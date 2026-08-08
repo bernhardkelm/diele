@@ -1,6 +1,6 @@
 {
   "name": "@diele/web",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "description": "The diele launcher: a new tab page for everything you self-host.",
   "license": "AGPL-3.0-or-later",
