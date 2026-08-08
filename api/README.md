@@ -1,7 +1,7 @@
 # @diele/api
 
-Backend for [`../web`](../web): it holds the configuration the launcher renders — cards, saved
-sites, search engines, icons — and the login that guards it. See the [root README](../README.md)
+Backend for [`../web`](../web): it holds the configuration the launcher renders - cards, saved
+sites, search engines, icons - and the login that guards it. See the [root README](../README.md)
 for what diele is and how to start it; this file is the reference for the API.
 
 The launcher is reachable by anyone and shows nothing until a session exists, so this process is
@@ -12,7 +12,7 @@ the only gate. There is no forward-auth middleware in front of it.
 All of it is environment, and none of it needs touching to run diele: the defaults are committed in
 [`../.env`](../.env), which lists **every** variable both halves read. Copy
 [`../.env.local.example`](../.env.local.example) to `../.env.local` for your secrets and anything
-that differs between machines — it lists the same variables again with their defaults, so
+that differs between machines - it lists the same variables again with their defaults, so
 overriding one is uncommenting rather than looking it up.
 
 The [root README](../README.md#docker) covers the handful a container actually needs. This is the
@@ -37,7 +37,7 @@ whole set.
 | `DIELE_VERSION` | what `/status` reports as the running build; the image stamps it from the git tag it was built at |
 | `VITE_API_TARGET` | **web, development only:** where the dev server proxies `/api`; a build talks to whatever origin serves it |
 
-`AUTH_MODE` falls back to `local` — the mode that needs nothing configured and still holds the
+`AUTH_MODE` falls back to `local` - the mode that needs nothing configured and still holds the
 door, since the first account is created through a setup form gated by a token printed at startup.
 A misspelled value therefore lands on the safe mode rather than refusing to boot, and says so on
 stderr.
@@ -50,14 +50,14 @@ Most-specific-first, first match wins:
 | --- | --- | --- |
 | 1 | a real environment variable | what a container is given, so images ship no `.env` at all |
 | 2 | `api/.env.local` · `web/.env.local` | package, untracked |
-| 3 | `api/.env` · `web/.env` | package, committed — override slots, shipped fully commented out |
-| 4 | `.env.local` | repo, untracked — where most overrides belong |
-| 5 | `.env` | repo, committed — every variable, with its default |
+| 3 | `api/.env` · `web/.env` | package, committed - override slots, shipped fully commented out |
+| 4 | `.env.local` | repo, untracked - where most overrides belong |
+| 5 | `.env` | repo, committed - every variable, with its default |
 | 6 | the built-in default | [`src/config.ts`](src/config.ts) |
 
 The nearest scope wins outright and, within a scope, the untracked file beats the committed one:
 the usual monorepo convention composed with the usual dotenv one. The root file is not a fallback
-for leftovers — it carries the full set, and the package files exist only so one half can be
+for leftovers - it carries the full set, and the package files exist only so one half can be
 pointed somewhere the other should not follow. They ship with every line commented out, because a
 live value in one would outrank the file people actually edit.
 
@@ -68,22 +68,22 @@ sit in the same files without reaching the bundle.
 
 Three modes, chosen by `AUTH_MODE`, all ending in the same session and cookie:
 
-- **`local`** — accounts live in this database and sign in with a password. For a deployment with
+- **`local`** - accounts live in this database and sign in with a password. For a deployment with
   no issuer to point at. This is the default, and an unset or misspelled variable lands here: it
   needs nothing configured and still holds the door, since the first account is created through a
   setup form gated by a token the server prints at startup. A misspelled value says so on stderr
   rather than being silently accepted.
-- **`oidc`** — OpenID Connect authorization code with PKCE, via `openid-client`. Any compliant
+- **`oidc`** - OpenID Connect authorization code with PKCE, via `openid-client`. Any compliant
   issuer works; nothing here knows which one. Setting it without `OIDC_ISSUER`, `OIDC_CLIENT_ID`
   and `OIDC_CLIENT_SECRET` refuses to boot rather than starting in a mode that cannot sign anyone
   in.
-- **`dev`** — grants every login as a fixed local identity, so the frontend can be worked on
+- **`dev`** - grants every login as a fixed local identity, so the frontend can be worked on
   without either. Never use it for anything reachable by others.
 
 Sessions are **server-side and opaque**: a 256-bit random id in an httpOnly cookie, the row in
 `sessions`. That buys revocation, which a JWT would not, and it lets the session be long without
-being unrevokable. The two windows are **idle time, not lifetime** — 24 hours, or 90 days when
-`remember me` was ticked — and roll forward on use, throttled to once an hour so opening tabs does
+being unrevokable. The two windows are **idle time, not lifetime** - 24 hours, or 90 days when
+`remember me` was ticked - and roll forward on use, throttled to once an hour so opening tabs does
 not mean writing to sqlite. An instance opened daily is therefore never asked again. The cookie
 itself always carries the longer window: the row decides when the session ends, and a cookie
 expiring on its own schedule would cut a live session short.
@@ -94,7 +94,7 @@ as a top-level navigation and `Strict` would withhold the cookie on exactly that
 `Secure` is derived rather than configured. `SESSION_COOKIE_SECURE=auto`, the default, turns it on
 when `PUBLIC_ORIGIN` is https and off when it is not; `true` and `false` override that, and any
 other value warns and derives anyway. The sentinel exists so the variable can sit in `.env` with a
-live value like every other one, because the derivation only runs while nothing explicit is set —
+live value like every other one, because the derivation only runs while nothing explicit is set -
 a literal default would replace it, and a literal `false` would hold the cookie insecure on an
 https origin without saying so. The reverse is just as quiet: a secure cookie sent to an http
 origin is dropped by the browser without a word, so the login answers 200 and the next request is
@@ -180,7 +180,7 @@ here would mean an instance showing rows nobody added. Use the import to seed on
 instead.
 
 Cards and saved sites share the `links` table and are told apart by `kind`. They differ only in
-where they render — both are a label, a url, keywords and an icon. Search engines stay separate,
+where they render - both are a label, a url, keywords and an icon. Search engines stay separate,
 because a `{query}` template is a different thing from a destination.
 
 `position` is spaced in tens, so moving a row between two others is one update rather than a
@@ -198,8 +198,8 @@ index will be, and an index that dies on restart is not one.
 `connectors.type` carries no `CHECK`: renaming one in sqlite means rebuilding the table, and adding
 a connector must never cost that. `src/connectors/registry.ts` is the allowlist.
 
-`connectors.user_id` is always null today. It is declared so the per-user variant — everyone seeing
-the repos of their own token rather than the instance's — is a code change rather than a migration.
+`connectors.user_id` is always null today. It is declared so the per-user variant - everyone seeing
+the repos of their own token rather than the instance's - is a code change rather than a migration.
 
 ## Icons
 
@@ -221,7 +221,7 @@ recolouring them would flatten the gradient.
 ## Slash commands
 
 A keyword plus a query url carrying `{query}`, so `/yt cats` reaches youtube without the term ever
-touching the default engine — the same template shape a search engine uses.
+touching the default engine - the same template shape a search engine uses.
 
 `/admin`, `/settings` and `/logout` are **not rows**: they act on the page rather than search and
 nothing about them is configurable. The admin list still shows them, marked read-only, so both
@@ -238,7 +238,7 @@ the scheme and the port are editable, the url follows from them, and the fronten
 one on load and whenever the tab regains focus. Optional tags say what runs there, so `vue` finds
 5173 rather than only the number doing.
 
-The feature carries a switch of its own, which is not the same as having no rows — probing costs a
+The feature carries a switch of its own, which is not the same as having no rows - probing costs a
 request per port on every load, so an instance that is not a development machine turns it off
 outright. It is **off by default**; `settings` holds the flag under `localhost.enabled`.
 
@@ -315,7 +315,7 @@ convenience, never the gate.
 
 Everything that is not one of these paths is the launcher: `src/site/routes.ts` serves `web/dist`
 when that directory holds a build, and answers an unrecognised path with `index.html`. It is
-mounted ahead of the session gate, because the sign-in screen is that document — behind it, a
+mounted ahead of the session gate, because the sign-in screen is that document - behind it, a
 portal could never be signed in to. It hands `/api` and `/status` straight back, so an api path
 nothing claims is still a json 404 rather than a page.
 
@@ -407,7 +407,7 @@ would take the only gate in front of the launcher down over a connector token.
 ### Saving
 
 A save is refused unless the settings actually reach the source. `verify` is a module's own
-connectivity check, cheap enough to run on every write — GitLab reads each configured group's
+connectivity check, cheap enough to run on every write - GitLab reads each configured group's
 record, which answers both questions at once: whether the token works at all, and whether it can see
 that particular group. Nothing is written until it passes, so a connector cannot be stored in a
 state where every run is going to fail and the first anyone hears of it is an empty list. An edit is
@@ -438,7 +438,7 @@ concurrent: syncing is not urgent, and better-sqlite3 is synchronous, so several
 together would each block the event loop for the length of their own write. It starts in the
 `listen` callback, so a slow source cannot delay the port opening.
 
-A failed run backs off — `interval * 2^failures`, capped at an hour — so a revoked token costs a
+A failed run backs off - `interval * 2^failures`, capped at an hour - so a revoked token costs a
 couple of dozen requests a day rather than one every quarter. The error is stored with every stored
 credential stripped out of it first, because a source's message tends to echo the request that
 caused it.
@@ -466,17 +466,17 @@ npm run build -w @diele/api        # tsc to dist/
 ```
 
 No configuration step: the committed repo-wide `.env` lists every variable with a working default.
-Put your secrets and machine-specific values in a `../.env.local` — see
+Put your secrets and machine-specific values in a `../.env.local` - see
 [Configuration](#configuration) above for the full set and the order they resolve in.
 
 The web app proxies `/api` here, so the browser only ever talks to `:5173` and the session cookie is
-first-party — which is why there is no CORS handling anywhere in this package.
+first-party - which is why there is no CORS handling anywhere in this package.
 
 The database is created and migrated on boot at `DB_PATH`, which defaults to `data/diele.db` at
 the repo root and is gitignored along with the whole `data/` directory. Delete it to start over.
 
 A relative `DB_PATH` is resolved from the repo root rather than the working directory, so the
-file lands in one place whether npm ran from the root or from this package — the two differ, and
+file lands in one place whether npm ran from the root or from this package - the two differ, and
 a cwd-relative default would quietly give each its own database. An absolute path is used as it
 stands, which is how a container points this at a mounted volume.
 

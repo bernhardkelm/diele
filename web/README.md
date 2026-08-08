@@ -10,7 +10,7 @@ the login screen.
 ## Search
 
 The bar is always present and takes focus on load, so a new tab can be typed into straight away.
-It searches saved sites, the service cards and the connector rows together — by name, by url and
+It searches saved sites, the service cards and the connector rows together - by name, by url and
 by keyword, so `example-group/web` finds the repo, `graf` finds Grafana and `3000` finds that
 local port.
 
@@ -44,7 +44,7 @@ blocked request and a dead port look identical from the browser.
 
 ## Slash commands
 
-A term starting with `/` addresses the commands and nothing else — the cards, sites and repos sit
+A term starting with `/` addresses the commands and nothing else - the cards, sites and repos sit
 that search out, so a slash never fuzzy-matches its way into an ordinary result.
 
 | typed | does |
@@ -108,7 +108,7 @@ admin view below. Nothing here has to be rebuilt to change them.
 The app reads them once per load through `GET /api/config` and paints from the previous visit's
 `localStorage` copy first, revalidating behind it. That is deliberate: this is a new tab page, so
 the API must never sit between opening a tab and seeing something. A lapsed session keeps the
-cached page on screen rather than bouncing to the issuer — only a cold start with nothing cached
+cached page on screen rather than bouncing to the issuer - only a cold start with nothing cached
 shows the login screen.
 
 Icons are uploaded rather than bundled: the API sanitises an svg on the way in and rewrites its
@@ -137,13 +137,13 @@ needs, so the form is rendered from the API's description and a new connector ne
 here. Features with no editor yet say so and cannot be opened.
 
 The list ends with the actions: exporting the whole configuration as a file, importing one back,
-and leaving admin mode. They are rows rather than a footer so they sit in the same keyboard ring —
+and leaving admin mode. They are rows rather than a footer so they sit in the same keyboard ring -
 leaving is something to find in the list, not only a key nobody mentions. Connector credentials are
 never in an export.
 
 ## Auth
 
-Login is handled by the API, and there is nothing in front of the app — it is reachable by anyone
+Login is handled by the API, and there is nothing in front of the app - it is reachable by anyone
 and shows nothing until a session exists. Which login screen appears follows the API's mode: a
 single sign-on button, or a username and password form with a `remember me` box. On an instance
 that has no account yet the same screen asks for one instead, gated by a setup token the server
@@ -151,8 +151,8 @@ prints at startup. See [`../api/README.md`](../api/README.md) for the flow.
 
 ## Styleguide
 
-`#/styleguide` lists every design token as it resolves right now — the declaration, the value the
-current theme paints, and a preview — followed by the recurring elements built from them. It has a
+`#/styleguide` lists every design token as it resolves right now - the declaration, the value the
+current theme paints, and a preview - followed by the recurring elements built from them. It has a
 theme switch, so both sides of a `light-dark()` pair can be checked in one place.
 
 Development only. `parseRoute` gates the route on `import.meta.env.DEV`, which is a literal `false`
@@ -162,7 +162,7 @@ markup, tokens or css reach `dist`.
 ## Connector entries
 
 The rows below the cards come from `GET /api/entries`, which the API serves out of its own sync
-cache — so this is a local read there rather than a trip to the forge, and a restart never leaves
+cache - so this is a local read there rather than a trip to the forge, and a restart never leaves
 the section empty while a source is asked again.
 
 Nothing here knows what GitLab is. An entry arrives carrying a `ref`, a `kind` that says which
@@ -213,7 +213,7 @@ The dev server proxies `/api` to `localhost:3000` (`VITE_API_TARGET` to point el
 browser only ever talks to one origin and the session cookie is first-party.
 
 `VITE_API_TARGET` is resolved in [`vite.config.ts`](vite.config.ts) through the same four-file
-chain the api uses, so both halves follow one documented precedence — see
+chain the api uses, so both halves follow one documented precedence - see
 [`../.env.local.example`](../.env.local.example). It is read with `dotenv` rather than
 `process.env`, which in a vite config only ever sees the shell, and rather than vite's own
 `loadEnv`, which reads a single directory and so cannot express a package file outranking a

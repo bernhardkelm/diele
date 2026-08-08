@@ -66,7 +66,7 @@ function requiredForOidc(name: string): string {
 const publicOrigin = (process.env.PUBLIC_ORIGIN ?? 'http://localhost:5173').replace(/\/+$/, '')
 
 // Resolved from the repo root rather than the working directory, so the database lands in the
-// same place whether npm ran from the root or from this package — the two differ, and a
+// same place whether npm ran from the root or from this package - the two differ, and a
 // cwd-relative default would quietly give each its own file. An absolute DB_PATH is used as it
 // stands, which is how a container points this at a mounted volume.
 const dbPath = resolve(repoRoot, process.env.DB_PATH ?? 'data/diele.db')

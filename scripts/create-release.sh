@@ -75,7 +75,7 @@ if [ "$BUMP" = major ] || [ "$BUMP" = minor ] || [ "$BUMP" = patch ]; then
   echo "Bumping ${BUMP}: ${LATEST} -> ${VERSION}"
 fi
 
-# Validate the (possibly bumped) version is strict x.x.x — three numeric parts, no pre-release
+# Validate the (possibly bumped) version is strict x.x.x - three numeric parts, no pre-release
 # suffix, and no `v` prefix: the CI tag trigger matches the bare semver shape.
 if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
   echo "Error: '$VERSION' is not a version (x.x.x) or a bump keyword (major|minor|patch)."

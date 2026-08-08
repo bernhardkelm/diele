@@ -1,6 +1,8 @@
-import { existsSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import express, { type NextFunction, type Request, type Response, Router } from 'express'
+import { config } from '#config.js'
+import { injectRuntime } from './indexMeta.js'
 
 // Vite's `build.assetsDir`. Everything under it carries a content hash, so a changed file is a
 // changed url and the old one may be held forever, which is true of nothing beside it.
@@ -33,6 +35,14 @@ export function createSiteRouter(root: string): Router {
   if (!existsSync(indexPath)) {
     return router
   }
+
+  // Read and stamped once: the values come from the environment and the document from the image,
+  // so neither changes while this process runs, and the alternative is that work on every
+  // request for a page that also happens to be the first thing anyone waits on.
+  const document = injectRuntime(readFileSync(indexPath, 'utf8'), {
+    brand: config.brand,
+    version: config.version,
+  })
 
   // Nothing a vite build emits lands under /api today, and this is what keeps a file dropped
   // there tomorrow from shadowing a route: the api answers those, not the directory.
@@ -69,11 +79,7 @@ export function createSiteRouter(root: string): Router {
     // Never cached: it names the hashed bundles, so a stale copy pins an open tab to the build
     // it was opened on.
     res.set('Cache-Control', 'no-cache')
-    res.sendFile(indexPath, (error?: Error) => {
-      if (error) {
-        next(error)
-      }
-    })
+    res.type('html').send(document)
   })
 
   return router

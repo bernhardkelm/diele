@@ -145,7 +145,7 @@ export async function startApi(env: Record<string, string> = {}): Promise<TestAp
 
     // Not through fetch. The spec has it drop the cache mode as soon as a conditional header is
     // present, so it appends `Cache-Control: no-cache`, and a server that honours that correctly
-    // answers 200 — which is the opposite of what a revalidation is meant to measure.
+    // answers 200 - which is the opposite of what a revalidation is meant to measure.
     conditionalGet(path: string, etag: string): Promise<number> {
       const headers: Record<string, string> = { 'if-none-match': etag }
 

@@ -46,7 +46,7 @@ entriesRouter.get('/', (req, res) => {
   }
 
   // The detail is an admin's to read. A sync error quotes the source's own response, so on an
-  // instance pointed at an internal address it says which hosts and ports answer and how — an
+  // instance pointed at an internal address it says which hosts and ports answer and how - an
   // internal-network oracle for anyone with an account. Everyone else is told that a section is
   // stale, which is all they can act on anyway.
   const detailed = canAdmin(req.user)
@@ -65,7 +65,7 @@ entriesRouter.get('/', (req, res) => {
     }))
 
   // Every entry is served, hidden or not, and the client leaves the hidden ones out. Hiding is
-  // a display preference rather than a permission — the lists that manage it have to show what
+  // a display preference rather than a permission - the lists that manage it have to show what
   // is hidden in order to bring it back, and an admin has to see what the portal is hiding from
   // everyone. Anything that must not be seen belongs behind the connector's own token.
   const payload: ApiEntries = {

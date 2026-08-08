@@ -1,6 +1,6 @@
 /* The subset of diele's design language these two pages need: the same tokens, the same
-   lockup, the same hairline controls. Copied rather than imported — an unpacked extension has
-   no build step and cannot reach the web package — so keep it in step with
+   lockup, the same hairline controls. Copied rather than imported - an unpacked extension has
+   no build step and cannot reach the web package - so keep it in step with
    `web/src/styles/tokens.css` and `web/src/styles/base.css`. */
 
 /* Latin subsets only, and only the weights used here. Self-hosted for the same reason the app

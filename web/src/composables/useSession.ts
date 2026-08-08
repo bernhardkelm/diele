@@ -17,6 +17,7 @@ import { refreshPortalConfig, resetPortalConfig } from '@/composables/usePortalC
 import { applyBrandAccent } from '@/helpers/brandAccent'
 import { clearConfigCache } from '@/helpers/configCache'
 import { clearEntriesCache } from '@/helpers/entriesCache'
+import { readInjectedBrand } from '@/helpers/injectedRuntime'
 import { DEFAULT_BRAND } from '@/helpers/portalConfig'
 import type { ApiBrand, ApiProvider, ApiProviders, ApiUser } from '@diele/common'
 
@@ -52,11 +53,20 @@ export interface SessionSource {
   loadProviders: () => Promise<void>
 }
 
+// Read once, at module scope, which is before the app mounts and so before the first paint. The
+// gate is the one screen with no cached configuration to start from, so without this it paints
+// the built-in defaults and swaps them for the deployment's own when providers answers.
+const injectedBrand = readInjectedBrand()
+
 const user = ref<ApiUser | undefined>()
 const providers = ref<ReadonlyArray<ApiProvider>>([])
-const brand = ref<ApiBrand>(DEFAULT_BRAND)
+const brand = ref<ApiBrand>(injectedBrand ?? DEFAULT_BRAND)
 const mode = ref<ApiProviders['mode'] | undefined>()
 const setupRequired = ref(false)
+
+if (injectedBrand) {
+  applyBrandAccent(injectedBrand)
+}
 
 /**
  * Drops everything read about this deployment and whoever was signed in, so the next reader
@@ -67,7 +77,7 @@ const setupRequired = ref(false)
 export function resetSession(): void {
   user.value = undefined
   providers.value = []
-  brand.value = DEFAULT_BRAND
+  brand.value = injectedBrand ?? DEFAULT_BRAND
   mode.value = undefined
   setupRequired.value = false
   loadProviders.reset()
@@ -253,8 +263,8 @@ export function useSession(): SessionSource {
   }
 
   /**
-   * Ends a session and drops everything cached under it — the configuration and the connector
-   * entries both — so the next visitor to this browser does not paint the last one's portal.
+   * Ends a session and drops everything cached under it - the configuration and the connector
+   * entries both - so the next visitor to this browser does not paint the last one's portal.
    * @param {string} url - Endpoint that destroys the session, or every session
    * @returns {Promise<void>}
    */

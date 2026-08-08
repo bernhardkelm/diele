@@ -5,19 +5,19 @@
 **Do more with your new tab page: search, launch and admin for everything you run.**
 
 Open a tab and the cursor is already in the search bar. Type, and diele searches your service
-cards, your saved sites, your repos and your local dev servers together — by name, by url and by
-keyword — then `↵` opens the best match. Nothing matches? The same `↵` searches the web.
+cards, your saved sites, your repos and your local dev servers together - by name, by url and by
+keyword - then `↵` opens the best match. Nothing matches? The same `↵` searches the web.
 
 Everything it shows is a row in its own database, edited from a panel inside the page. There are
 no config files to redeploy: add a card, change the wordmark, plug in a GitLab token, and the
 next tab has it.
 
-- **One bar over everything you own** — cards, saved sites, repos and local ports, ranked above the web
-- **A keyboard the whole way down** — nothing is reachable only by mouse
-- **Connectors** — GitLab and GitHub repos sync in on a timer, each with their own quick jumps
-- **An admin panel, not a config file** — every row edited in the page, the whole configuration exportable as one document
-- **Three ways to sign in** — OpenID Connect, local accounts, or a dev mode while you build
-- **One container** — one port, one volume, and a database that is a file
+- **One bar over everything you own** - cards, saved sites, repos and local ports, ranked above the web
+- **A keyboard the whole way down** - nothing is reachable only by mouse
+- **Connectors** - GitLab and GitHub repos sync in on a timer, each with their own quick jumps
+- **An admin panel, not a config file** - every row edited in the page, the whole configuration exportable as one document
+- **Three ways to sign in** - OpenID Connect, local accounts, or a dev mode while you build
+- **One container** - one port, one volume, and a database that is a file
 
 > **Status:** used daily, but young. The endpoints and the database schema are still moving, and
 > there are no releases yet. See [Planned](#planned) for what is not here.
@@ -61,8 +61,8 @@ cards, the saved sites, the connector rows and the local ports together, by name
 keyword.
 
 Matching is fuzzy, so `prometeus` still finds Prometheus and `uk` finds Uptime Kuma. Paths split on
-their separators, so `example-group/web` matches both halves. A term that is really a url —
-`example.com`, `localhost:3000`, a pasted link — leads the results as **Go to**.
+their separators, so `example-group/web` matches both halves. A term that is really a url -
+`example.com`, `localhost:3000`, a pasted link - leads the results as **Go to**.
 
 What diele already knows ranks above the web: the first match is highlighted, so `↵` opens it. To
 search the web anyway, `↑` steps off the list and hands `↵` back to the engine.
@@ -80,7 +80,7 @@ Nothing is reachable only by mouse, and the admin and settings views reuse the s
 | `↑` `↓` | move the highlight; stepping off either end returns to the field |
 | `←` `→` | step through a repo's own page, its pipelines, merge requests and releases |
 | `tab` / `shift`+`tab` | cycle the search engine forwards or back |
-| `alt`+`1`–`9`,`0` | open that card; holding `alt` reveals the badges |
+| `alt`+`1`-`9`,`0` | open that card; holding `alt` reveals the badges |
 | `/` | as the first character, opens the commands; from elsewhere, focuses the field |
 | `esc` | backs out one level at a time |
 
@@ -163,7 +163,7 @@ It is applied before the app mounts, so a pinned theme never flashes the device'
 Cards, sites, engines, commands, ports, icons and connectors are all rows, all edited in place.
 
 Each feature declares its own fields and the input each one needs, and the form is rendered from
-that declaration — which is what lets a new connector be added without touching the web app at
+that declaration - which is what lets a new connector be added without touching the web app at
 all.
 
 ![Every feature in one list, built-ins and connectors alike](docs/images/admin.png)
@@ -287,7 +287,7 @@ docker run -d --name diele \
 
 Open it and the first page is the setup screen; the token that gates it is in `docker logs diele`.
 
-**Required.** One value, and a wrong one paints the portal and then rejects every write — including
+**Required.** One value, and a wrong one paints the portal and then rejects every write - including
 the form that claims the first account.
 
 | variable | |
@@ -329,7 +329,7 @@ To get something to look at, open `#/admin` → *Import* and pick
 
 ### Making it your new tab page
 
-Chrome has no setting for this — overriding the new tab page takes an extension, so there is one in
+Chrome has no setting for this - overriding the new tab page takes an extension, so there is one in
 [`extension/`](extension/README.md). Load it unpacked from `chrome://extensions`, open a new tab,
 and enter the address of your instance. It asks for the `storage` permission and nothing else: no
 host access, no build step, no third party.
@@ -366,7 +366,7 @@ rollback.
 
 ### From source
 
-Needs Node 24.7 or newer. Nothing else — the database is a file.
+Needs Node 24.7 or newer. Nothing else - the database is a file.
 
 ```sh
 git clone https://github.com/bernhardkelm/diele.git
@@ -390,22 +390,22 @@ npm start
 
 ```
 diele/
-├── web/        the launcher — Vue 3, Vite                        → web/README.md
-├── api/        sign-in, storage, connectors — Express 5, SQLite  → api/README.md
+├── web/        the launcher - Vue 3, Vite                        → web/README.md
+├── api/        sign-in, storage, connectors - Express 5, SQLite  → api/README.md
 ├── common/     the wire types both sides share
 ├── extension/  Chrome new tab override, no build step            → extension/README.md
 └── data/       the SQLite database, created on first boot, gitignored
 ```
 
-- [**web/README.md**](web/README.md) — the search ring, the settings and admin views, how connector
+- [**web/README.md**](web/README.md) - the search ring, the settings and admin views, how connector
   entries reach the page, and how to develop against the app alone.
-- [**api/README.md**](api/README.md) — auth and sessions, the full configuration reference, the
+- [**api/README.md**](api/README.md) - auth and sessions, the full configuration reference, the
   database, every endpoint, and what a connector module has to implement.
-- [**extension/README.md**](extension/README.md) — loading the new tab override, and what counts as
+- [**extension/README.md**](extension/README.md) - loading the new tab override, and what counts as
   an address.
-- [**CONTRIBUTING.md**](CONTRIBUTING.md) — what diele is and is not, where code goes, and the
+- [**CONTRIBUTING.md**](CONTRIBUTING.md) - what diele is and is not, where code goes, and the
   conventions worth writing down.
-- [**SECURITY.md**](SECURITY.md) — what diele is exposed to, and how to report a vulnerability.
+- [**SECURITY.md**](SECURITY.md) - what diele is exposed to, and how to report a vulnerability.
 
 ## License
 

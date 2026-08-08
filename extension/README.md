@@ -4,7 +4,7 @@ An unpacked Chrome extension that makes your diele instance the new tab page.
 
 Chrome has no setting for this: *On startup* only applies at launch, and the home button
 navigates the current tab. Overriding the new tab page requires an extension, and
-`chrome_url_overrides` may only point at a page inside the extension — hence the redirect in
+`chrome_url_overrides` may only point at a page inside the extension - hence the redirect in
 [`newtab.js`](newtab.js) rather than the url itself.
 
 Store extensions do the same thing, usually with permission to observe every new tab you open.
@@ -22,7 +22,7 @@ The first new tab is also the setup step: with nothing stored yet it shows a fie
 redirecting, so there is no file to edit before loading.
 
 Chrome keeps unpacked extensions across restarts. It re-flags them on each launch with a
-"disable developer mode extensions" prompt — dismissing it keeps the extension enabled.
+"disable developer mode extensions" prompt - dismissing it keeps the extension enabled.
 
 ## Changing the target
 
@@ -43,7 +43,7 @@ anything whose hostname is not a hostname. Both checks matter because the stored
 to `location.replace` on every new tab.
 
 Worth knowing if you change that validation: a browser does **not** throw on
-`new URL('https://not a url')` — it percent-encodes the mess into the hostname and returns
+`new URL('https://not a url')` - it percent-encodes the mess into the hostname and returns
 happily, where Node's parser rejects the same string. The hostname is therefore checked against
 a pattern rather than the constructor being trusted to fail.
 
@@ -52,7 +52,7 @@ a pattern rather than the constructor being trusted to fail.
 Edge, Brave, Vivaldi and Opera load the same folder through their own `chrome://extensions`.
 Firefox needs `browser_specific_settings` in the manifest and reads the same
 `chrome_url_overrides` key, but its new tab override behaves differently enough to want its own
-testing — it has not been tried.
+testing - it has not been tried.
 
 ## Known quirk
 
@@ -79,7 +79,7 @@ has no build step and cannot reach the `web` package. Keep them in step with
 
 ## Fonts
 
-Space Grotesk, Inter and Geist Mono, latin subsets, one weight each — the same files the
+Space Grotesk, Inter and Geist Mono, latin subsets, one weight each - the same files the
 launcher self-hosts, about 52 KB in total. All three are licensed
 [OFL-1.1](https://openfontlicense.org), which permits redistribution as part of this extension;
 the licence text and each font's copyright line travel with them in `fonts/OFL.txt`. They are

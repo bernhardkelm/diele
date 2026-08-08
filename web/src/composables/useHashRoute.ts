@@ -80,7 +80,7 @@ export function useHashRoute(): HashRouteSource {
   }
 
   // Read here, in setup, and not only on mount. The ref lives at module scope, so between the
-  // last unmount and this call nothing was tracking the address bar — and a caller that decides
+  // last unmount and this call nothing was tracking the address bar - and a caller that decides
   // something from the route during setup, the way the settings view normalises an addressed
   // section, would otherwise decide it from whatever the previous view left behind.
   onHashChange()
