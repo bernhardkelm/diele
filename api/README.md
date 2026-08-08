@@ -200,7 +200,7 @@ and entering the token is what turns it back on.
 
 | method | path | |
 | --- | --- | --- |
-| `GET` | `/status` | health, public |
+| `GET` | `/status` | health and the running build, public |
 | `GET` | `/api/auth/providers` | what the login screen offers, and whether setup is pending; public |
 | `GET` | `/api/auth/login` | 302 to the issuer, `?redirect=` to come back to, `?remember=1` for the long window |
 | `POST` | `/api/auth/login` | local mode: username and password, opens a session |
@@ -250,6 +250,12 @@ would bust its etag on every sync and resend the inline icons with it.
 
 Everything under `/api/admin` additionally passes `requireAdmin`. The client's mode switch is a
 convenience, never the gate.
+
+Everything that is not one of these paths is the launcher: `src/site/routes.ts` serves `web/dist`
+when that directory holds a build, and answers an unrecognised path with `index.html`. It is
+mounted ahead of the session gate, because the sign-in screen is that document — behind it, a
+portal could never be signed in to. It hands `/api` and `/status` straight back, so an api path
+nothing claims is still a json 404 rather than a page.
 
 ## Connectors
 

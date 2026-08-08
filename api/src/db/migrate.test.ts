@@ -77,5 +77,8 @@ test('the refusal names both versions, so the fix is obvious', () => {
   const db = memory()
   migrate(db, [step(1, []), step(2, [])])
 
-  assert.throws(() => migrate(db, [step(1, [])]), /version 2, which is newer than this build knows \(1\)/)
+  assert.throws(
+    () => migrate(db, [step(1, [])]),
+    /version 2, which is newer than this build knows \(1\)/,
+  )
 })

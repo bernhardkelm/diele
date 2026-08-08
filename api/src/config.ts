@@ -71,6 +71,10 @@ const publicOrigin = (process.env.PUBLIC_ORIGIN ?? 'http://localhost:5173').repl
 // stands, which is how a container points this at a mounted volume.
 const dbPath = resolve(repoRoot, process.env.DB_PATH ?? 'data/diele.db')
 
+// Where the built frontend is, deliberately not a setting: the image lays the two halves out the
+// same way the repo does, so one path is right in both places and nothing has to be told.
+const webRoot = resolve(repoRoot, 'web/dist')
+
 // Annotated rather than inferred: `config` is `as const`, and inferring this through the
 // modules that read it back leaves the field `unknown` at some call sites and not others.
 const secrets: SecretKeyring = parseKeyring(process.env.DIELE_SECRET_KEYS)
@@ -85,7 +89,11 @@ export const config = {
   publicOrigin,
   authMode,
   dbPath,
+  webRoot,
   trustProxy,
+  // Written into the image at build time from the git tag, so a running instance can say which
+  // one it is. A checkout has no tag, and says so rather than claiming a release number.
+  version: process.env.DIELE_VERSION ?? '0.0.0-dev',
   // The wordmark, the line under it, and the accent. Served rather than built in, so a second
   // deployment is a value change and a restart rather than a rebuild of the frontend.
   brand: {

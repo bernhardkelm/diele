@@ -1,3 +1,4 @@
+import type { ApiStatus } from '@diele/common'
 import cookieParser from 'cookie-parser'
 import express, { type Express, type NextFunction, type Request, type Response } from 'express'
 import { ZodError } from 'zod'
@@ -13,13 +14,15 @@ import { configRouter } from './bootstrap/routes.js'
 import { config } from './config.js'
 import { entriesRouter } from './connectors/routes.js'
 import { ApiError } from './errors.js'
+import { createSiteRouter } from './site/routes.js'
 
 /**
  * Builds the express app: session resolution and the deny-by-default gate run before any
  * router, so a route added later is protected without its author doing anything.
+ * @param {string} siteRoot - Directory the built launcher is served from; one holding no build serves nothing
  * @returns {Express} - Configured app, not yet listening
  */
-export function createApp(): Express {
+export function createApp(siteRoot: string = config.webRoot): Express {
   const app = express()
 
   // Off unless a deployment says otherwise. `req.ip` is the only key the login limiter has, and
@@ -36,7 +39,8 @@ export function createApp(): Express {
   app.use(cookieParser())
 
   app.get('/status', (_req, res) => {
-    res.json({ status: 'ok' })
+    const payload: ApiStatus = { status: 'ok', version: config.version }
+    res.json(payload)
   })
 
   // Every payload below belongs to one account: the entries carry that person's hidden list, and
@@ -48,6 +52,10 @@ export function createApp(): Express {
     res.vary('Cookie')
     next()
   })
+
+  // Before the gate below, because the login screen is part of the app it is gating: mounted
+  // after it, the document and its assets would answer 401 to anyone not already signed in.
+  app.use(createSiteRouter(siteRoot))
 
   app.use(attachSession())
   app.use(requireSameOrigin())
