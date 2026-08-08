@@ -1,7 +1,11 @@
 import { ref, type Ref } from 'vue'
 import { readStored, removeStored, writeStored } from '@/helpers/storage'
 
-/** localStorage key holding the theme override, absent while the device decides. */
+/**
+ * localStorage key holding the theme override, absent while the device decides. Named a second
+ * time by the inline script in `index.html`, which stamps the same value before the first paint,
+ * so neither side may rename it alone.
+ */
 const STORAGE_KEY = 'diele:theme'
 
 /** What the portal paints in: the device's own choice, or one the override pins it to. */

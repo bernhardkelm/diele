@@ -27,6 +27,36 @@ describe('LauncherBar', () => {
     expect(wrapper.emitted('update:modelValue')).toEqual([['grafana']])
   })
 
+  // A new tab is typed into before it has settled, and those keystrokes are collected by an
+  // inline script until a field exists to hold them.
+  it('starts carrying whatever was typed before it existed', () => {
+    window.__dieleEarlyKeys = { end: () => 'graf' }
+
+    const wrapper = bar()
+
+    expect(wrapper.find('input').element.value).toBe('graf')
+    expect(wrapper.emitted('update:modelValue')).toEqual([['graf']])
+  })
+
+  // Selecting it instead would let the next keystroke wipe what was already typed.
+  it('takes the caret without selecting what it replayed', () => {
+    window.__dieleEarlyKeys = { end: () => 'graf' }
+
+    const input = bar().find('input').element
+
+    expect(document.activeElement).toBe(input)
+    expect(input.selectionStart).toBe(input.selectionEnd)
+  })
+
+  it('is left alone when nothing was typed before it', () => {
+    delete window.__dieleEarlyKeys
+
+    const wrapper = bar()
+
+    expect(wrapper.find('input').element.value).toBe('')
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined()
+  })
+
   it('submits on enter, and asks for a new tab when a modifier is held', async () => {
     const wrapper = bar({ modelValue: 'grafana' })
 

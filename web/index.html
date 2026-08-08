@@ -7,6 +7,61 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="color-scheme" content="light dark">
     <title>diele</title>
+
+    <!-- Runs during parse, ahead of the stylesheet and the bundle: the only point where a pinned
+         theme still reaches the first paint, and the only place a keystroke landing before Vue
+         mounts has anywhere to go. Shipped verbatim on every navigation, so it stays terse.
+         Read from the other end by helpers/earlyKeys.ts. -->
+    <script>
+      (function () {
+        // the key useTheme.ts writes, so neither side may rename it alone
+        try {
+          const theme = localStorage.getItem('diele:theme')
+          if (theme === 'light' || theme === 'dark') {
+            document.documentElement.setAttribute('data-theme', theme)
+          }
+        } catch {
+          // storage is a convenience here as everywhere else, see helpers/storage.ts
+        }
+
+        let typed = []
+
+        // Capture phase so nothing swallows it first, never prevented since with no field yet
+        // the key has nowhere else to land. No Enter: replaying it would open whichever match a
+        // possibly stale cache ranked first.
+        function capture(event) {
+          if (event.metaKey || event.ctrlKey || event.altKey) {
+            return
+          }
+
+          if (event.key === 'Backspace') {
+            typed.pop()
+            return
+          }
+
+          if (event.key.length !== 1 || typed.length >= 32) {
+            return
+          }
+
+          // a leading space is how a page is scrolled, not the start of a query
+          if (event.key !== ' ' || typed.length > 0) {
+            typed.push(event.key)
+          }
+        }
+
+        window.addEventListener('keydown', capture, true)
+
+        window.__dieleEarlyKeys = {
+          end: function () {
+            window.removeEventListener('keydown', capture, true)
+            const text = typed.join('')
+            typed = []
+
+            return text
+          },
+        }
+      })()
+    </script>
   </head>
   <body>
     <div id="app"></div>

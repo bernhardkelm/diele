@@ -76,7 +76,7 @@
   --diele-space-8: 2rem;
   --diele-space-12: 3rem;
 
-  /* Type. Inter and Space Grotesk are self-hosted through @fontsource; see main.ts for the
+  /* Type. Inter and Space Grotesk are self-hosted through @fontsource; see fonts.css for the
      loaded weights. */
   --diele-font: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   /* The rows and controls take the system's own monospace where there is a good one: SF Mono

@@ -1,0 +1,51 @@
+/* Latin subsets only: the portal has no cyrillic, greek or vietnamese copy, and the full
+   @fontsource entrypoints ship those faces too. Weights are the ones the styles actually ask for,
+   so an unloaded weight can never fall back to a synthesised one.
+
+   Declared here rather than importing the packages' own stylesheets, which set `font-display:
+   swap` and list a woff alongside every woff2. Vite resolves the bare specifiers and emits each
+   file as a hashed asset, so the npm update path survives. */
+
+/* `optional` never swaps: a face that misses the first paint sits the visit out and is there,
+   cached, for the next one. On a page opened this often that trades one plain-looking visit for
+   never reflowing again. */
+
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400;
+  font-display: optional;
+  src: url('@fontsource/inter/files/inter-latin-400-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 600;
+  font-display: optional;
+  src: url('@fontsource/inter/files/inter-latin-600-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Space Grotesk';
+  font-style: normal;
+  font-weight: 700;
+  font-display: optional;
+  src: url('@fontsource/space-grotesk/files/space-grotesk-latin-700-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Geist Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: optional;
+  src: url('@fontsource/geist-mono/files/geist-mono-latin-400-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Geist Mono';
+  font-style: normal;
+  font-weight: 600;
+  font-display: optional;
+  src: url('@fontsource/geist-mono/files/geist-mono-latin-600-normal.woff2') format('woff2');
+}

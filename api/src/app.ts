@@ -39,6 +39,16 @@ export function createApp(): Express {
     res.json({ status: 'ok' })
   })
 
+  // Every payload below belongs to one account: the entries carry that person's hidden list, and
+  // an error string is redacted for everyone but an admin. `private` keeps a shared cache from
+  // holding a copy, `no-cache` keeps the etag revalidation the client already does rather than
+  // letting a heuristic serve a stale portal.
+  app.use('/api', (_req, res, next) => {
+    res.set('Cache-Control', 'private, no-cache')
+    res.vary('Cookie')
+    next()
+  })
+
   app.use(attachSession())
   app.use(requireSameOrigin())
   app.use(requireSession())

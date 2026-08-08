@@ -91,6 +91,15 @@ test('an unchanged config answers 304 against its etag', async () => {
   assert.equal(await api.conditionalGet('/api/config', etag), 304)
 })
 
+// The payloads under /api are one account's own, so a proxy holding a copy would hand one
+// person's portal to the next caller.
+test('api responses are private and revalidated rather than heuristically cached', async () => {
+  const response = await api.request('/api/config')
+
+  assert.equal(response.headers.get('cache-control'), 'private, no-cache')
+  assert.match(response.headers.get('vary') ?? '', /Cookie/i)
+})
+
 test('a write from another origin is refused even with a valid session', async () => {
   const response = await api.request('/api/admin/links/card', {
     method: 'POST',

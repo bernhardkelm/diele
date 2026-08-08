@@ -1,18 +1,14 @@
 import { createApp } from 'vue'
 import App from './App.vue'
 import { initTheme } from '@/composables/useTheme'
-// Latin subsets only: the portal has no cyrillic, greek or vietnamese copy, and the full
-// entrypoints ship those faces too. Weights are the ones the styles actually ask for, so an
-// unloaded weight can never fall back to a synthesised one.
-import '@fontsource/inter/latin-400.css'
-import '@fontsource/inter/latin-600.css'
-import '@fontsource/space-grotesk/latin-700.css'
-import '@fontsource/geist-mono/latin-400.css'
-import '@fontsource/geist-mono/latin-600.css'
+import { dropEarlyKeys } from '@/helpers/earlyKeys'
+import '@/styles/fonts.css'
 import '@/styles/tokens.css'
 import '@/styles/base.css'
 
-// before mount, so a pinned theme is on the document for the first paint
+// The inline script in index.html has already stamped a pinned theme, early enough for the first
+// paint. This is the same read from the module that owns it, and what still applies if that
+// script is ever dropped or refused.
 initTheme()
 
 const app = createApp(App)
@@ -24,3 +20,7 @@ app.config.errorHandler = (error, _instance, info) => {
 }
 
 app.mount('#app')
+
+// Whatever mounted, the pre-mount capture is finished with. A run that ended on the login gate
+// has no field to replay into, and one left running would collect the password typed there.
+dropEarlyKeys()

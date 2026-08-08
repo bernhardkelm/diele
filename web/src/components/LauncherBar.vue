@@ -2,6 +2,7 @@
 import { onMounted, useTemplateRef } from 'vue'
 import { useGlobalSearchShortcut } from '@/composables/useGlobalSearchShortcut'
 import { useRevealOnActive } from '@/composables/useRevealOnActive'
+import { takeEarlyKeys } from '@/helpers/earlyKeys'
 
 const query = defineModel<string>({ required: true })
 
@@ -93,7 +94,24 @@ function clearQuery(): void {
 // the admin list moves focus onto its rows, so it needs a way to hand the caret back here
 defineExpose({ focus: focusInput })
 
+// Whatever was typed before Vue mounted, put into the field it was meant for. Taken here rather
+// than on mount, so the input is created already carrying the text and the caret sits after it
+// without a second patch. Only a bar that renders takes it, which is what leaves the buffer
+// alone on the login gate.
+const earlyKeys = takeEarlyKeys()
+if (earlyKeys) {
+  query.value = earlyKeys
+}
+
 onMounted(() => {
+  // A key was already pressed, so there is a hardware keyboard and the hover gate is moot.
+  // Focused without selecting, because replayed text is the start of a query rather than
+  // something the next keystroke should type over.
+  if (query.value !== '') {
+    input.value?.focus()
+    return
+  }
+
   if (window.matchMedia?.(CAN_HOVER).matches) {
     focusInput()
   }
