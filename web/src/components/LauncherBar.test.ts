@@ -147,16 +147,18 @@ describe('ActionRow', () => {
   })
 
   // Every row in the ring is addressable the same way, whatever kind it is.
-  it('is a station in the ring, one level deeper when nested', () => {
+  it('is a station in the ring, at whichever depth it was placed', () => {
     const flat = mount(ActionRow, { props: { action, stationKey: 'action:export' } })
-    const nested = mount(ActionRow, {
-      props: { action, stationKey: 'action:export', nested: true },
-    })
 
     expect(flat.attributes('role')).toBe('treeitem')
     expect(flat.attributes('data-station')).toBe('action:export')
     expect(flat.attributes('aria-level')).toBe('1')
-    expect(nested.attributes('aria-level')).toBe('2')
+
+    for (const level of [2, 3] as const) {
+      const nested = mount(ActionRow, { props: { action, stationKey: 'k', level } })
+
+      expect(nested.attributes('aria-level'), String(level)).toBe(String(level))
+    }
   })
 
   it('is the list tab stop only while it is the active row', () => {
@@ -238,4 +240,3 @@ describe('what the field announces about itself', () => {
     expect(wrapper.find('[role="status"]').text()).not.toContain('matches')
   })
 })
-

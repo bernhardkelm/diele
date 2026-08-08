@@ -29,11 +29,11 @@ import { rowActionsFor, type RowActionId } from '@/features/admin/adminRowAction
 import { adminSettingsActions } from '@/features/admin/adminSettingsActions'
 import {
   buildStations,
+  entryKey,
   featureKey,
   type AdminStation,
   type HiddenEntries,
 } from '@/features/admin/adminStations'
-import { producedBy } from '@/features/admin/producedEntries'
 import { searchFeatures } from '@/features/admin/featureSearch'
 
 const { brand } = usePortalConfig()
@@ -85,20 +85,45 @@ const actions = computed<ReadonlyArray<ListAction>>(() =>
   }),
 )
 
-const { rows: entryRows, sources } = useConnectorEntries()
+const { rows: entryRows } = useConnectorEntries()
 const { forEveryone, toggle: setHidden, showAll: showAllHidden } = useHiddenEntries()
 
-// What the open connector went and fetched, as opposed to the instances that fetched it. Only a
-// connector that produces entries has any: a feature with no `entries` capability opens onto its
-// own rows and nothing else.
-const produced = computed(() => {
+// Ahead of the ring, because the list itself now depends on which form is open: the repos of a
+// connection are listed under its settings, so `stations` reads `editing`. `restore` is reached
+// through a closure rather than passed by value, since the ring that owns it is built from those
+// same stations and cannot exist yet.
+const { editing, keepFocus, removeAt, cancelEdit, saveEntry, addEntry } = useAdminRowEdits({
+  create,
+  update,
+  remove,
+  restore: (intent) => restore(intent),
+})
+
+// Connection whose settings are open, which is also the one whose repos are listed under them:
+// what a connection fetched belongs to the connection being looked at, and only one is ever
+// open, so the second connection's repos are never behind the first one's.
+// Read from the rows rather than the stations, which are built from this: only a feature that
+// fetches has repos to list, so a card row that happens to share an id with a connector never
+// picks up that connector's.
+const openConnection = computed(() => {
   const feature = features.value.find((entry) => entry.id === expanded.value)
 
-  if (feature?.capabilities?.includes('entries') !== true) {
+  if (!expanded.value || feature?.capabilities?.includes('entries') !== true) {
+    return undefined
+  }
+
+  return rows.value.find((row) => entryKey(expanded.value!, row.id) === editing.value)?.id
+})
+
+// What that connection went and fetched, as opposed to the connection itself.
+const produced = computed(() => {
+  if (openConnection.value === undefined) {
     return []
   }
 
-  return sortRows(producedBy(entryRows.value, sources.value, feature.id), 'name', 'asc')
+  const listed = entryRows.value.filter((row) => row.connectorId === openConnection.value)
+
+  return sortRows(listed, 'name', 'asc')
 })
 
 // Keeping an entry from everyone lives here rather than in a personal settings page, because it
@@ -111,6 +136,7 @@ const visibility = computed<HiddenEntries | undefined>(() => {
   const count = produced.value.filter((row) => forEveryone.value.includes(row.ref)).length
 
   return {
+    openRow: openConnection.value,
     entries: produced.value,
     hidden: forEveryone.value,
     // only while something is hidden: on a list nothing has been taken out of, it would be a
@@ -165,13 +191,6 @@ useStickyFocus({ selector: '[data-station]', heldClass: 'row-marker-held' })
 // Station whose action is running, so only that row says what is happening rather than all of
 // them greying out together.
 const acting = ref<string | undefined>()
-
-const { editing, keepFocus, removeAt, cancelEdit, saveEntry, addEntry } = useAdminRowEdits({
-  create,
-  update,
-  remove,
-  restore,
-})
 
 const hints = computed(() =>
   hintsFor(
@@ -560,7 +579,7 @@ onMounted(() => void loadFeatures())
             :station-key="station.key"
             :active="index === tabStop"
             :focused="index === activeIndex"
-            :nested="station.nested"
+            :level="station.nested ? 3 : 1"
             :query="query"
             @run="station.action.run()"
           />
@@ -629,12 +648,23 @@ onMounted(() => void loadFeatures())
   }
 }
 
+/* Where everything that hangs off an open connection sits: the connector row's own gutter plus
+   the indent its form takes inside it, so the repo switches and their restore row line up with
+   the settings they belong to rather than one step short of them. See AdminEntryForm. */
 .admin__features {
+  --row-deep-gutter: calc(var(--diele-space-6) * 5);
+
   width: 100%;
   margin: 0;
   padding: 0;
   list-style: none;
   border-bottom: 3px solid var(--diele-rule);
+}
+
+@media (max-width: 640px) {
+  .admin__features {
+    --row-deep-gutter: var(--diele-space-6);
+  }
 }
 
 /* Written here rather than on each row, because the rows are of four kinds and a sibling

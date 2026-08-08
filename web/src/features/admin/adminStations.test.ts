@@ -49,12 +49,14 @@ const ENTRIES: ReadonlyArray<RowTarget> = [
 ]
 
 /**
- * Builds what an open connector produced, and what the portal keeps from everyone.
+ * Builds what an open connection produced, and what the portal keeps from everyone.
  * @param {ReadonlyArray<string>} hidden - Refs hidden for everyone
+ * @param {number} openRow - Connection whose entries are on screen
  * @returns {HiddenEntries} - The switches and their restore row
  */
-function produced(hidden: ReadonlyArray<string> = []): HiddenEntries {
+function produced(hidden: ReadonlyArray<string> = [], openRow = 1): HiddenEntries {
   return {
+    openRow,
     entries: ENTRIES,
     hidden,
     showAll:
@@ -154,10 +156,10 @@ describe('buildStations', () => {
     expect(new Set(keys).size).toBe(keys.length)
   })
 
-  // The instances are what the feature is opened to edit; the entries are what they went and
-  // fetched, so they follow rather than lead.
-  it('puts what a connector produced after the instances that produced it', () => {
-    const stations = buildStations([feature()], 'cards', [row(1)], [], produced())
+  // Under the connection that fetched them rather than under the feature: reaching the second
+  // connection's repos would otherwise mean walking the whole of the first one's.
+  it('hangs what a connection produced off that connection alone', () => {
+    const stations = buildStations([feature()], 'cards', [row(1), row(2)], [], produced([], 1))
 
     expect(stations.map((station) => station.kind)).toEqual([
       'feature',
@@ -165,11 +167,29 @@ describe('buildStations', () => {
       'entry',
       'hidden',
       'hidden',
+      'entry',
     ])
   })
 
+  it('places nothing under a connection that is not the open one', () => {
+    const stations = buildStations([feature()], 'cards', [row(1), row(2)], [], produced([], 2))
+    const kinds = stations.map((station) => station.kind)
+
+    expect(kinds).toEqual(['feature', 'add', 'entry', 'entry', 'hidden', 'hidden'])
+  })
+
+  // Nothing is on screen until a connection is opened, which is what keeps the list walkable.
+  it('places no switches while no connection is open', () => {
+    const stations = buildStations([feature()], 'cards', [row(1)], [], {
+      ...produced(),
+      openRow: undefined,
+    })
+
+    expect(stations.some((station) => station.kind === 'hidden')).toBe(false)
+  })
+
   it('reads a ref in the hidden set as hidden, and labels a row by namespace and name', () => {
-    const stations = buildStations([feature()], 'cards', [], [], produced(['row:2']))
+    const stations = buildStations([feature()], 'cards', [row(1)], [], produced(['row:2']))
     const hidden = stations.filter((station) => station.kind === 'hidden')
 
     expect(hidden.map((station) => station.label)).toEqual(['example-group/web', 'api'])
@@ -178,10 +198,10 @@ describe('buildStations', () => {
 
   // On a list nothing has been taken out of, it would be a row that does nothing.
   it('places the restore row ahead of the switches, only while something is hidden', () => {
-    const none = buildStations([feature()], 'cards', [], [], produced())
+    const none = buildStations([feature()], 'cards', [row(1)], [], produced())
     expect(none.some((station) => station.kind === 'action')).toBe(false)
 
-    const some = buildStations([feature()], 'cards', [], [], produced(['row:1']))
+    const some = buildStations([feature()], 'cards', [row(1)], [], produced(['row:1']))
     const restore = some.find((station) => station.kind === 'action')
 
     expect(restore).toMatchObject({ nested: true })
@@ -190,7 +210,7 @@ describe('buildStations', () => {
     )
   })
 
-  // A feature that produces nothing opens onto its own rows and nothing else.
+  // A feature whose rows fetch nothing opens onto them and nothing else.
   it('places no switches for a feature that produced nothing', () => {
     const stations = buildStations([feature()], 'cards', [row(1)], [])
 

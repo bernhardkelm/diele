@@ -384,34 +384,58 @@ describe('adding and editing a row', () => {
 // connector that produced the entry rather than on a personal settings page.
 describe('keeping a produced entry from everyone', () => {
   /**
-   * Opens the connector whose entries the panel offers switches for.
-   * @returns {Promise<VueWrapper>} - The mounted panel, with GitLab open
+   * Opens the GitLab feature, then the connection whose entries the switches belong to.
+   * @returns {Promise<VueWrapper>} - The mounted panel, with both levels open
    */
-  async function openGitlab(): Promise<VueWrapper> {
+  async function openConnection(): Promise<VueWrapper> {
     const wrapper = await open()
-    const row = wrapper
+    const feature = wrapper
       .findAllComponents(AdminFeatureRow)
-      .find((feature) => feature.props('feature').id === 'gitlab')!
+      .find((row) => row.props('feature').id === 'gitlab')!
 
-    await row.trigger('click')
+    await feature.trigger('click')
     await nextTick()
-    await vi.waitFor(() =>
-      expect(wrapper.findAllComponents(AdminHiddenRow).length).toBeGreaterThan(0),
-    )
+    await vi.waitFor(() => expect(wrapper.findAllComponents(AdminEntryRow).length).toBe(1))
+
+    // the connection itself, whose settings the repos are listed under
+    await wrapper.findAllComponents(AdminEntryRow)[0]!.trigger('click')
+    await nextTick()
 
     return wrapper
   }
 
-  it('offers one switch per entry the open connector produced', async () => {
-    const wrapper = await openGitlab()
+  // Under the connection rather than the feature: with two of them, the second one's repos would
+  // otherwise sit behind the whole of the first one's.
+  it('shows nothing until the connection itself is opened', async () => {
+    const wrapper = await open()
+    const feature = wrapper
+      .findAllComponents(AdminFeatureRow)
+      .find((row) => row.props('feature').id === 'gitlab')!
+
+    await feature.trigger('click')
+    await nextTick()
+    await vi.waitFor(() => expect(wrapper.findAllComponents(AdminEntryRow).length).toBe(1))
+
+    expect(wrapper.findAllComponents(AdminHiddenRow)).toHaveLength(0)
+  })
+
+  it('offers one switch per entry the open connection produced', async () => {
+    const wrapper = await openConnection()
     const switches = wrapper.findAllComponents(AdminHiddenRow)
 
     expect(switches.map((row) => row.props('entry').ref)).toEqual(['gitlab:1:api', 'gitlab:1:web'])
     expect(switches.map((row) => row.props('hidden'))).toEqual([true, false])
   })
 
+  // One level deeper than the connection, so the three read as one ladder.
+  it('sits a level below the connection it hangs from', async () => {
+    const wrapper = await openConnection()
+
+    expect(wrapper.findAllComponents(AdminHiddenRow)[0]!.attributes('aria-level')).toBe('3')
+  })
+
   it('writes the everyone scope, which is the one an admin alone may reach', async () => {
-    const wrapper = await openGitlab()
+    const wrapper = await openConnection()
 
     await wrapper
       .findAllComponents(AdminHiddenRow)

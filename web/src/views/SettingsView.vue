@@ -284,7 +284,7 @@ function onFocusin(event: FocusEvent): void {
             :active="index === tabStop"
             :focused="index === activeIndex"
             :query="query"
-            :nested="station.nested"
+            :level="station.nested ? 2 : 1"
             @run="open(station)"
           />
         </template>

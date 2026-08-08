@@ -24,7 +24,7 @@ const emit = defineEmits<{ run: [] }>()
 const { attrs: stationAttrs, ownsEvent } = useStationRow({
   stationKey: () => props.stationKey,
   active: () => props.active,
-  level: 2,
+  level: 3,
 })
 
 const name = computed(() =>
@@ -58,7 +58,7 @@ function onKeydown(event: KeyboardEvent): void {
 
 <template>
   <li
-    class="produced row-shell row-marker-focus row-grammar"
+    class="produced row-shell row-marker-focus"
     v-bind="stationAttrs"
     :class="{ 'produced--off': hidden }"
     :aria-label="label"
@@ -82,11 +82,21 @@ function onKeydown(event: KeyboardEvent): void {
 </template>
 
 <style scoped>
-/* see AdminEntryRow: a row inside an open feature carries the same gutter and grammar */
+/* Its own tracks rather than the list's, the way the form these sit under has its own: a repo
+   name is far longer than a card's label, and on the shared tracks it would widen the first one
+   for every row in the list — so opening a connection stepped the whole panel sideways. Spanning
+   instead, nothing here is measured against the rows above.
+   The gutter lines them up with the form they belong to, rather than sitting one step short of
+   it: see the list's own `--row-deep-gutter`. */
 .produced {
-  --row-gutter: var(--produced-gutter);
-  --produced-gutter: calc(var(--diele-space-6) * 2);
-  --row-marker-left: var(--diele-space-8);
+  --row-gutter: var(--row-deep-gutter, calc(var(--diele-space-6) * 3));
+  --row-marker-left: calc(var(--row-gutter) - var(--diele-space-4));
+
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: baseline;
+  gap: var(--diele-space-4);
   cursor: pointer;
 }
 
@@ -94,11 +104,7 @@ function onKeydown(event: KeyboardEvent): void {
   opacity: 0.55;
 }
 
-/* A group and a repo run far past a card's label, and the shared first track is `auto`: sized to
-   its widest cell across the whole list. Capped at the track's own minimum, so one long repo
-   name cannot narrow the detail column of every other row. */
 .produced__name {
-  max-width: var(--diele-row-label);
   color: var(--diele-fg);
 }
 
@@ -115,7 +121,7 @@ function onKeydown(event: KeyboardEvent): void {
 
 @media (max-width: 640px) {
   .produced {
-    --produced-gutter: var(--diele-space-4);
+    --row-gutter: var(--diele-space-6);
     --row-marker-left: var(--diele-space-2);
 
     grid-template-columns: minmax(0, 1fr) auto;

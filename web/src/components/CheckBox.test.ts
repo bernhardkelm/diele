@@ -53,6 +53,26 @@ describe('CheckBox', () => {
     expect((wrapper.find('input').element as HTMLInputElement).checked).toBe(true)
   })
 
+  // A checkbox inside a form answers Enter by submitting it, which leaves this the one control
+  // in a form a keyboard cannot actually set.
+  it('toggles on enter rather than submitting the form around it', async () => {
+    const wrapper = mount(CheckBox, { props: { modelValue: false } })
+
+    await wrapper.find('input').trigger('keydown', { key: 'Enter' })
+
+    expect(wrapper.emitted('update:modelValue')).toEqual([[true]])
+  })
+
+  it('does not swallow the key on a box that cannot be set', async () => {
+    const wrapper = mount(CheckBox, { props: { modelValue: false, disabled: true } })
+    const event = new KeyboardEvent('keydown', { key: 'Enter', cancelable: true, bubbles: true })
+
+    wrapper.find('input').element.dispatchEvent(event)
+
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined()
+    expect(event.defaultPrevented).toBe(false)
+  })
+
   it('disables the control rather than only dimming it', () => {
     const wrapper = mount(CheckBox, { props: { modelValue: false, disabled: true } })
 

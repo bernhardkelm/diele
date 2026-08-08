@@ -5,8 +5,8 @@ export interface StationRowOptions {
   stationKey: () => string
   /** Whether this row is the list's single tab stop */
   active: () => boolean | undefined
-  /** Depth in the tree: a feature or a closing action is 1, a row inside one is 2 */
-  level: 1 | 2
+  /** Depth in the tree: a feature is 1, a row inside one is 2, what that row opens onto is 3 */
+  level: 1 | 2 | 3
 }
 
 export interface StationRow {

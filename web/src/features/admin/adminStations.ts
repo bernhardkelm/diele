@@ -73,7 +73,7 @@ export function featureKey(featureId: string): string {
  * @param {number} rowId - Row being addressed
  * @returns {string} - Its key
  */
-function entryKey(featureId: string, rowId: number): string {
+export function entryKey(featureId: string, rowId: number): string {
   return `entry:${featureId}:${rowId}`
 }
 
@@ -97,7 +97,9 @@ function hiddenKey(featureId: string, entryRef: string): string {
 }
 
 export interface HiddenEntries {
-  /** What the expanded connector produced, in the order the switches are listed */
+  /** Connector instance whose produced entries are on screen, or undefined while none is open */
+  readonly openRow: number | undefined
+  /** What that instance produced, in the order the switches are listed */
   readonly entries: ReadonlyArray<RowTarget>
   /** Refs the portal keeps out of everyone's list */
   readonly hidden: ReadonlyArray<string>
@@ -110,13 +112,15 @@ export interface HiddenEntries {
  * ring. The expanded feature's rows follow it directly, so walking down from a feature steps
  * into its entries rather than over them.
  *
- * A connector's produced entries come after its configured instances, because the instances are
- * what the feature is opened to edit and the entries are what they went and fetched.
+ * A connector's produced entries hang off the instance that fetched them, one level below it and
+ * only while that instance is open. Under the feature instead they would read as belonging to
+ * every instance at once, and reaching the second connector's repos would mean walking the whole
+ * of the first one's.
  * @param {ReadonlyArray<ApiFeature>} features - Features left after filtering
  * @param {string | undefined} expanded - Feature whose rows are on screen
  * @param {ReadonlyArray<ApiRow>} rows - Rows of the expanded feature
  * @param {ReadonlyArray<ListAction>} actions - Closing actions, after every feature
- * @param {HiddenEntries | undefined} visibility - What the expanded connector produced, when it produces anything
+ * @param {HiddenEntries | undefined} visibility - What the open instance produced, when one is open
  * @returns {ReadonlyArray<AdminStation>} - The ring, in the order it is rendered
  */
 export function buildStations(
@@ -159,28 +163,34 @@ export function buildStations(
         first: index === 0,
         last: index === rows.length - 1,
       })
+
+      if (!visibility || row.id !== visibility.openRow) {
+        return
+      }
+
+      // Ahead of the switches, the way the add row leads a feature's entries: on a list long
+      // enough to need it, a restore behind them all is a scroll away from what it undoes.
+      if (visibility.showAll) {
+        stations.push({
+          kind: 'action',
+          key: `action:${feature.id}:${row.id}:${visibility.showAll.id}`,
+          label: visibility.showAll.label,
+          action: visibility.showAll,
+          nested: true,
+        })
+      }
+
+      for (const entry of visibility.entries) {
+        stations.push({
+          kind: 'hidden',
+          key: hiddenKey(feature.id, entry.ref),
+          label: entry.detail ? `${entry.detail}/${entry.name}` : entry.name,
+          feature,
+          entry,
+          hidden: visibility.hidden.includes(entry.ref),
+        })
+      }
     })
-
-    if (visibility?.showAll) {
-      stations.push({
-        kind: 'action',
-        key: `action:${feature.id}:${visibility.showAll.id}`,
-        label: visibility.showAll.label,
-        action: visibility.showAll,
-        nested: true,
-      })
-    }
-
-    for (const entry of visibility?.entries ?? []) {
-      stations.push({
-        kind: 'hidden',
-        key: hiddenKey(feature.id, entry.ref),
-        label: entry.detail ? `${entry.detail}/${entry.name}` : entry.name,
-        feature,
-        entry,
-        hidden: visibility!.hidden.includes(entry.ref),
-      })
-    }
   }
 
   for (const action of actions) {

@@ -14,18 +14,18 @@ interface ActionRowProps {
   focused?: boolean
   /** Term filtering the list, marked up in the label */
   query?: string
-  /** Whether the row sits inside an open section rather than in the list itself */
-  nested?: boolean
+  /** Depth the row sits at: 1 closes the list itself, 2 and 3 sit inside what opened them */
+  level?: 1 | 2 | 3
 }
 
-const props = defineProps<ActionRowProps>()
+const props = withDefaults(defineProps<ActionRowProps>(), { level: 1 })
 
 const emit = defineEmits<{ run: [] }>()
 
 const { attrs: stationAttrs, ownsEvent } = useStationRow({
   stationKey: () => props.stationKey,
   active: () => props.active,
-  level: props.nested ? 2 : 1,
+  level: props.level,
 })
 
 /**
@@ -47,7 +47,11 @@ function onKeydown(event: KeyboardEvent): void {
   <li
     class="action row-shell row-marker-focus row-grammar"
     v-bind="stationAttrs"
-    :class="{ 'action--off': action.disabled, 'action--nested': nested }"
+    :class="{
+      'action--off': action.disabled,
+      'action--nested': level === 2,
+      'action--deep': level === 3,
+    }"
     :aria-disabled="action.disabled ? true : undefined"
     @keydown="onKeydown"
     @click="!action.disabled && emit('run')"
@@ -85,6 +89,16 @@ function onKeydown(event: KeyboardEvent): void {
   padding-left: calc(var(--diele-space-6) * 2);
 }
 
+/* One step further again, for a row inside something that was itself opened from a nested row.
+   A list that wants these lined up with something of its own, a form the rows sit under, says
+   so by setting `--row-deep-gutter`. */
+.action--deep {
+  --gutter: var(--row-deep-gutter, calc(var(--diele-space-6) * 3));
+  --row-marker-left: calc(var(--gutter) - var(--diele-space-4));
+
+  padding-left: var(--gutter);
+}
+
 .action__name {
   color: var(--diele-fg);
 }
@@ -107,6 +121,10 @@ function onKeydown(event: KeyboardEvent): void {
     --row-marker-left: var(--diele-space-2);
 
     padding-left: var(--diele-space-4);
+  }
+
+  .action--deep {
+    --row-marker-left: var(--diele-space-2);
   }
 
   .action__name {

@@ -6,9 +6,28 @@ interface CheckBoxProps {
   label?: string
 }
 
-defineProps<CheckBoxProps>()
+const props = defineProps<CheckBoxProps>()
 
 const emit = defineEmits<{ 'update:modelValue': [value: boolean] }>()
+
+/**
+ * Toggles the box on Enter.
+ *
+ * A checkbox inside a form answers Enter by submitting it, which leaves this the one control in
+ * a form a keyboard cannot actually set: the caret reaches it, and the key that means "do the
+ * thing" everywhere else saves the form around it instead. Space still toggles it natively; this
+ * only stops Enter meaning something else here than it does on every other row.
+ * @param {KeyboardEvent} event - Key press being handled
+ * @returns {void}
+ */
+function onEnter(event: KeyboardEvent): void {
+  if (props.disabled) {
+    return
+  }
+
+  event.preventDefault()
+  emit('update:modelValue', !props.modelValue)
+}
 </script>
 
 <template>
@@ -24,6 +43,7 @@ const emit = defineEmits<{ 'update:modelValue': [value: boolean] }>()
       :disabled="disabled"
       :aria-label="label"
       @change="emit('update:modelValue', ($event.target as HTMLInputElement).checked)"
+      @keydown.enter="onEnter"
     />
     <span class="check__box" aria-hidden="true">[{{ modelValue ? '×' : ' ' }}]</span>
   </span>
