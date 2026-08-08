@@ -1,6 +1,8 @@
 # diele
 
-Do more with your new tab page: search, launch and admin for everything you run.
+![diele](docs/images/hero.png)
+
+**Do more with your new tab page: search, launch and admin for everything you run.**
 
 Open a tab and the cursor is already in the search bar. Type, and diele searches your service
 cards, your saved sites, your repos and your local dev servers together — by name, by url and by
@@ -10,141 +12,256 @@ Everything it shows is a row in its own database, edited from a panel inside the
 no config files to redeploy: add a card, change the wordmark, plug in a GitLab token, and the
 next tab has it.
 
+- **One bar over everything you own** — cards, saved sites, repos and local ports, ranked above the web
+- **A keyboard the whole way down** — nothing is reachable only by mouse
+- **Connectors** — GitLab and GitHub repos sync in on a timer, each with their own quick jumps
+- **An admin panel, not a config file** — every row edited in the page, the whole configuration exportable as one document
+- **Three ways to sign in** — OpenID Connect, local accounts, or a dev mode while you build
+- **One container** — one port, one volume, and a database that is a file
+
 > **Status:** used daily, but young. The endpoints and the database schema are still moving, and
-> there are no releases yet. See [Not here yet](#not-here-yet) before you rely on it.
+> there are no releases yet. See [Planned](#planned) for what is not here.
 
-## What it does
+## Table of contents
 
-**Search that ranks what you own over the web.** One bar over cards, saved sites, connector rows
-and local ports. Fuzzy, so `prometeus` still finds Prometheus and `uk` finds Uptime Kuma. Paths
-split on their separators, so `example-group/web` matches both halves. A term that is really a
-url leads the results as **Go to**; one written as `r/vuejs` leads them as a jump to that
-subreddit.
+- [Features](#features)
+  - [Search](#search)
+  - [Keyboard control](#keyboard-control)
+  - [Slash commands](#slash-commands)
+  - [Search engines](#search-engines)
+  - [Cards](#cards)
+  - [Saved sites](#saved-sites)
+  - [Local ports](#local-ports)
+  - [Subreddit jump](#subreddit-jump)
+  - [Light and dark](#light-and-dark)
+  - [The admin panel](#the-admin-panel)
+  - [Export and import](#export-and-import)
+  - [Signing in](#signing-in)
+  - [Connectors](#connectors)
+  - [Planned](#planned)
+- [Installation](#installation)
+  - [Docker](#docker)
+  - [Making it your new tab page](#making-it-your-new-tab-page)
+  - [Backing up](#backing-up)
+  - [Which tag](#which-tag)
+  - [From source](#from-source)
+- [Documentation](#documentation)
+- [License](#license)
 
-**A keyboard the whole way down.** `↑` `↓` move the highlight, `←` `→` step through a repo's
-pipelines, merge requests and releases, `tab` cycles search engines, `alt`+`1`–`9` opens a card
-by its badge, and `esc` backs out one level at a time. The admin and settings views reuse the
-same ring, so nothing is reachable only by mouse.
+## Features
 
-**Slash commands.** `/` lists them. `/admin`, `/settings` and `/logout` are built in; the rest are
-a keyword plus a query url carrying `{query}`, so `/yt cats` goes straight to YouTube.
+### Search
 
-**Connectors.** A connector is a feature whose rows come from somewhere else. GitLab and GitHub
-ship today: give one a token and some groups or orgs and your repos appear under the cards, each
-with its own quick jumps. Entries are synced on a timer into diele's own store, so a restart never
-shows an empty list and a revoked token leaves the last good sync standing rather than wiping it.
+The bar takes focus on load, so a new tab can be typed into straight away. It searches the service
+cards, the saved sites, the connector rows and the local ports together, by name, by url and by
+keyword.
 
-**Local ports.** Dev servers on the machine holding the browser are probed on load and get a dot
-when something is listening, so `vue` finds `:5173` rather than only the number doing. Off by
-default, because it costs a request per port on every load.
+Matching is fuzzy, so `prometeus` still finds Prometheus and `uk` finds Uptime Kuma. Paths split on
+their separators, so `example-group/web` matches both halves. A term that is really a url —
+`example.com`, `localhost:3000`, a pasted link — leads the results as **Go to**.
 
-**An admin panel, not a config file.** Cards, sites, engines, commands, ports, icons and
-connectors are all rows, all edited in place, all exportable as one document you can import into
-another instance. Connector credentials travel in that document still encrypted, so an instance
-holding the same `DIELE_SECRET_KEYS` restores a working connector and one holding a different key
-restores it switched off, waiting for its token. Each feature declares its own fields, so a new
-connector needs no form code.
+What diele already knows ranks above the web: the first match is highlighted, so `↵` opens it. To
+search the web anyway, `↑` steps off the list and hands `↵` back to the engine.
 
-**Three ways to sign in.** OpenID Connect with PKCE against any issuer, local accounts with
-argon2id passwords, or a `dev` mode that grants every login while you work on the frontend.
-All three end in the same opaque server-side session, so signing someone out actually works.
+![Searching for "web": a local port, a saved site and a repo, ranked above the web](docs/images/search.png)
 
-**Light and dark**, following the OS by default, pinnable per device in `#/settings`. Uploaded
-SVG logos are sanitised on the way in and recoloured to `currentColor`, so they sit monochrome
-at rest and take their brand colour on hover.
+### Keyboard control
 
-## Quickstart
+Nothing is reachable only by mouse, and the admin and settings views reuse the same ring.
 
-Needs Node 24.7 or newer. Nothing else — the database is a file.
-
-```sh
-git clone <your-fork> diele
-cd diele
-npm install
-npm run dev
-```
-
-No configuration step: the defaults are committed, so that starts the API on `:3000` and the web
-app on `:5173` and creates the SQLite database on first boot. Open **http://localhost:5173**.
-
-The first page is a **setup screen**, because a fresh instance holds no account. Creating the
-first one is gated by a token the server prints at startup — look for it in the `npm run dev`
-output. After that, `admin` signs in with the password you chose.
-
-To work on the web app without signing in at all, put `AUTH_MODE=dev` in a `.env.local`. It
-grants every login as a fixed identity, so never set it on anything reachable by others.
-
-A fresh database is **empty** on purpose: an instance showing rows nobody added would be
-guessing. To get something to look at, open `#/admin` → *Import* and pick
-[`api/example-seed.json`](api/example-seed.json).
-
-### Making it your new tab page
-
-Chrome has no setting for this — overriding the new tab page takes an extension, so there is one
-in [`extension/`](extension/README.md). Load it unpacked from `chrome://extensions`, open a new
-tab, and enter the address of your instance. It asks for the `storage` permission and nothing
-else: no host access, no build step, no third party.
-
-```sh
-npm run build        # common types, then api, then web
-npm run type-check
-npm run lint
-npm test
-```
-
-## Configuration
-
-All of it is environment, and none of it needs touching to run diele: the defaults are committed
-in [`.env`](.env), which lists **every** variable both halves read. Copy
-[`.env.local.example`](.env.local.example) to `.env.local` for your secrets and anything that
-differs between machines — it lists the same variables again with their defaults, so overriding
-one is uncommenting rather than looking it up.
-
-Values resolve most-specific-first, first match wins:
-
-| | source | |
-| --- | --- | --- |
-| 1 | a real environment variable | what a container is given, so images ship no `.env` at all |
-| 2 | `api/.env.local` · `web/.env.local` | package, untracked |
-| 3 | `api/.env` · `web/.env` | package, committed — override slots, shipped fully commented out |
-| 4 | `.env.local` | repo, untracked — where most overrides belong |
-| 5 | `.env` | repo, committed — every variable, with its default |
-| 6 | the built-in default | `api/src/config.ts` |
-
-The nearest scope wins outright and, within a scope, the untracked file beats the committed one:
-the usual monorepo convention composed with the usual dotenv one. The root file is not a fallback
-for leftovers — it carries the full set, and the package files exist only so one half can be
-pointed somewhere the other should not follow. They ship with every line commented out, because a
-live value in one would outrank the file people actually edit.
-
-Only `VITE_`-prefixed variables are readable from browser code, which is why the api's secrets
-sit in the same files without reaching the bundle.
-
-| variable | does |
+| key | does |
 | --- | --- |
-| `PORT` | port the API listens on, default `3000` |
-| `DB_PATH` | where the SQLite file lives, default `data/diele.db`; a relative path is resolved from the repo root |
-| `PUBLIC_ORIGIN` | origin the browser reaches diele on; the OIDC redirect uri is derived from it |
-| `BRAND_TITLE`, `BRAND_SUBTITLE` | the wordmark and the line under it |
-| `BRAND_ACCENT_LIGHT`, `BRAND_ACCENT_DARK` | the accent, one six-digit hex per theme |
-| `AUTH_MODE` | `local` (default), `oidc` or `dev` |
-| `OIDC_ISSUER`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET` | required when `AUTH_MODE=oidc` |
-| `OIDC_SCOPES`, `OIDC_DISPLAY_NAME` | scopes requested, and what the sign-in button says |
-| `LOCAL_SETUP_TOKEN` | local mode: gates creating the first account; generated and printed when unset |
-| `DIELE_SECRET_KEYS` | `id:base64` pairs sealing connector credentials, first one active |
-| `SESSION_MAX_AGE_MS`, `SESSION_REMEMBER_MAX_AGE_MS` | idle windows, not lifetimes; they roll forward on use |
-| `SESSION_COOKIE_SECURE` | `auto` (default) derives it from the `PUBLIC_ORIGIN` scheme, which is almost always right; `true` or `false` override |
-| `SESSION_COOKIE_NAME` | name of the session cookie, default `diele_session`; only worth changing to run two instances on one host |
-| `TRUST_PROXY` | off by default; set to the number of proxies in front (`1` behind nginx) so `req.ip` is the caller and not a header |
-| `DIELE_VERSION` | what `/status` reports as the running build; the image stamps it from the git tag it was built at |
-| `VITE_API_TARGET` | **web, development only:** where the dev server proxies `/api`; a build talks to whatever origin serves it |
+| `↵` | opens the highlighted entry, or searches the web when nothing is highlighted |
+| `cmd`/`ctrl`+`↵` | the same, but alongside in a second tab |
+| `↑` `↓` | move the highlight; stepping off either end returns to the field |
+| `←` `→` | step through a repo's own page, its pipelines, merge requests and releases |
+| `tab` / `shift`+`tab` | cycle the search engine forwards or back |
+| `alt`+`1`–`9`,`0` | open that card; holding `alt` reveals the badges |
+| `/` | as the first character, opens the commands; from elsewhere, focuses the field |
+| `esc` | backs out one level at a time |
 
-`AUTH_MODE` falls back to `local` — the mode that needs nothing configured and still holds the
-door, since the first account is created through a setup form gated by a token printed at
-startup. A misspelled value therefore lands on the safe mode rather than refusing to boot, and
-says so on stderr.
+![Holding alt reveals a digit badge on every card](docs/images/keyboard.png)
 
-## Deploy
+### Slash commands
+
+A term starting with `/` addresses the commands and nothing else, so a slash never fuzzy-matches
+its way into an ordinary result. `/` on its own lists them.
+
+`/admin`, `/settings` and `/logout` are built in and cannot be redefined. The rest are a keyword
+plus a query url carrying `{query}`, added in the admin panel, so `/yt cats` goes straight to
+YouTube without the term ever touching the default engine.
+
+![Typing a single slash lists every command](docs/images/commands.png)
+
+### Search engines
+
+What `↵` submits to when nothing local matched. The first one is the default and every visit starts
+there; `tab` cycles through the rest without leaving the keyboard.
+
+An engine is a name and a url carrying `{query}`, so anything with a search url can be one.
+
+![Tab has cycled the engine to Wikipedia, and the fallback line says so](docs/images/engines.png)
+
+### Cards
+
+The logo grid on the resting page: the services you open often, each a label, a url, keywords and
+an icon.
+
+Icons are uploaded rather than bundled. An svg is sanitised on the way in and its paint rewritten
+to `currentColor`, so an uploaded logo sits monochrome at rest and takes its brand colour on hover
+like the built-in ones.
+
+![The card grid on the resting page](docs/images/cards.png)
+
+### Saved sites
+
+Everything that does not deserve a logo on the front page but should still be one keystroke away.
+They are suggested as results when the term matches them, and stay out of the way until it does.
+
+![A saved site suggested alongside a local port and a repo](docs/images/sites.png)
+
+### Local ports
+
+Dev servers on the machine holding the browser. Only the scheme and the port are editable and the
+url follows from them, while optional tags say what runs there, so `vue` finds `:5173` rather than
+only the number doing.
+
+Each is probed on load and whenever the tab regains focus, and the ones with something listening
+get a dot. Off by default, because it costs a request per port on every load: an instance that is
+not a development machine turns the whole feature off.
+
+![Three ports answering, one not](docs/images/localhost.png)
+
+### Subreddit jump
+
+A term written as `r/vuejs` or `/r/vuejs` leads the results as a jump to that subreddit instead of
+a search. It costs nothing until a term is written that way, and it is a switch rather than a list.
+
+![A term written as a subreddit path leads the results](docs/images/reddit.png)
+
+### Light and dark
+
+Both palettes follow the OS by default and can be pinned per device in `#/settings`. The override
+lives in the browser, so it is the one setting a lapsed session still changes.
+
+It is applied before the app mounts, so a pinned theme never flashes the device's one first.
+
+<table>
+<tr>
+<td><img src="docs/images/theme-light.png" alt="The portal in light mode"></td>
+<td><img src="docs/images/theme-dark.png" alt="The portal in dark mode"></td>
+</tr>
+</table>
+
+### The admin panel
+
+`/admin` opens the panel, which is the same page in a different mode rather than a second app.
+Cards, sites, engines, commands, ports, icons and connectors are all rows, all edited in place.
+
+Each feature declares its own fields and the input each one needs, and the form is rendered from
+that declaration — which is what lets a new connector be added without touching the web app at
+all.
+
+![Every feature in one list, built-ins and connectors alike](docs/images/admin.png)
+
+### Export and import
+
+The whole configuration leaves as one versioned document and goes back into another instance the
+same way: cards, sites, engines, commands, ports, icons and settings.
+
+Connector credentials travel in that document still encrypted. An instance holding the same
+`DIELE_SECRET_KEYS` restores a working connector; one holding a different key restores it switched
+off, waiting for its token.
+
+![Export and import sit in the list as rows, in the same keyboard ring](docs/images/transfer.png)
+
+### Signing in
+
+Three modes, all ending in the same opaque server-side session, so signing someone out actually
+works.
+
+| mode | is |
+| --- | --- |
+| `local` | accounts in diele's own database, argon2id passwords. The default, and it needs nothing configured |
+| `oidc` | OpenID Connect with PKCE against any compliant issuer |
+| `dev` | grants every login as a fixed identity while you work on the frontend, never for anything reachable by others |
+
+A fresh instance in local mode opens on a **setup screen** rather than a login, because there is no
+account yet. Creating the first one is gated by a token the server prints at startup.
+
+![The local mode sign-in screen](docs/images/login.png)
+
+### Connectors
+
+A connector is a feature whose rows come from somewhere else. Give one a token and some groups or
+orgs, and your repos appear under the cards, each with its own quick jumps.
+
+Entries are synced on a timer into diele's own store, so a restart never shows an empty list, and a
+revoked token leaves the last good sync standing rather than wiping it. A connector is only saved
+once its settings actually reach the source, so one cannot be stored in a state where every run is
+going to fail.
+
+Set `DIELE_SECRET_KEYS` before adding one: without a key there is nowhere safe to put a token, and
+the panel says so instead of taking it.
+
+![Repos from both forges, listed under the cards with their quick jumps](docs/images/connectors.png)
+
+#### GitLab
+
+| field | |
+| --- | --- |
+| **Instance** | origin only, `https://gitlab.com` or a self-hosted one |
+| **Groups** | comma separated; empty means every group the token can see |
+| **Access token** | stored encrypted, never returned |
+| **Include subgroups** | on by default: repos of nested groups are listed alongside the group's own |
+
+Create a **personal access token** under *Preferences → Access tokens* with the **`read_api`**
+scope, on an account that can see the groups you name. Nothing is written, so no other scope
+applies.
+
+> GitLab caps token lifetime at one year. An expired token does not empty the list: the last good
+> sync stands and the connector row reports the failure, which is where it becomes visible.
+
+![The GitLab connector, its form rendered from the fields the module declares](docs/images/connector-gitlab.png)
+
+#### GitHub
+
+| field | |
+| --- | --- |
+| **Instance** | origin only, `https://github.com` or a GitHub Enterprise one |
+| **Orgs and users** | comma separated; empty means every repo the token can see |
+| **Access token** | stored encrypted, never returned |
+
+A **fine-grained personal access token** needs one permission and no more: *Repository permissions
+→ **Metadata: Read-only***. Point its resource owner at the org or account whose repos you want,
+grant it access to all repositories or pick them, and an org owner approves it if the org requires
+approval.
+
+A classic token works too and needs `repo` to see private repositories, or nothing at all for
+public ones. It is the blunter instrument of the two: `repo` also carries write access, which diele
+never uses.
+
+diele only ever lists repositories. The pipeline, pull request and release jumps on each row are
+plain links to GitHub, not API calls, which is why the permission set stays this small.
+
+![The GitHub connector, the same form from a different declaration](docs/images/connector-github.png)
+
+### Planned
+
+Listed in the admin panel already, each declaring the capabilities it will answer to, which is
+where the shape it is expected to take is written down.
+
+| | |
+| --- | --- |
+| **Uptime Kuma** | monitor states, shown as a dot on the cards they belong to |
+| **Prometheus** | firing alerts at the top of the page, and card states from a query |
+| **Grafana** | dashboards, suggested as results when the term matches them |
+| **Notion** | pages from a private workspace, suggested as you type |
+| **Users and roles** | only the first account exists today; the `groups` claim is already carried onto the session, so the seam is there |
+
+## Installation
+
+### Docker
 
 One container, one port, one volume. The api serves the built launcher itself, so both halves are
 on one origin without a proxy in front to put them there.
@@ -166,11 +283,30 @@ docker run -d --name diele \
 
 Open it and the first page is the setup screen; the token that gates it is in `docker logs diele`.
 
-`PUBLIC_ORIGIN` is the one value that is not optional. It is the address people actually open, and
-a wrong one paints the portal and then rejects every write — including the form that claims the
-first account. Everything else in the table above is a real environment variable here, because the
-image ships no `.env` at all: set `DIELE_SECRET_KEYS` before adding a connector, and `TRUST_PROXY=1`
-when something terminates TLS in front.
+**Required.** One value, and a wrong one paints the portal and then rejects every write — including
+the form that claims the first account.
+
+| variable | |
+| --- | --- |
+| `PUBLIC_ORIGIN` | the address people actually open, scheme and host; the OIDC redirect uri is derived from it |
+
+**Optional.** Everything here has a working default. The image ships no `.env` at all, so each of
+these is a real environment variable.
+
+| variable | |
+| --- | --- |
+| `DIELE_SECRET_KEYS` | `id:base64` pairs sealing connector credentials, first one active. Set it before adding a connector: `echo "k1:$(openssl rand -base64 32)"` |
+| `AUTH_MODE` | `local` (default), `oidc` or `dev` |
+| `OIDC_ISSUER`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET` | required when `AUTH_MODE=oidc`; see [the api README](api/README.md#setting-up-an-oidc-provider) |
+| `TRUST_PROXY` | off by default; set to the number of proxies in front (`1` behind nginx) so `req.ip` is the caller and not a header |
+| `BRAND_TITLE`, `BRAND_SUBTITLE` | the wordmark and the line under it |
+| `BRAND_ACCENT_LIGHT`, `BRAND_ACCENT_DARK` | the accent, one six-digit hex per theme |
+| `LOCAL_SETUP_TOKEN` | gates creating the first account; generated and printed when unset |
+| `SESSION_MAX_AGE_MS`, `SESSION_REMEMBER_MAX_AGE_MS` | idle windows, not lifetimes; they roll forward on use |
+
+Losing `DIELE_SECRET_KEYS` means re-entering every credential by hand, so back it up somewhere
+other than the database. The [full variable list](api/README.md#configuration), including the ones
+that only matter outside a container, is in the api README.
 
 The process runs as uid 1000 against a read-only root filesystem with no capabilities, so `/data`
 is the only path it can write. A named volume takes its ownership from the image and needs nothing
@@ -182,6 +318,23 @@ mkdir -p /srv/diele && sudo chown 1000:1000 /srv/diele    # then -v /srv/diele:/
 
 `/status` answers without a session and names the running build, which is what the image's own
 `HEALTHCHECK` reads.
+
+A fresh database is **empty** on purpose: an instance showing rows nobody added would be guessing.
+To get something to look at, open `#/admin` → *Import* and pick
+[`api/example-seed.json`](api/example-seed.json).
+
+### Making it your new tab page
+
+Chrome has no setting for this — overriding the new tab page takes an extension, so there is one in
+[`extension/`](extension/README.md). Load it unpacked from `chrome://extensions`, open a new tab,
+and enter the address of your instance. It asks for the `storage` permission and nothing else: no
+host access, no build step, no third party.
+
+Edge, Brave, Vivaldi and Opera load the same folder the same way. Safari needs no extension: it
+opens new tabs with the home page, so setting that is enough. Firefox has no such setting and
+would need the extension, which has not been tried there.
+
+![The first new tab asks where the instance lives](docs/images/extension.png)
 
 ### Backing up
 
@@ -209,16 +362,27 @@ rollback.
 
 ### From source
 
+Needs Node 24.7 or newer. Nothing else — the database is a file.
+
+```sh
+git clone https://github.com/bernhardkelm/diele.git
+cd diele
+npm install
+npm run dev
+```
+
+No configuration step: the defaults are committed, so that starts the API on `:3000` and the web
+app on `:5173` and creates the SQLite database on first boot. Open **http://localhost:5173**.
+
+To serve it the way the image does, as one origin with no dev server:
+
 ```sh
 npm ci
 npm run build
 npm start
 ```
 
-`npm start` serves `web/dist` as well, so this is the same single origin the image is, minus the
-container.
-
-## Layout
+## Documentation
 
 ```
 diele/
@@ -229,22 +393,15 @@ diele/
 └── data/       the SQLite database, created on first boot, gitignored
 ```
 
-`common` is types only and emits nothing but declarations, so neither side gains a runtime
-dependency on the other — but a field renamed on one side stops compiling on the other instead
-of arriving as a silently missing value. What belongs there and what does not is written down in
-[CONTRIBUTING.md](CONTRIBUTING.md).
-
-The web app is served on its own origin in development and talks to the API through the Vite
-proxy, so the session cookie is first-party in every environment and there is no CORS handling
-anywhere in the codebase.
-
-## Not here yet
-
-- **Connectors** for Uptime Kuma, Prometheus, Grafana and Notion. They are listed in the
-  admin panel already, each declaring the capabilities it will answer to, which is where the
-  shape they are expected to take is written down.
-- **User management and role-based permissions.** The `groups` claim is already carried onto the
-  session, so the seam is there.
+- [**web/README.md**](web/README.md) — the search ring, the settings and admin views, how connector
+  entries reach the page, and how to develop against the app alone.
+- [**api/README.md**](api/README.md) — auth and sessions, the full configuration reference, the
+  database, every endpoint, and what a connector module has to implement.
+- [**extension/README.md**](extension/README.md) — loading the new tab override, and what counts as
+  an address.
+- [**CONTRIBUTING.md**](CONTRIBUTING.md) — what diele is and is not, where code goes, and the
+  conventions worth writing down.
+- [**SECURITY.md**](SECURITY.md) — what diele is exposed to, and how to report a vulnerability.
 
 ## License
 

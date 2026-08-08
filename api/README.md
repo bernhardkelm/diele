@@ -7,6 +7,63 @@ for what diele is and how to start it; this file is the reference for the API.
 The launcher is reachable by anyone and shows nothing until a session exists, so this process is
 the only gate. There is no forward-auth middleware in front of it.
 
+## Configuration
+
+All of it is environment, and none of it needs touching to run diele: the defaults are committed in
+[`../.env`](../.env), which lists **every** variable both halves read. Copy
+[`../.env.local.example`](../.env.local.example) to `../.env.local` for your secrets and anything
+that differs between machines — it lists the same variables again with their defaults, so
+overriding one is uncommenting rather than looking it up.
+
+The [root README](../README.md#docker) covers the handful a container actually needs. This is the
+whole set.
+
+| variable | does |
+| --- | --- |
+| `PORT` | port the API listens on, default `3000` |
+| `DB_PATH` | where the SQLite file lives, default `data/diele.db`; a relative path is resolved from the repo root |
+| `PUBLIC_ORIGIN` | origin the browser reaches diele on; the OIDC redirect uri is derived from it |
+| `BRAND_TITLE`, `BRAND_SUBTITLE` | the wordmark and the line under it |
+| `BRAND_ACCENT_LIGHT`, `BRAND_ACCENT_DARK` | the accent, one six-digit hex per theme |
+| `AUTH_MODE` | `local` (default), `oidc` or `dev` |
+| `OIDC_ISSUER`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET` | required when `AUTH_MODE=oidc` |
+| `OIDC_SCOPES`, `OIDC_DISPLAY_NAME` | scopes requested, and what the sign-in button says |
+| `LOCAL_SETUP_TOKEN` | local mode: gates creating the first account; generated and printed when unset |
+| `DIELE_SECRET_KEYS` | `id:base64` pairs sealing connector credentials, first one active |
+| `SESSION_MAX_AGE_MS`, `SESSION_REMEMBER_MAX_AGE_MS` | idle windows, not lifetimes; they roll forward on use |
+| `SESSION_COOKIE_SECURE` | `auto` (default) derives it from the `PUBLIC_ORIGIN` scheme, which is almost always right; `true` or `false` override |
+| `SESSION_COOKIE_NAME` | name of the session cookie, default `diele_session`; only worth changing to run two instances on one host |
+| `TRUST_PROXY` | off by default; set to the number of proxies in front (`1` behind nginx) so `req.ip` is the caller and not a header |
+| `DIELE_VERSION` | what `/status` reports as the running build; the image stamps it from the git tag it was built at |
+| `VITE_API_TARGET` | **web, development only:** where the dev server proxies `/api`; a build talks to whatever origin serves it |
+
+`AUTH_MODE` falls back to `local` — the mode that needs nothing configured and still holds the
+door, since the first account is created through a setup form gated by a token printed at startup.
+A misspelled value therefore lands on the safe mode rather than refusing to boot, and says so on
+stderr.
+
+### Where a value comes from
+
+Most-specific-first, first match wins:
+
+| | source | |
+| --- | --- | --- |
+| 1 | a real environment variable | what a container is given, so images ship no `.env` at all |
+| 2 | `api/.env.local` · `web/.env.local` | package, untracked |
+| 3 | `api/.env` · `web/.env` | package, committed — override slots, shipped fully commented out |
+| 4 | `.env.local` | repo, untracked — where most overrides belong |
+| 5 | `.env` | repo, committed — every variable, with its default |
+| 6 | the built-in default | [`src/config.ts`](src/config.ts) |
+
+The nearest scope wins outright and, within a scope, the untracked file beats the committed one:
+the usual monorepo convention composed with the usual dotenv one. The root file is not a fallback
+for leftovers — it carries the full set, and the package files exist only so one half can be
+pointed somewhere the other should not follow. They ship with every line commented out, because a
+live value in one would outrank the file people actually edit.
+
+Only `VITE_`-prefixed variables are readable from browser code, which is why this package's secrets
+sit in the same files without reaching the bundle.
+
 ## Auth
 
 Three modes, chosen by `AUTH_MODE`, all ending in the same session and cookie:
@@ -403,12 +460,9 @@ npm run lint -w @diele/api
 npm run build -w @diele/api        # tsc to dist/
 ```
 
-No configuration step: the committed repo-wide `.env` lists every variable with a working
-default. Put your secrets and machine-specific values in a `.env.local` — see
-[`../.env.local.example`](../.env.local.example) for the full precedence order. `api/.env` and
-`api/.env.local` outrank the repo-wide pair and exist for anything that must not follow it; the
-committed one ships fully commented out. Every file is optional, and a real environment variable
-wins over all of them, which is how a container is configured and why an image ships no `.env`.
+No configuration step: the committed repo-wide `.env` lists every variable with a working default.
+Put your secrets and machine-specific values in a `../.env.local` — see
+[Configuration](#configuration) above for the full set and the order they resolve in.
 
 The web app proxies `/api` here, so the browser only ever talks to `:5173` and the session cookie is
 first-party — which is why there is no CORS handling anywhere in this package.
