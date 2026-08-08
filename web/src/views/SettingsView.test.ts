@@ -32,15 +32,15 @@ const entries = {
 
 /**
  * Answers each endpoint the view reads, so it renders what a configured portal would.
- * @param {object} options - Whether the account may change what everyone sees
+ * @param {object} options - Whether the account may change what everyone sees, and what is hidden
  * @returns {ReturnType<typeof vi.fn>} - The stubbed fetch
  */
-function stubApi({ canAdmin = true } = {}) {
+function stubApi({ canAdmin = true, hidden = { all: [], mine: [] } } = {}) {
   return vi.fn((input: RequestInfo | URL) => {
     const url = String(input)
 
     if (url.includes('/api/entries')) {
-      return Promise.resolve(new Response(JSON.stringify(entries)))
+      return Promise.resolve(new Response(JSON.stringify({ ...entries, hidden })))
     }
 
     if (url.includes('/api/auth/me')) {
@@ -98,6 +98,25 @@ describe('what the list offers', () => {
     await vi.waitFor(() => expect(wrapper.text()).toContain('Hidden entries'))
 
     expect(wrapper.text()).toContain('Hidden entries')
+  })
+
+  // A row an admin took off every list is out of this one whatever the account decides, so a
+  // personal switch beside it would be a second control over the same row.
+  it('leaves a row the portal hides from everyone out of the personal switches', async () => {
+    vi.stubGlobal('fetch', stubApi({ hidden: { all: ['gitlab:1:1'], mine: [] } }))
+    const wrapper = await open()
+
+    const section = await vi.waitFor(() => {
+      const row = wrapper
+        .findAllComponents(SettingsSectionRow)
+        .find((candidate) => candidate.props('section').id === 'hidden')
+      expect(row).toBeDefined()
+
+      return row!.props('section')
+    })
+
+    expect(section.options).toEqual([])
+    expect(section.trail).toBe('0/0')
   })
 
   // The API refuses that scope independently; this only keeps the switch off a page where

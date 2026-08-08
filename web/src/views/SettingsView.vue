@@ -66,6 +66,7 @@ const sections = computed<ReadonlyArray<SettingsSection>>(() => {
     themeSection(preference.value, setTheme),
     entrySection(sortRows(entryRows.value, 'name', 'asc'), {
       isHiddenIn: (ref) => isHiddenIn(ref, 'mine'),
+      isHiddenForEveryone: (ref) => isHiddenIn(ref, 'all'),
       toggle: (ref) => toggle(ref, 'mine'),
       showAll: () => showAll('mine'),
     }),

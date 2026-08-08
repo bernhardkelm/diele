@@ -9,13 +9,18 @@ const rows: ReadonlyArray<RowTarget> = [
 ]
 
 /**
- * Builds the hidden set and controls a section reads.
+ * Builds the hidden sets and controls a section reads.
  * @param {ReadonlyArray<string>} hidden - Refs this account hid from its own list
+ * @param {ReadonlyArray<string>} hiddenForEveryone - Refs the portal hides from every account
  * @returns {EntryVisibility} - The controls, with spies on the writes
  */
-function visibility(hidden: ReadonlyArray<string> = []): EntryVisibility {
+function visibility(
+  hidden: ReadonlyArray<string> = [],
+  hiddenForEveryone: ReadonlyArray<string> = [],
+): EntryVisibility {
   return {
     isHiddenIn: (ref) => hidden.includes(ref),
+    isHiddenForEveryone: (ref) => hiddenForEveryone.includes(ref),
     toggle: vi.fn().mockResolvedValue(undefined),
     showAll: vi.fn().mockResolvedValue(undefined),
   }
@@ -36,6 +41,28 @@ describe('entrySection', () => {
     const options = entrySection(rows, visibility()).options
 
     expect(options.map((option) => option.id)).toEqual(['row:1', 'row:2', 'row:3'])
+  })
+
+  // It is out of the list whatever this account decides, so a switch beside it would be a
+  // second control over the same row that changes nothing anyone can see.
+  it('leaves out a row the portal hides from everyone', () => {
+    const section = entrySection(rows, visibility([], ['row:2']))
+
+    expect(section.options.map((option) => option.id)).toEqual(['row:1', 'row:3'])
+  })
+
+  it('counts only what is still on offer once the portal hid one', () => {
+    const section = entrySection(rows, visibility(['row:1'], ['row:2']))
+
+    expect(section.trail).toBe('1/2')
+  })
+
+  // A row this account hid before an admin hid it from everyone still sits in the personal set,
+  // and it must not bring back a restore row for something the list no longer shows.
+  it('offers no restore row when everything hidden here is also hidden for everyone', () => {
+    const section = entrySection(rows, visibility(['row:2'], ['row:2']))
+
+    expect(section.action).toBeUndefined()
   })
 
   it('labels a row by its namespace and name, and by name alone without one', () => {
