@@ -255,6 +255,8 @@ plain links to GitHub, not API calls, which is why the permission set stays this
 Listed in the admin panel already, each declaring the capabilities it will answer to, which is
 where the shape it is expected to take is written down.
 
+| | |
+| --- | --- |
 | **Uptime Kuma** | monitor states, shown as a dot on the cards they belong to |
 | **Prometheus** | firing alerts at the top of the page, and card states from a query |
 | **Grafana** | dashboards, suggested as results when the term matches them |
