@@ -63,6 +63,28 @@ export function positiveInt(name: string, raw: string | undefined, fallback: num
 }
 
 /**
+ * Reads a plain on/off variable, keeping the fallback for anything that is neither. Warns rather
+ * than throws: none of these is worth refusing to boot over.
+ * @param {string} name - Environment variable the value came from, for the warning
+ * @param {string | undefined} raw - Value as read from the environment
+ * @param {boolean} fallback - Value to use when unset or unreadable
+ * @returns {boolean} - What the variable asked for, or the fallback
+ */
+export function boolOr(name: string, raw: string | undefined, fallback: boolean): boolean {
+  const value = raw?.trim().toLowerCase()
+  if (value === undefined || value.length === 0) {
+    return fallback
+  }
+
+  if (value !== 'true' && value !== 'false') {
+    console.warn(`${name}=${raw} is not true or false, falling back to ${fallback}`)
+    return fallback
+  }
+
+  return value === 'true'
+}
+
+/**
  * Resolves whether the session cookie is marked `Secure`. `auto` derives it from the scheme the
  * portal is actually served on, which is what almost every instance wants; `true` and `false`
  * are deliberate overrides.

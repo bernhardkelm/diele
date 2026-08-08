@@ -35,6 +35,7 @@ whole set.
 | `SESSION_COOKIE_NAME` | name of the session cookie, default `diele_session`; only worth changing to run two instances on one host |
 | `TRUST_PROXY` | off by default; set to the number of proxies in front (`1` behind nginx) so `req.ip` is the caller and not a header |
 | `DIELE_VERSION` | what `/status` reports as the running build; the image stamps it from the git tag it was built at |
+| `DIELE_SEED_STOCK_CONFIG` | whether a database created by this boot gets the stock engines, commands and ports, default `true`; read only while the schema is created |
 | `VITE_API_TARGET` | **web, development only:** where the dev server proxies `/api`; a build talks to whatever origin serves it |
 
 `AUTH_MODE` falls back to `local` - the mode that needs nothing configured and still holds the
@@ -175,9 +176,15 @@ on every new tab and written when something is edited. A second process to run w
 Migrations are an ordered array in `src/db/migrations/`, applied in one transaction each, with
 `PRAGMA user_version` as the ledger.
 
-A fresh database starts **empty**: configuration is entered through the admin view, and seeding it
-here would mean an instance showing rows nobody added. Use the import to seed one from an export
-instead.
+A fresh database starts with the **stock configuration**: the search engines, slash commands and
+local ports in [`src/db/stockConfig.ts`](src/db/stockConfig.ts), written by `seedStockConfig` at
+the end of the first migration. That migration is the only place carrying the guarantee the seed
+needs, that there was no database a moment ago; a later one would run on every install and put
+back rows someone had deliberately deleted. `DIELE_SEED_STOCK_CONFIG=false` skips it.
+
+Cards and saved sites are deliberately not seeded. Those are guesses at addresses only one
+deployment knows, and an instance showing rows nobody added is the thing this rule exists to
+prevent. Import an export, or [`example-seed.json`](example-seed.json), to get those.
 
 Cards and saved sites share the `links` table and are told apart by `kind`. They differ only in
 where they render - both are a label, a url, keywords and an icon. Search engines stay separate,
@@ -449,10 +456,13 @@ section. That rule is the one worth a test: getting it wrong is silent data loss
 
 ## Seeding
 
-[`example-seed.json`](example-seed.json) is an importable document with three cards, two saved
-sites, two engines, two commands and two local ports, all pointing at `example.com`. Import it
-through the admin view to get something to develop against rather than starting from an empty
-database. It turns local port probing on.
+A fresh database already carries the stock configuration, so this is about the rest.
+
+[`example-seed.json`](example-seed.json) is an importable document with three cards and two saved
+sites pointing at `example.com`, for something to develop against. It also carries the stock
+engines, commands and ports, because an import **replaces** every table rather than adding to
+them: without them the imported portal would have no engine left and `↵` would search nothing.
+`src/db/stockConfig.test.ts` fails if the two ever drift apart. It turns local port probing on.
 
 ## Develop
 

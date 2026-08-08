@@ -81,3 +81,9 @@ desktop.ini
 # Merge and patch artifacts
 *.orig
 *.rej
+
+# Release notes
+release-notes.md
+
+# Debug settings list
+settings.json

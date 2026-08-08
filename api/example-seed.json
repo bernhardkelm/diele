@@ -81,21 +81,40 @@
       "enabled": true
     },
     {
-      "name": "Wikipedia",
-      "urlTemplate": "https://en.wikipedia.org/w/index.php?search={query}",
+      "name": "Google",
+      "urlTemplate": "https://www.google.com/search?q={query}",
       "position": 20,
       "enabled": true
+    },
+    {
+      "name": "Wikipedia",
+      "urlTemplate": "https://en.wikipedia.org/w/index.php?search={query}",
+      "position": 30,
+      "enabled": false
+    },
+    {
+      "name": "Ecosia",
+      "urlTemplate": "https://www.ecosia.org/search?q={query}",
+      "position": 40,
+      "enabled": false
     }
   ],
   "localhost": [
     { "scheme": "http", "port": 3000, "keywords": ["api"], "position": 10, "enabled": true },
-    { "scheme": "http", "port": 5173, "keywords": ["vite", "web"], "position": 20, "enabled": true }
+    {
+      "scheme": "http",
+      "port": 5173,
+      "keywords": ["vite", "web"],
+      "position": 20,
+      "enabled": true
+    },
+    { "scheme": "http", "port": 8080, "keywords": ["proxy"], "position": 30, "enabled": true }
   ],
   "commands": [
     {
-      "keyword": "yt",
-      "label": "Search YouTube",
-      "urlTemplate": "https://www.youtube.com/results?search_query={query}",
+      "keyword": "gh",
+      "label": "Search GitHub",
+      "urlTemplate": "https://github.com/search?q={query}",
       "position": 10,
       "enabled": true
     },
@@ -105,6 +124,62 @@
       "urlTemplate": "https://developer.mozilla.org/en-US/search?q={query}",
       "position": 20,
       "enabled": true
+    },
+    {
+      "keyword": "npm",
+      "label": "Search npm",
+      "urlTemplate": "https://www.npmjs.com/search?q={query}",
+      "position": 30,
+      "enabled": true
+    },
+    {
+      "keyword": "so",
+      "label": "Search Stack Overflow",
+      "urlTemplate": "https://stackoverflow.com/search?q={query}",
+      "position": 40,
+      "enabled": true
+    },
+    {
+      "keyword": "gl",
+      "label": "Search GitLab",
+      "urlTemplate": "https://gitlab.com/search?search={query}",
+      "position": 50,
+      "enabled": false
+    },
+    {
+      "keyword": "yt",
+      "label": "Search YouTube",
+      "urlTemplate": "https://www.youtube.com/results?search_query={query}",
+      "position": 60,
+      "enabled": false
+    },
+    {
+      "keyword": "dh",
+      "label": "Search Docker Hub",
+      "urlTemplate": "https://hub.docker.com/search?q={query}",
+      "position": 70,
+      "enabled": false
+    },
+    {
+      "keyword": "ciu",
+      "label": "Can I use",
+      "urlTemplate": "https://caniuse.com/?search={query}",
+      "position": 80,
+      "enabled": false
+    },
+    {
+      "keyword": "maps",
+      "label": "Open in Maps",
+      "urlTemplate": "https://www.google.com/maps/search/{query}",
+      "position": 90,
+      "enabled": false
+    },
+    {
+      "keyword": "tr",
+      "label": "Translate",
+      "urlTemplate": "https://translate.google.com/?sl=auto&tl=en&op=translate&text={query}",
+      "position": 100,
+      "enabled": false
     }
   ],
   "settings": {
