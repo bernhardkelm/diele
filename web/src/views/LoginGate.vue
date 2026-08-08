@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted } from 'vue'
 import CredentialForm from '@/components/CredentialForm.vue'
+import PageFooter from '@/components/PageFooter.vue'
 import PortalHeader from '@/components/PortalHeader.vue'
 import { useSession } from '@/composables/useSession'
 
@@ -28,6 +29,8 @@ onMounted(() => void loadProviders())
     </button>
 
     <div v-else class="gate__placeholder" aria-hidden="true" />
+
+    <PageFooter />
   </div>
 </template>
 

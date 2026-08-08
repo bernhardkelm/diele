@@ -2,6 +2,7 @@
 import { computed, ref, useTemplateRef } from 'vue'
 import ActionRow from '@/components/ActionRow.vue'
 import LauncherBar from '@/components/LauncherBar.vue'
+import PageFooter from '@/components/PageFooter.vue'
 import PortalHeader from '@/components/PortalHeader.vue'
 import SettingsOptionRow from '@/features/settings/SettingsOptionRow.vue'
 import SettingsSectionRow from '@/features/settings/SettingsSectionRow.vue'
@@ -51,25 +52,23 @@ if (routeSection.value) {
 // The route owns which section is open, so opening one survives a step back.
 const expanded = computed(() => routeSection.value)
 
-// The sections are offered whenever a connector is configured, whether or not it has produced
-// anything yet: a connector that is failing still has rows someone hid, and hiding the switch
-// would strand them.
+// Offered whenever a connector is configured, whether or not it has produced anything yet: a
+// connector that is failing still has rows someone hid, and hiding the switch would strand them.
 //
-// The second one reaches everybody's list, so it is only offered to an account that may change
-// what everyone sees. The API refuses that scope independently; this only keeps the switch off
-// a page where every press would come back rejected.
+// This account's own list only. Keeping an entry from everyone belongs to the admin panel,
+// under the connector that produced it.
 const sections = computed<ReadonlyArray<SettingsSection>>(() => {
   if (sources.value.length === 0) {
     return [themeSection(preference.value, setTheme)]
   }
 
-  const rows = sortRows(entryRows.value, 'name', 'asc')
-  const visibility = { isHiddenIn, toggle, showAll }
-
   return [
     themeSection(preference.value, setTheme),
-    entrySection(rows, 'mine', visibility),
-    ...(user.value?.canAdmin ? [entrySection(rows, 'all', visibility)] : []),
+    entrySection(sortRows(entryRows.value, 'name', 'asc'), {
+      isHiddenIn: (ref) => isHiddenIn(ref, 'mine'),
+      toggle: (ref) => toggle(ref, 'mine'),
+      showAll: () => showAll('mine'),
+    }),
   ]
 })
 
@@ -293,6 +292,8 @@ function onFocusin(event: FocusEvent): void {
 
       <p v-else class="settings__empty">Nothing here matches “{{ query }}”.</p>
     </main>
+
+    <PageFooter />
   </div>
 </template>
 

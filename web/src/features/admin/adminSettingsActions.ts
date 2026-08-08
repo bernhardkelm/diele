@@ -28,7 +28,7 @@ export function adminSettingsActions(controls: AdminSettingsControls): ReadonlyA
       kind: 'action',
       id: 'export',
       label: 'Export settings',
-      description: 'download everything as a file; connector credentials are never included',
+      description: 'download everything as a file; credentials ride along encrypted',
       trail: controls.message,
       disabled: controls.busy,
       run: controls.exportSettings,

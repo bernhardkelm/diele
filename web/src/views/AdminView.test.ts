@@ -8,6 +8,8 @@ import AdminAddRow from '@/features/admin/AdminAddRow.vue'
 import AdminEntryForm from '@/features/admin/AdminEntryForm.vue'
 import AdminField from '@/features/admin/AdminField.vue'
 import ActionRow from '@/components/ActionRow.vue'
+import AdminHiddenRow from '@/features/admin/AdminHiddenRow.vue'
+import { resetConnectorEntries } from '@/composables/useConnectorEntries'
 import { resetPortalConfig } from '@/composables/usePortalConfig'
 
 const FEATURES = [
@@ -38,7 +40,56 @@ const FEATURES = [
     count: 0,
     enabledCount: 0,
   },
+  {
+    id: 'gitlab',
+    label: 'GitLab',
+    description: 'repos of the token groups',
+    kind: 'connector',
+    produces: ['row'],
+    capabilities: ['entries'],
+    fields: [{ key: 'label', label: 'Label', input: 'text', required: true }],
+    collection: '/api/admin/connectors/gitlab',
+    count: 1,
+    enabledCount: 1,
+  },
 ]
+
+// What the GitLab instance went and fetched, which is what the panel offers to keep from
+// everyone. Separate from the rows above: those are the instances, these are their output.
+const ENTRIES = {
+  entries: [
+    {
+      ref: 'gitlab:1:web',
+      connectorId: 1,
+      connectorType: 'gitlab',
+      kind: 'row',
+      label: 'web',
+      detail: 'example-group',
+      url: 'https://gitlab.test/example-group/web',
+      keywords: [],
+      actions: [],
+      timestamp: null,
+      parentRef: null,
+      searchOnly: false,
+    },
+    {
+      ref: 'gitlab:1:api',
+      connectorId: 1,
+      connectorType: 'gitlab',
+      kind: 'row',
+      label: 'api',
+      detail: 'example-group',
+      url: 'https://gitlab.test/example-group/api',
+      keywords: [],
+      actions: [],
+      timestamp: null,
+      parentRef: null,
+      searchOnly: false,
+    },
+  ],
+  sources: [{ connectorId: 1, type: 'gitlab', label: 'Work', syncedAt: null, error: null }],
+  hidden: { all: ['gitlab:1:api'], mine: [] },
+}
 
 const ROWS = [
   { id: 1, label: 'Grafana', url: 'https://grafana.example', enabled: true },
@@ -66,6 +117,21 @@ function stubApi() {
 
     if (url.includes('/api/admin/links/card')) {
       return Promise.resolve(new Response(JSON.stringify({ rows: ROWS })))
+    }
+
+    if (url.includes('/api/admin/connectors/gitlab')) {
+      return Promise.resolve(
+        new Response(JSON.stringify({ rows: [{ id: 1, label: 'Work', enabled: true }] })),
+      )
+    }
+
+    // Before the hidden write, so the two are told apart by the more specific path first.
+    if (url.includes('/api/entries/hidden')) {
+      return Promise.resolve(new Response(JSON.stringify({ ok: true })))
+    }
+
+    if (url.includes('/api/entries')) {
+      return Promise.resolve(new Response(JSON.stringify(ENTRIES)))
     }
 
     if (url.includes('/api/admin/icons')) {
@@ -118,11 +184,13 @@ beforeEach(() => {
   localStorage.clear()
   window.location.hash = ''
   resetPortalConfig()
+  resetConnectorEntries()
   vi.stubGlobal('fetch', stubApi())
 })
 
 afterEach(() => {
   resetPortalConfig()
+  resetConnectorEntries()
   localStorage.clear()
   window.location.hash = ''
   vi.unstubAllGlobals()
@@ -135,6 +203,16 @@ describe('the feature list', () => {
     expect(wrapper.findAllComponents(AdminFeatureRow)).toHaveLength(FEATURES.length)
     expect(wrapper.text()).toContain('Cards')
     expect(wrapper.text()).toContain('Search engines')
+  })
+
+  // On every view rather than the portal alone: whoever is looking at the admin panel is at
+  // least as likely to be the one wondering how it works.
+  it('carries the docs link the portal carries', async () => {
+    const wrapper = await open()
+
+    expect(wrapper.find('.page-footer a').attributes('href')).toBe(
+      'https://github.com/bernhardkelm/diele',
+    )
   })
 
   it('closes the list with the actions that act on the whole portal', async () => {
@@ -302,6 +380,64 @@ describe('adding and editing a row', () => {
 })
 
 // An export is a file that gets mailed around; an import replaces the whole configuration.
+// Keeping an entry from everyone changes what every account sees, so it belongs beside the
+// connector that produced the entry rather than on a personal settings page.
+describe('keeping a produced entry from everyone', () => {
+  /**
+   * Opens the connector whose entries the panel offers switches for.
+   * @returns {Promise<VueWrapper>} - The mounted panel, with GitLab open
+   */
+  async function openGitlab(): Promise<VueWrapper> {
+    const wrapper = await open()
+    const row = wrapper
+      .findAllComponents(AdminFeatureRow)
+      .find((feature) => feature.props('feature').id === 'gitlab')!
+
+    await row.trigger('click')
+    await nextTick()
+    await vi.waitFor(() =>
+      expect(wrapper.findAllComponents(AdminHiddenRow).length).toBeGreaterThan(0),
+    )
+
+    return wrapper
+  }
+
+  it('offers one switch per entry the open connector produced', async () => {
+    const wrapper = await openGitlab()
+    const switches = wrapper.findAllComponents(AdminHiddenRow)
+
+    expect(switches.map((row) => row.props('entry').ref)).toEqual(['gitlab:1:api', 'gitlab:1:web'])
+    expect(switches.map((row) => row.props('hidden'))).toEqual([true, false])
+  })
+
+  it('writes the everyone scope, which is the one an admin alone may reach', async () => {
+    const wrapper = await openGitlab()
+
+    await wrapper
+      .findAllComponents(AdminHiddenRow)
+      .find((row) => row.props('entry').ref === 'gitlab:1:web')!
+      .trigger('click')
+
+    await vi.waitFor(() =>
+      expect(calls.some((call) => call.url.includes('/api/entries/hidden'))).toBe(true),
+    )
+
+    expect(calls.find((call) => call.url.includes('/api/entries/hidden'))!.body).toEqual({
+      ref: 'gitlab:1:web',
+      scope: 'all',
+      hidden: true,
+    })
+  })
+
+  // A feature that fetches nothing opens onto its own rows and nothing else.
+  it('offers no switches under a feature that produces no entries', async () => {
+    const wrapper = await open()
+    await expand(wrapper, 'cards')
+
+    expect(wrapper.findAllComponents(AdminHiddenRow)).toHaveLength(0)
+  })
+})
+
 describe('moving a configuration in and out', () => {
   it('offers both transfer actions among the closing rows', async () => {
     const wrapper = await open()

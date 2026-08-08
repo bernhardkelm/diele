@@ -14,7 +14,7 @@ export interface AdminRowEdits {
   /** Station key of the row whose form is open, or undefined while none is */
   editing: Ref<string | undefined>
   /** Runs any write and puts focus back on a station once the list has been rebuilt */
-  keepFocus: (write: Promise<boolean>, key: string) => Promise<void>
+  keepFocus: (write: Promise<unknown>, key: string) => Promise<void>
   removeAt: (id: number, index: number) => Promise<void>
   cancelEdit: (key: string) => Promise<void>
   saveEntry: (key: string, id: number, values: Record<string, unknown>) => Promise<void>
@@ -35,12 +35,14 @@ export function useAdminRowEdits(options: AdminRowEditsOptions): AdminRowEdits {
   const editing = ref<string | undefined>()
 
   /**
-   * Runs a write and puts focus back afterwards.
-   * @param {Promise<void>} write - The call being made
+   * Runs a write and puts focus back afterwards. Whatever the write answers is the caller's to
+   * read: this only waits for it, so a write that reports nothing is as welcome as one that
+   * reports whether it landed.
+   * @param {Promise<unknown>} write - The call being made
    * @param {string} key - Station to focus once the list has been rebuilt
    * @returns {Promise<void>}
    */
-  async function keepFocus(write: Promise<boolean>, key: string): Promise<void> {
+  async function keepFocus(write: Promise<unknown>, key: string): Promise<void> {
     await write
     await options.restore({ type: 'station', key })
   }

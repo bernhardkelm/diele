@@ -93,5 +93,10 @@ export function rowActionsFor(station: AdminStation | undefined): ReadonlyArray<
     return [EDIT]
   }
 
+  // nothing to open, so the switch is the row's own action rather than one beside it
+  if (station.kind === 'hidden') {
+    return [toggleAction(!station.hidden, true)]
+  }
+
   return station.action.disabled ? [] : [OPEN]
 }

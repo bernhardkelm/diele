@@ -169,12 +169,16 @@ describe('the resting page', () => {
     expect(wrapper.findComponent(EntryRow).props('entry').name).toBe('web')
   })
 
-  // Read rather than configured: an instance is reached on exactly one host, and it is the one
-  // thing the page can say about itself without being told.
-  it('names the host it is being reached on', async () => {
+  // For whoever opens the page and wonders what it is. Opened in its own tab, so following it
+  // never costs the portal someone had in front of them.
+  it('points at the docs for the thing it is running', async () => {
     const wrapper = await open()
+    const link = wrapper.find('.page-footer a')
 
-    expect(wrapper.find('.page__footer').text()).toBe(window.location.host)
+    expect(link.text()).toBe('docs')
+    expect(link.attributes('href')).toBe('https://github.com/bernhardkelm/diele')
+    expect(link.attributes('target')).toBe('_blank')
+    expect(link.attributes('rel')).toContain('noopener')
   })
 })
 

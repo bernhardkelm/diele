@@ -110,6 +110,16 @@ describe('what the list offers', () => {
     expect(wrapper.text()).not.toContain('Hidden for everyone')
   })
 
+  // On every view rather than the portal alone: whoever is looking at a settings page is at
+  // least as likely to be the one wondering how it works.
+  it('carries the docs link the portal carries', async () => {
+    const wrapper = await open()
+
+    expect(wrapper.find('.page-footer a').attributes('href')).toBe(
+      'https://github.com/bernhardkelm/diele',
+    )
+  })
+
   it('closes the list with a way back and a way out', async () => {
     const wrapper = await open()
     const actions = wrapper.findAllComponents(ActionRow).map((row) => row.props('action').id)

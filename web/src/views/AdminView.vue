@@ -4,8 +4,10 @@ import ActionRow from '@/components/ActionRow.vue'
 import AdminAddRow from '@/features/admin/AdminAddRow.vue'
 import AdminEntryRow from '@/features/admin/AdminEntryRow.vue'
 import AdminFeatureRow from '@/features/admin/AdminFeatureRow.vue'
+import AdminHiddenRow from '@/features/admin/AdminHiddenRow.vue'
 import CredentialForm from '@/components/CredentialForm.vue'
 import LauncherBar from '@/components/LauncherBar.vue'
+import PageFooter from '@/components/PageFooter.vue'
 import PortalHeader from '@/components/PortalHeader.vue'
 import { useAdmin } from '@/features/admin/useAdmin'
 import { useAdminKeyboard } from '@/features/admin/useAdminKeyboard'
@@ -14,6 +16,9 @@ import { useAdminRowEdits } from '@/features/admin/useAdminRowEdits'
 import { useAdminTransfer } from '@/features/admin/useAdminTransfer'
 import { ROUTES, adminSection } from '@/composables/routes'
 import { useCollapseToStation } from '@/composables/useCollapseToStation'
+import { useConnectorEntries } from '@/composables/useConnectorEntries'
+import { sortRows } from '@/composables/useEntrySort'
+import { useHiddenEntries } from '@/composables/useHiddenEntries'
 import { useHashRoute } from '@/composables/useHashRoute'
 import { usePortalConfig } from '@/composables/usePortalConfig'
 import { useSession } from '@/composables/useSession'
@@ -22,7 +27,13 @@ import { searchActions, type ListAction } from '@/helpers/listActions'
 import { hintsFor } from '@/features/admin/adminHints'
 import { rowActionsFor, type RowActionId } from '@/features/admin/adminRowActions'
 import { adminSettingsActions } from '@/features/admin/adminSettingsActions'
-import { buildStations, featureKey, type AdminStation } from '@/features/admin/adminStations'
+import {
+  buildStations,
+  featureKey,
+  type AdminStation,
+  type HiddenEntries,
+} from '@/features/admin/adminStations'
+import { producedBy } from '@/features/admin/producedEntries'
 import { searchFeatures } from '@/features/admin/featureSearch'
 
 const { brand } = usePortalConfig()
@@ -74,12 +85,56 @@ const actions = computed<ReadonlyArray<ListAction>>(() =>
   }),
 )
 
+const { rows: entryRows, sources } = useConnectorEntries()
+const { forEveryone, toggle: setHidden, showAll: showAllHidden } = useHiddenEntries()
+
+// What the open connector went and fetched, as opposed to the instances that fetched it. Only a
+// connector that produces entries has any: a feature with no `entries` capability opens onto its
+// own rows and nothing else.
+const produced = computed(() => {
+  const feature = features.value.find((entry) => entry.id === expanded.value)
+
+  if (feature?.capabilities?.includes('entries') !== true) {
+    return []
+  }
+
+  return sortRows(producedBy(entryRows.value, sources.value, feature.id), 'name', 'asc')
+})
+
+// Keeping an entry from everyone lives here rather than in a personal settings page, because it
+// changes what every account sees. The API refuses the scope to a non-admin independently.
+const visibility = computed<HiddenEntries | undefined>(() => {
+  if (produced.value.length === 0) {
+    return undefined
+  }
+
+  const count = produced.value.filter((row) => forEveryone.value.includes(row.ref)).length
+
+  return {
+    entries: produced.value,
+    hidden: forEveryone.value,
+    // only while something is hidden: on a list nothing has been taken out of, it would be a
+    // row that does nothing
+    showAll:
+      count > 0
+        ? {
+            kind: 'action',
+            id: 'show-all-hidden',
+            label: 'Show all hidden entries',
+            description: `brings back the ${count} entr${count === 1 ? 'y' : 'ies'} hidden from everyone`,
+            run: () => void showAllHidden('all'),
+          }
+        : undefined,
+  }
+})
+
 const stations = computed(() =>
   buildStations(
     searchFeatures(features.value, query.value),
     expanded.value,
     rows.value,
     searchActions(actions.value, query.value),
+    visibility.value,
   ),
 )
 
@@ -172,6 +227,11 @@ function open(station: AdminStation): void {
       station.action.run()
     }
 
+    return
+  }
+
+  if (station.kind === 'hidden') {
+    void keepFocus(setHidden(station.entry.ref, 'all'), station.key)
     return
   }
 
@@ -337,6 +397,11 @@ function runAction(station: AdminStation, index: number, id: RowActionId): void 
     return
   }
 
+  if (station.kind === 'hidden') {
+    open(station)
+    return
+  }
+
   if (station.kind !== 'entry') {
     return
   }
@@ -478,12 +543,24 @@ onMounted(() => void loadFeatures())
             @submit="addEntry(station.key, $event)"
           />
 
+          <AdminHiddenRow
+            v-else-if="station.kind === 'hidden'"
+            :entry="station.entry"
+            :hidden="station.hidden"
+            :station-key="station.key"
+            :active="index === tabStop"
+            :focused="index === activeIndex"
+            :busy="busy"
+            @run="runAction(station, index, 'toggle')"
+          />
+
           <ActionRow
             v-else
             :action="station.action"
             :station-key="station.key"
             :active="index === tabStop"
             :focused="index === activeIndex"
+            :nested="station.nested"
             :query="query"
             @run="station.action.run()"
           />
@@ -504,6 +581,8 @@ onMounted(() => void loadFeatures())
         @change="importSettings"
       />
     </main>
+
+    <PageFooter />
   </div>
 </template>
 

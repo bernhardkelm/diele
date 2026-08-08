@@ -31,6 +31,12 @@ function primaryHint(
     return { text: '↵ runs', key: true }
   }
 
+  // Named for its reach rather than "on/off": this one switch decides what every account sees,
+  // and reads identically to the personal one in settings otherwise.
+  if (station.kind === 'hidden') {
+    return { text: '↵ shows/hides for everyone', key: true }
+  }
+
   return editable ? { text: '↵ edits', key: true } : undefined
 }
 

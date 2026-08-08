@@ -4,6 +4,7 @@ import { getDb } from '#db/index.js'
 import { hexColor, httpUrl, queryTemplate } from '#fieldSchemas.js'
 import { sanitizeSvg } from '#icons/sanitize.js'
 import { MAX_SVG_BYTES } from '#icons/schemas.js'
+import { importSecrets } from '#secrets/repository.js'
 import { VERSION } from './transferVersion.js'
 
 // An imported file is checked exactly as hard as a typed one. It may have been edited by hand or
@@ -59,17 +60,37 @@ const commandSchema = z.object({
   enabled: z.boolean().default(true),
 })
 
+// Base64 rather than free text: these three are buffers on the way in, and a value that is not
+// one is a file to refuse rather than a credential to try opening.
+const base64 = z
+  .string()
+  .min(1)
+  .max(8192)
+  .regex(/^[A-Za-z0-9+/]+={0,2}$/, 'is not base64')
+
+const secretSchema = z.object({
+  key: z.string().trim().min(1).max(60),
+  keyId: z.string().trim().min(1).max(60),
+  iv: base64,
+  tag: base64,
+  ciphertext: base64,
+})
+
 const connectorSchema = z.object({
   type: z.string().trim().min(1).max(40),
   label: z.string().trim().min(1).max(80),
   config: z.record(z.string(), z.unknown()).default({}),
   syncIntervalSeconds: z.number().int().positive().default(900),
   position: z.number().int(),
+  // Absent on a v1 or v2 file, and on one exported by a deployment that had no key to seal with.
+  secrets: z.array(secretSchema).default([]),
+  enabled: z.boolean().default(false),
 })
 
 export const importSchema = z.object({
-  // Both versions apply: a v1 file simply carries no connectors.
-  version: z.union([z.literal(1), z.literal(VERSION)]),
+  // Every version this far applies: a v1 file simply carries no connectors, and a v2 one carries
+  // them without their credentials.
+  version: z.union([z.literal(1), z.literal(2), z.literal(VERSION)]),
   icons: z.array(iconSchema).default([]),
   connectors: z.array(connectorSchema).default([]),
   cards: z.array(linkSchema).default([]),
@@ -88,6 +109,10 @@ export type ImportPayload = z.infer<typeof importSchema>
  *
  * Icons are re-sanitised rather than trusted: the file may have been edited or come from
  * somewhere else entirely, and it is about to be inlined into the portal's own page.
+ *
+ * A connector's credentials are restored only where this deployment's key can open them, which
+ * is the same key that sealed them. Anywhere else they are dropped and the connector arrives
+ * switched off, waiting for its token to be typed in.
  * @param {ImportPayload} payload - Validated document to apply
  * @returns {Record<string, number>} - How many rows of each kind were written
  */
@@ -112,12 +137,13 @@ export function applyImport(payload: ImportPayload): Record<string, number> {
      VALUES (@keyword, @label, @urlTemplate, @position, @enabled)`,
   )
   const insertSetting = db.prepare('INSERT INTO settings (key, value) VALUES (?, ?)')
-  // enabled = 0: the file carries no credential, so a connector restored on would only spend
-  // the next interval failing. Entering its token is what turns it back on.
+  // Inserted off whatever the file said, and switched on below only once its credentials are in.
+  // A connector restored on without them would spend every interval failing.
   const insertConnector = db.prepare(
     `INSERT INTO connectors (type, label, config, sync_interval_s, position, enabled)
      VALUES (@type, @label, @config, @interval, @position, 0)`,
   )
+  const enableConnector = db.prepare('UPDATE connectors SET enabled = 1 WHERE id = ?')
 
   db.transaction(() => {
     db.prepare('DELETE FROM links').run()
@@ -187,13 +213,23 @@ export function applyImport(payload: ImportPayload): Record<string, number> {
     }
 
     for (const connector of payload.connectors) {
-      insertConnector.run({
+      const { lastInsertRowid } = insertConnector.run({
         type: connector.type,
         label: connector.label,
         config: JSON.stringify(connector.config),
         interval: connector.syncIntervalSeconds,
         position: connector.position,
       })
+
+      const id = Number(lastInsertRowid)
+      const stored = importSecrets(id, connector.secrets)
+
+      // Only once every credential the file carried actually opened. A connector missing one of
+      // its tokens is a connector that fails, and it says more to arrive off than to arrive on
+      // and go red on the first run.
+      if (connector.enabled && stored === connector.secrets.length) {
+        enableConnector.run(id)
+      }
     }
 
     for (const [key, value] of Object.entries(payload.settings)) {

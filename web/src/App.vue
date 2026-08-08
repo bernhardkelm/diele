@@ -6,6 +6,7 @@ import LauncherBar from '@/components/LauncherBar.vue'
 import LoginGate from '@/views/LoginGate.vue'
 import EntriesLoading from '@/features/portal/EntriesLoading.vue'
 import EntryList from '@/features/portal/EntryList.vue'
+import PageFooter from '@/components/PageFooter.vue'
 import PortalHeader from '@/components/PortalHeader.vue'
 import ServiceCard from '@/features/portal/ServiceCard.vue'
 import SettingsView from '@/views/SettingsView.vue'
@@ -75,10 +76,6 @@ const StyleguideView = import.meta.env.DEV
 // Asked for here rather than inside the gate, because whether the gate shows at all now
 // depends on the answer. Fetching it there first would need the gate to already be on screen.
 void loadProviders()
-
-// Read rather than configured: an instance is reached on exactly one host, and it is the one
-// thing the page can say about itself without being told.
-const host = window.location.host
 
 // the tiles wrap wherever the viewport lets them, so the arrows ask the layout itself how
 // wide a row is rather than assuming a count
@@ -170,12 +167,7 @@ const altHeld = useAltHeld()
     <!-- Named and pointed at by the field rather than marked up as a listbox: the results hold a
          sortable header and a grid of tiles, neither of which a listbox may contain. Which row
          holds the highlight is announced by the field's own live region instead. -->
-    <main
-      v-if="matches.length"
-      id="launcher-results"
-      class="stack"
-      aria-label="Search results"
-    >
+    <main v-if="matches.length" id="launcher-results" class="stack" aria-label="Search results">
       <CommandList
         v-if="sections.commands.length"
         :commands="sections.commands"
@@ -225,9 +217,7 @@ const altHeld = useAltHeld()
       Nothing here matches “{{ query }}” — ↵ searches {{ engine?.name ?? 'the web' }}.
     </p>
 
-    <footer class="page__footer">
-      <span>{{ host }}</span>
-    </footer>
+    <PageFooter />
   </div>
 </template>
 
@@ -250,13 +240,6 @@ const altHeld = useAltHeld()
 }
 
 .page__empty {
-  color: var(--diele-fg-muted);
-}
-
-.page__footer {
-  margin-top: auto;
-  font-size: var(--diele-text-md);
-  letter-spacing: 0.04em;
   color: var(--diele-fg-muted);
 }
 </style>

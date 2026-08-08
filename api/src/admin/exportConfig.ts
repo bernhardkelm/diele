@@ -1,4 +1,5 @@
 import { getDb } from '#db/index.js'
+import { exportSecrets } from '#secrets/repository.js'
 import { VERSION } from './transferVersion.js'
 
 export interface ExportPayload {
@@ -10,7 +11,7 @@ export interface ExportPayload {
   readonly engines: ReadonlyArray<Record<string, unknown>>
   readonly localhost: ReadonlyArray<Record<string, unknown>>
   readonly commands: ReadonlyArray<Record<string, unknown>>
-  /** Config only; credentials are never in here and must stay out */
+  /** Config, and each connector's credentials still sealed under this deployment's key */
   readonly connectors: ReadonlyArray<Record<string, unknown>>
   readonly settings: Record<string, unknown>
 }
@@ -19,9 +20,12 @@ export interface ExportPayload {
  * Collects everything the portal renders into one portable document, for backing up, seeding
  * a second deployment, or moving a configuration between them.
  *
- * Connector credentials are deliberately absent and must stay absent: an export is a file
- * that gets mailed around and committed, which is the last place a token belongs.
- * @returns {ExportPayload} - The whole configuration, without secrets
+ * Connector credentials ride along still encrypted, never in the clear. What opens them is
+ * `DIELE_SECRET_KEYS`, which is not in the file and belongs to the deployment rather than the
+ * export: an instance holding the same key restores a working connector, and one holding a
+ * different key finds nothing it can open and restores the connector switched off. The file is
+ * therefore no more use to whoever finds it than the ciphertext in the database is.
+ * @returns {ExportPayload} - The whole configuration, credentials sealed
  */
 export function buildExport(): ExportPayload {
   const db = getDb()
@@ -65,15 +69,17 @@ export function buildExport(): ExportPayload {
       `SELECT keyword, label, url_template AS urlTemplate, position, enabled
        FROM slash_commands ORDER BY position, id`,
     ).map((row) => ({ ...row, enabled: row.enabled === 1 })),
-    // connector_secrets is deliberately not read here, and adding it would be the mistake this
-    // whole file is written to avoid. `enabled` is not carried either: a connector arrives
-    // without its credential, so it comes back off rather than failing on first sync.
+    // `enabled` travels with the credentials rather than on its own: the import only restores it
+    // for a connector whose credentials it could open, so one that arrives without them still
+    // comes back off instead of spending every interval failing.
     connectors: rows(
-      `SELECT type, label, config, sync_interval_s AS syncIntervalSeconds, position
+      `SELECT id, type, label, config, sync_interval_s AS syncIntervalSeconds, position, enabled
        FROM connectors ORDER BY position, id`,
-    ).map((row) => ({
+    ).map(({ id, ...row }) => ({
       ...row,
+      enabled: row.enabled === 1,
       config: JSON.parse(String(row.config ?? '{}')) as Record<string, unknown>,
+      secrets: exportSecrets(Number(id)),
     })),
     settings: Object.fromEntries(
       rows('SELECT key, value FROM settings').map((row) => [

@@ -1,9 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
-import { buildStations, featureKey } from '@/features/admin/adminStations'
+import { buildStations, featureKey, type HiddenEntries } from '@/features/admin/adminStations'
 import { rowActionsFor } from '@/features/admin/adminRowActions'
 import { detailOf, summaryOf } from '@/features/admin/adminRowText'
 import type { ApiFeature, ApiRow } from '@diele/common'
 import type { ListAction } from '@/helpers/listActions'
+import type { RowTarget } from '@/types/portal'
 
 /**
  * Builds a feature to place in the ring.
@@ -40,6 +41,33 @@ const leave: ListAction = {
   label: 'Back to the portal',
   description: 'leave',
   run: vi.fn(),
+}
+
+const ENTRIES: ReadonlyArray<RowTarget> = [
+  { ref: 'row:1', kind: 'row', name: 'web', url: 'https://g.test/web', detail: 'example-group' },
+  { ref: 'row:2', kind: 'row', name: 'api', url: 'https://g.test/api' },
+]
+
+/**
+ * Builds what an open connector produced, and what the portal keeps from everyone.
+ * @param {ReadonlyArray<string>} hidden - Refs hidden for everyone
+ * @returns {HiddenEntries} - The switches and their restore row
+ */
+function produced(hidden: ReadonlyArray<string> = []): HiddenEntries {
+  return {
+    entries: ENTRIES,
+    hidden,
+    showAll:
+      hidden.length > 0
+        ? {
+            kind: 'action',
+            id: 'show-all-hidden',
+            label: 'Show all hidden entries',
+            description: 'brings them back',
+            run: vi.fn(),
+          }
+        : undefined,
+  }
 }
 
 describe('buildStations', () => {
@@ -119,10 +147,54 @@ describe('buildStations', () => {
       'cards',
       [row(1), row(2)],
       [leave],
+      produced(['row:1']),
     )
     const keys = stations.map((station) => station.key)
 
     expect(new Set(keys).size).toBe(keys.length)
+  })
+
+  // The instances are what the feature is opened to edit; the entries are what they went and
+  // fetched, so they follow rather than lead.
+  it('puts what a connector produced after the instances that produced it', () => {
+    const stations = buildStations([feature()], 'cards', [row(1)], [], produced())
+
+    expect(stations.map((station) => station.kind)).toEqual([
+      'feature',
+      'add',
+      'entry',
+      'hidden',
+      'hidden',
+    ])
+  })
+
+  it('reads a ref in the hidden set as hidden, and labels a row by namespace and name', () => {
+    const stations = buildStations([feature()], 'cards', [], [], produced(['row:2']))
+    const hidden = stations.filter((station) => station.kind === 'hidden')
+
+    expect(hidden.map((station) => station.label)).toEqual(['example-group/web', 'api'])
+    expect(hidden.map((station) => station.hidden)).toEqual([false, true])
+  })
+
+  // On a list nothing has been taken out of, it would be a row that does nothing.
+  it('places the restore row ahead of the switches, only while something is hidden', () => {
+    const none = buildStations([feature()], 'cards', [], [], produced())
+    expect(none.some((station) => station.kind === 'action')).toBe(false)
+
+    const some = buildStations([feature()], 'cards', [], [], produced(['row:1']))
+    const restore = some.find((station) => station.kind === 'action')
+
+    expect(restore).toMatchObject({ nested: true })
+    expect(some.indexOf(restore!)).toBeLessThan(
+      some.findIndex((station) => station.kind === 'hidden'),
+    )
+  })
+
+  // A feature that produces nothing opens onto its own rows and nothing else.
+  it('places no switches for a feature that produced nothing', () => {
+    const stations = buildStations([feature()], 'cards', [row(1)], [])
+
+    expect(stations.some((station) => station.kind === 'hidden')).toBe(false)
   })
 })
 

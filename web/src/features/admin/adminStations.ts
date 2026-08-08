@@ -1,5 +1,6 @@
 import type { ListAction } from '@/helpers/listActions'
 import { summaryOf } from '@/features/admin/adminRowText'
+import type { RowTarget } from '@/types/portal'
 import type { ApiFeature, ApiRow } from '@diele/common'
 
 interface FeatureStation {
@@ -27,18 +28,35 @@ interface AddStation {
   readonly feature: ApiFeature
 }
 
+interface HiddenStation {
+  readonly kind: 'hidden'
+  readonly key: string
+  readonly label: string
+  readonly feature: ApiFeature
+  readonly entry: RowTarget
+  /** Whether the portal keeps this entry out of everyone's list */
+  readonly hidden: boolean
+}
+
 interface ActionStation {
   readonly kind: 'action'
   readonly key: string
   readonly label: string
   readonly action: ListAction
+  /** Whether the row belongs to an open feature rather than closing the list */
+  readonly nested: boolean
 }
 
 /**
  * One stop in the admin view's keyboard ring. A feature's entries are stations in the same list
  * as the feature itself, which is what lets one pair of arrow keys reach everything.
  */
-export type AdminStation = FeatureStation | EntryStation | AddStation | ActionStation
+export type AdminStation =
+  | FeatureStation
+  | EntryStation
+  | AddStation
+  | HiddenStation
+  | ActionStation
 
 /**
  * Names the station a feature occupies.
@@ -69,13 +87,36 @@ function addKey(featureId: string): string {
 }
 
 /**
+ * Names the station one of a connector's produced entries occupies.
+ * @param {string} featureId - Connector the entry came from
+ * @param {string} entryRef - Entry being addressed
+ * @returns {string} - Its key
+ */
+function hiddenKey(featureId: string, entryRef: string): string {
+  return `hidden:${featureId}:${entryRef}`
+}
+
+export interface HiddenEntries {
+  /** What the expanded connector produced, in the order the switches are listed */
+  readonly entries: ReadonlyArray<RowTarget>
+  /** Refs the portal keeps out of everyone's list */
+  readonly hidden: ReadonlyArray<string>
+  /** Brings every one of them back, offered only while something is hidden */
+  readonly showAll: ListAction | undefined
+}
+
+/**
  * Flattens the features, the expanded one's rows and the closing actions into a single ordered
  * ring. The expanded feature's rows follow it directly, so walking down from a feature steps
  * into its entries rather than over them.
+ *
+ * A connector's produced entries come after its configured instances, because the instances are
+ * what the feature is opened to edit and the entries are what they went and fetched.
  * @param {ReadonlyArray<ApiFeature>} features - Features left after filtering
  * @param {string | undefined} expanded - Feature whose rows are on screen
  * @param {ReadonlyArray<ApiRow>} rows - Rows of the expanded feature
  * @param {ReadonlyArray<ListAction>} actions - Closing actions, after every feature
+ * @param {HiddenEntries | undefined} visibility - What the expanded connector produced, when it produces anything
  * @returns {ReadonlyArray<AdminStation>} - The ring, in the order it is rendered
  */
 export function buildStations(
@@ -83,6 +124,7 @@ export function buildStations(
   expanded: string | undefined,
   rows: ReadonlyArray<ApiRow>,
   actions: ReadonlyArray<ListAction>,
+  visibility?: HiddenEntries,
 ): ReadonlyArray<AdminStation> {
   const stations: AdminStation[] = []
 
@@ -118,6 +160,27 @@ export function buildStations(
         last: index === rows.length - 1,
       })
     })
+
+    if (visibility?.showAll) {
+      stations.push({
+        kind: 'action',
+        key: `action:${feature.id}:${visibility.showAll.id}`,
+        label: visibility.showAll.label,
+        action: visibility.showAll,
+        nested: true,
+      })
+    }
+
+    for (const entry of visibility?.entries ?? []) {
+      stations.push({
+        kind: 'hidden',
+        key: hiddenKey(feature.id, entry.ref),
+        label: entry.detail ? `${entry.detail}/${entry.name}` : entry.name,
+        feature,
+        entry,
+        hidden: visibility!.hidden.includes(entry.ref),
+      })
+    }
   }
 
   for (const action of actions) {
@@ -126,6 +189,7 @@ export function buildStations(
       key: `action:${action.id}`,
       label: action.label,
       action,
+      nested: false,
     })
   }
 

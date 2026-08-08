@@ -40,7 +40,10 @@ default, because it costs a request per port on every load.
 
 **An admin panel, not a config file.** Cards, sites, engines, commands, ports, icons and
 connectors are all rows, all edited in place, all exportable as one document you can import into
-another instance. Each feature declares its own fields, so a new connector needs no form code.
+another instance. Connector credentials travel in that document still encrypted, so an instance
+holding the same `DIELE_SECRET_KEYS` restores a working connector and one holding a different key
+restores it switched off, waiting for its token. Each feature declares its own fields, so a new
+connector needs no form code.
 
 **Three ways to sign in.** OpenID Connect with PKCE against any issuer, local accounts with
 argon2id passwords, or a `dev` mode that grants every login while you work on the frontend.
