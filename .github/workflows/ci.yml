@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# A second push to the same branch supersedes the first, rather than queueing behind it.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint:ci
+
+      # Builds `common` first, which the other two type-check against.
+      - name: Type check
+        run: npm run type-check
+
+      # Thresholds are enforced by the scripts themselves, so a drop in coverage fails here.
+      - name: Test
+        run: npm run test:coverage
+
+      - name: Build
+        run: npm run build

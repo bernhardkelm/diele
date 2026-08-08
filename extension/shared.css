@@ -1,0 +1,251 @@
+/* The subset of diele's design language these two pages need: the same tokens, the same
+   lockup, the same hairline controls. Copied rather than imported — an unpacked extension has
+   no build step and cannot reach the web package — so keep it in step with
+   `web/src/styles/tokens.css` and `web/src/styles/base.css`. */
+
+/* Latin subsets only, and only the weights used here. Self-hosted for the same reason the app
+   self-hosts them: an extension page must load nothing from the network. */
+@font-face {
+  font-family: 'Space Grotesk';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('fonts/space-grotesk-latin-700-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Inter';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('fonts/inter-latin-400-normal.woff2') format('woff2');
+}
+
+@font-face {
+  font-family: 'Geist Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('fonts/geist-mono-latin-400-normal.woff2') format('woff2');
+}
+
+:root {
+  --diele-bg: light-dark(#f6f7f9, #0e0f12);
+  --diele-fg: light-dark(#1c2024, #e8eaed);
+  --diele-fg-muted: light-dark(#6b7280, #9097a1);
+  --diele-border: light-dark(#e3e6ea, #262a31);
+  --diele-accent: light-dark(#16a34a, #22c55e);
+  --diele-wordmark: light-dark(#1c2024, #f2f4f7);
+  --diele-subtitle: light-dark(#6b737f, #9097a1);
+  --diele-status-down: light-dark(#dc2626, #f87171);
+
+  --diele-space-1: 0.25rem;
+  --diele-space-2: 0.5rem;
+  --diele-space-3: 0.75rem;
+  --diele-space-6: 1.5rem;
+  --diele-space-8: 2rem;
+  --diele-space-12: 3rem;
+
+  --diele-font:
+    'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --diele-font-mono: ui-monospace, 'SF Mono', Menlo, 'Geist Mono', monospace;
+  --diele-font-brand: 'Space Grotesk', var(--diele-font);
+
+  --diele-text-base: 1rem;
+  --diele-text-xs: calc(var(--diele-text-base) * 0.7);
+  --diele-text-sm: calc(var(--diele-text-base) * 0.75);
+  --diele-text-md: calc(var(--diele-text-base) * 0.8);
+  --diele-text-display: clamp(
+    calc(var(--diele-text-base) * 1.75),
+    4vw,
+    calc(var(--diele-text-base) * 2.5)
+  );
+
+  --diele-transition: 160ms cubic-bezier(0.4, 0, 0.2, 1);
+
+  color-scheme: light dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* The UA rule for [hidden] is a plain `display: none` that any author `display` outranks, and
+   both hidden elements here set one. Without this they are visible before anything sets them. */
+[hidden] {
+  display: none !important;
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--diele-space-8);
+  margin: 0;
+  /* The options page opens in a small dialog, so it sizes to its content rather than the
+     viewport; the new tab page fills the window it replaces. */
+  min-height: 100vh;
+  min-width: 22rem;
+  padding: var(--diele-space-12) var(--diele-space-6);
+  background: var(--diele-bg);
+  color: var(--diele-fg);
+  font-family: var(--diele-font);
+  font-size: var(--diele-text-base);
+}
+
+/* The lockup: wordmark and mark on one line, subtitle tracked out beneath it. */
+.brand {
+  text-align: center;
+}
+
+.brand__title {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin: 0;
+  font-family: var(--diele-font-brand);
+  font-size: var(--diele-text-display);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.05em;
+  color: var(--diele-wordmark);
+}
+
+/* the lockup proportion: the mark is always 0.7 of the type it sits beside, nudged in em so
+   the pair holds together as the title scales with the viewport */
+.brand__tilde {
+  display: block;
+  width: 0.7em;
+  height: auto;
+  margin-left: 0.17em;
+  margin-top: 0.22em;
+  overflow: visible;
+}
+
+.brand__subtitle {
+  margin: var(--diele-space-2) 0 0;
+  font-family: var(--diele-font-mono);
+  font-size: var(--diele-text-sm);
+  text-transform: uppercase;
+  /* the tracking opens a gap after the last letter, which the indent pulls back so the word
+     stays optically centred under the lockup */
+  letter-spacing: 7px;
+  text-indent: 7px;
+  color: var(--diele-subtitle);
+}
+
+.lede {
+  max-width: 26rem;
+  margin: calc(var(--diele-space-6) * -1) 0 0;
+  font-family: var(--diele-font-mono);
+  font-size: var(--diele-text-md);
+  line-height: 1.6;
+  text-align: center;
+  color: var(--diele-fg-muted);
+}
+
+form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--diele-space-3);
+  width: 100%;
+  max-width: 22rem;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--diele-space-1);
+}
+
+.label {
+  font-family: var(--diele-font-mono);
+  font-size: var(--diele-text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--diele-fg-muted);
+}
+
+/* A line rather than a box, because the rest of diele is built from hairline rules. */
+input {
+  padding: 0.3rem 0;
+  font-family: var(--diele-font-mono);
+  font-size: var(--diele-text-md);
+  color: var(--diele-fg);
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--diele-border);
+  border-radius: 0;
+  transition: border-color var(--diele-transition);
+}
+
+/* the underline is the focus state; a ring around a control with no box of its own would be
+   drawing the box back in */
+input:focus-visible {
+  border-bottom-color: var(--diele-accent);
+  outline: none;
+}
+
+button {
+  align-self: flex-start;
+  padding: 0;
+  font: inherit;
+  font-family: var(--diele-font-mono);
+  font-size: var(--diele-text-md);
+  color: var(--diele-fg-muted);
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: color var(--diele-transition);
+}
+
+button:hover {
+  color: var(--diele-fg);
+  text-decoration: underline;
+}
+
+button:focus-visible {
+  color: var(--diele-accent);
+  text-decoration: underline;
+  outline: none;
+}
+
+.error {
+  margin: 0;
+  font-family: var(--diele-font-mono);
+  font-size: var(--diele-text-sm);
+  line-height: 1.5;
+  color: var(--diele-status-down);
+}
+
+.note {
+  margin: 0;
+  font-family: var(--diele-font-mono);
+  font-size: var(--diele-text-sm);
+  color: var(--diele-fg-muted);
+}
+
+/* The button sits on the same line as the note it follows, so the two read as one sentence. */
+.note--action {
+  display: flex;
+  align-items: baseline;
+  gap: var(--diele-space-2);
+}
+
+.note--action button {
+  align-self: baseline;
+  font-size: inherit;
+  text-decoration: underline;
+}
+
+.note--action button:hover,
+.note--action button:focus-visible {
+  color: var(--diele-accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none;
+  }
+}

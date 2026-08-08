@@ -1,0 +1,68 @@
+{
+  "name": "diele",
+  "version": "0.0.0",
+  "private": true,
+  "description": "A self-hosted new tab page: search, launch and admin for everything you run.",
+  "license": "AGPL-3.0-or-later",
+  "author": "Bernhard Kelm",
+  "homepage": "https://github.com/bernhardkelm/diele#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bernhardkelm/diele.git"
+  },
+  "bugs": {
+    "url": "https://github.com/bernhardkelm/diele/issues"
+  },
+  "keywords": [
+    "new-tab",
+    "start-page",
+    "self-hosted",
+    "launcher",
+    "homelab",
+    "gitlab"
+  ],
+  "type": "module",
+  "workspaces": [
+    "common",
+    "api",
+    "web"
+  ],
+  "engines": {
+    "node": ">=24.7"
+  },
+  "scripts": {
+    "dev": "run-s build:common dev:all",
+    "dev:all": "run-p watch:common dev:api dev:web",
+    "dev:api": "npm run dev -w @diele/api",
+    "dev:web": "npm run dev -w @diele/web",
+    "watch:common": "npm run watch -w @diele/common",
+    "clean": "rm -rf common/dist api/dist web/dist common/*.tsbuildinfo api/*.tsbuildinfo web/*.tsbuildinfo",
+    "build": "run-s build:common build:api build:web",
+    "build:common": "npm run build -w @diele/common",
+    "build:api": "npm run build -w @diele/api",
+    "build:web": "npm run build -w @diele/web",
+    "start": "npm run start -w @diele/api",
+    "type-check": "run-s build:common type-check:api type-check:web",
+    "type-check:api": "npm run type-check -w @diele/api",
+    "type-check:web": "npm run type-check -w @diele/web",
+    "lint": "run-s lint:api lint:web",
+    "lint:api": "npm run lint -w @diele/api",
+    "lint:web": "npm run lint -w @diele/web",
+    "lint:ci": "run-s lint:ci:api lint:ci:web",
+    "lint:ci:api": "npm run lint:ci -w @diele/api",
+    "lint:ci:web": "npm run lint:ci -w @diele/web",
+    "test": "run-s test:api test:web",
+    "test:api": "npm test -w @diele/api",
+    "test:web": "npm run test:unit -w @diele/web",
+    "test:coverage": "run-s test:coverage:api test:coverage:web",
+    "test:coverage:api": "npm run test:coverage -w @diele/api",
+    "test:coverage:web": "npm run test:coverage -w @diele/web",
+    "format": "run-s format:common format:api format:web",
+    "format:common": "npm run format -w @diele/common",
+    "format:api": "npm run format -w @diele/api",
+    "format:web": "npm run format -w @diele/web"
+  },
+  "devDependencies": {
+    "npm-run-all2": "^9.0.3"
+  }
+}

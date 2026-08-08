@@ -1,0 +1,83 @@
+# Dependencies
+node_modules
+
+# Build output
+dist
+dist-ssr
+*.tsbuildinfo
+*.tgz
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Caches
+.cache
+.npm
+.eslintcache
+
+# Tests
+coverage
+.nyc_output
+*.lcov
+__screenshots__/
+
+# Vite
+*.timestamp-*-*.mjs
+
+# Local environment. `.env`, `api/.env` and `web/.env` are committed and hold defaults only; the
+# machine's own values and every secret live in `.env.local`, matched by `*.local` below.
+*.local
+
+# Credentials
+*.pem
+*.key
+*.crt
+*.cert
+*.p12
+*.pfx
+
+# Database, created on first boot from DB_PATH, which resolves to ./data/ by default
+data/
+*.db
+*.db-shm
+*.db-wal
+
+# node:test database
+.test.db
+.test.db-wal
+.test.db-shm
+
+# Packed browser extension builds
+*.zip
+*.crx
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Claude Code
+.claude/settings.local.json
+
+# OS
+.DS_Store
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+desktop.ini
+
+# Merge and patch artifacts
+*.orig
+*.rej

@@ -1,0 +1,11 @@
+{
+  // The tests, checked with the same strictness as the code and emitted nowhere. `tsconfig.json`
+  // excludes them so they stay out of `dist/`, which would otherwise leave them unchecked.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": "./src"
+  },
+  "include": ["src/**/*"],
+  "exclude": []
+}

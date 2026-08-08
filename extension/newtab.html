@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>diele</title>
+    <link rel="stylesheet" href="shared.css" />
+  </head>
+  <body>
+    <!-- Hidden until the stored url is read, so a configured browser never flashes this on its
+         way to the redirect -->
+    <template id="setup">
+      <header class="brand">
+        <h1 class="brand__title">
+          diele<svg class="brand__tilde" viewBox="0 0 40 24" aria-hidden="true" focusable="false">
+            <path
+              d="M4,13 Q11,3 19,13 Q27,23 35,13"
+              stroke="var(--diele-accent)"
+              stroke-width="6"
+              fill="none"
+              stroke-linecap="round"
+            />
+          </svg>
+        </h1>
+        <p class="brand__subtitle">new tab</p>
+      </header>
+
+      <p class="lede">This browser is not pointed at an instance yet.</p>
+
+      <form id="form">
+        <div class="field">
+          <label class="label" for="url">Address</label>
+          <!-- Deliberately not type="url": the browser's own validation refuses a bare host,
+               which is exactly the input normaliseUrl exists to accept. -->
+          <input
+            id="url"
+            type="text"
+            inputmode="url"
+            placeholder="diele.example.com"
+            autocomplete="off"
+            autocapitalize="off"
+            spellcheck="false"
+            required
+          />
+        </div>
+        <button type="submit">Save and open</button>
+        <p id="error" class="error" hidden></p>
+      </form>
+    </template>
+    <!-- External files, not inline: the manifest v3 CSP blocks inline scripts on extension
+         pages. storage.js first, it defines what newtab.js calls. -->
+    <script src="storage.js"></script>
+    <script src="newtab.js"></script>
+  </body>
+</html>

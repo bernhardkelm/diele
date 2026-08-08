@@ -1,0 +1,226 @@
+/* Minimal reset + global document styling. */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+* {
+  margin: 0;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  min-height: 100vh;
+  font-family: var(--diele-font);
+  font-size: var(--diele-text-base);
+  line-height: 1.5;
+  color: var(--diele-fg);
+  background:
+    radial-gradient(1200px 600px at 50% -10%, var(--diele-bg-accent), transparent 70%),
+    var(--diele-bg);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+svg {
+  display: block;
+}
+
+/* The row grammar. Every result row is one line of label · detail · trail on three shared
+   tracks, so the details of a list start on one x rather than each following its own label.
+   Three parts, because the grid spans more than one element: the list holds the tracks, a row
+   hands its own up to it, and where a row wraps its content in a button or a link, that inner
+   element is what actually carries the columns. Each list keeps its own behaviour below the
+   breakpoint, because a short-labelled list stays on one line where a long-hinted one stacks. */
+.row-grammar {
+  display: grid;
+  grid-template-columns: minmax(var(--diele-row-label), auto) minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: var(--diele-space-4);
+}
+
+@supports (grid-template-columns: subgrid) {
+  /* the list measures the widest label actually in it, rather than every row keeping the
+     token's guess */
+  .row-tracks {
+    display: grid;
+    grid-template-columns: minmax(var(--diele-row-label), auto) minmax(0, 1fr) auto;
+  }
+
+  .row-grammar,
+  .row-grammar-pass {
+    display: grid;
+    grid-column: 1 / -1;
+    grid-template-columns: subgrid;
+  }
+}
+
+/* The shell every row in a station list shares: the gutter its marker sits in, the type it is set
+   in, and the colour it takes when reached. Only the gutter differs between lists, so that is a
+   property rather than a reason to restate the rule. A row that needs more, a nested depth, an
+   off state, a pointer cursor, adds it in its own scoped block, which outranks this. */
+.row-shell {
+  --row-marker-top: var(--diele-space-3);
+
+  position: relative;
+  scroll-margin-block: var(--diele-reveal-gap);
+  padding: var(--diele-space-3) var(--diele-space-2) var(--diele-space-3)
+    var(--row-gutter, var(--diele-space-6));
+  font-family: var(--diele-font-mono);
+  font-size: var(--diele-text-lg);
+  color: var(--diele-fg-muted);
+  transition: color var(--diele-transition);
+}
+
+.row-shell:hover,
+.row-shell:focus {
+  color: var(--diele-fg);
+  outline: none;
+}
+
+/* The trail every row ends with: the words and badges that sit after the detail column. */
+.row-trail {
+  display: flex;
+  justify-self: end;
+  gap: var(--diele-space-3);
+  align-items: baseline;
+  font-size: var(--diele-text-sm);
+}
+
+/* The shell a route-level view sits in: one column, centred, with room around it. */
+.view-shell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--diele-space-8);
+  min-height: 100vh;
+  padding: var(--diele-space-12) var(--diele-space-6);
+}
+
+/* The selection marker every row and the launcher field share. What reveals it differs by list,
+   an entry the arrows picked, a row holding focus, a row whose form holds it, so the trigger
+   stays with the component and only the drawing lives here. The offsets are properties because
+   a nested row sits a gutter deeper and the field seats the glyph on its own baseline. */
+.row-marker::before,
+.row-marker-focus:focus::before,
+.row-marker-within:focus-within::before {
+  content: var(--diele-marker);
+  position: absolute;
+  left: var(--row-marker-left, var(--diele-space-2));
+  top: var(--row-marker-top, auto);
+  color: var(--diele-accent);
+  transform: var(--diele-marker-lift);
+}
+
+/* Keeps one line one line. min-width, because a grid item's automatic minimum is its content:
+   without it a nowrap text cannot shrink, and the neighbouring column wraps in its place. */
+.truncate {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}
+
+/* Every interaction in the portal is text that underlines: the row actions, a repo's quick
+   links, and so every button as well. A button that needs more weight says so with a modifier
+   of its own rather than by growing a box. */
+button {
+  padding: 0;
+  font: inherit;
+  /* stated rather than inherited, so one standing on its own takes the mono the rows and fields
+     are set in instead of the body sans */
+  font-family: var(--diele-font-mono);
+  color: var(--diele-fg-muted);
+  background: none;
+  border: none;
+  cursor: pointer;
+  transition: color var(--diele-transition);
+}
+
+button:hover:not(:disabled) {
+  color: var(--diele-fg);
+  text-decoration: underline;
+}
+
+button:focus-visible {
+  color: var(--diele-accent);
+  text-decoration: underline;
+  outline: none;
+}
+
+button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* One treatment for every text box, dropdown and number field, so a form reads as one set of
+   parts wherever it is rendered. A line rather than a box, because the rest of the page is
+   built from hairline rules and the launcher's own field already sits on one. Checkboxes,
+   radios and file pickers keep the platform's control; the launcher opts out in its own rules. */
+input:not([type='checkbox'], [type='radio'], [type='file']),
+select,
+textarea {
+  padding: 0.3rem 0;
+  font-family: var(--diele-font-mono);
+  font-size: var(--diele-text-md);
+  color: var(--diele-fg);
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--diele-border);
+  border-radius: 0;
+  transition: border-color var(--diele-transition);
+}
+
+/* the underline is the focus state, the way the marker is a row's; a ring around a control
+   with no box of its own would be drawing the box back in */
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  border-bottom-color: var(--diele-accent);
+  outline: none;
+}
+
+input:disabled,
+select:disabled,
+textarea:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+/* The platform draws its own arrow in its own chrome, which is the one part of a form that
+   cannot be made to match the rest. The caret is drawn alongside instead, in the glyph the
+   rows already expand with. */
+select {
+  appearance: none;
+  padding-right: var(--diele-space-6);
+}
+
+/* The stepper only appears on hover, is unreachable by keyboard, and is two more shapes the
+   platform draws its own way. The arrow keys still step the value without it. */
+input[type='number'] {
+  appearance: textfield;
+}
+
+input[type='number']::-webkit-outer-spin-button,
+input[type='number']::-webkit-inner-spin-button {
+  appearance: none;
+  margin: 0;
+}

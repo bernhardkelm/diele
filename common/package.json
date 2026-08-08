@@ -1,0 +1,36 @@
+{
+  "name": "@diele/common",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Wire types shared by the diele api and web app.",
+  "license": "AGPL-3.0-or-later",
+  "author": "Bernhard Kelm",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bernhardkelm/diele.git",
+    "directory": "common"
+  },
+  "bugs": {
+    "url": "https://github.com/bernhardkelm/diele/issues"
+  },
+  "type": "module",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "watch": "tsc -b --watch",
+    "type-check": "tsc -b",
+    "format": "oxfmt src/"
+  },
+  "devDependencies": {
+    "oxfmt": "^0.62.0",
+    "typescript": "~6.0.3"
+  },
+  "engines": {
+    "node": ">=24.7"
+  }
+}

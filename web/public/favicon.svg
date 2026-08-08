@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <rect width="64" height="64" rx="14.08" fill="#0C0D10"/>
+  <!-- scaled so the inked mark, round caps included, spans 64% of the square and centres on it -->
+  <g transform="translate(10.41 17.61) scale(1.107)">
+    <path d="M4,13 Q11,3 19,13 Q27,23 35,13" stroke="#E8756A" stroke-width="6" fill="none" stroke-linecap="round"/>
+  </g>
+</svg>

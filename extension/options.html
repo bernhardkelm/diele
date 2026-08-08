@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>diele new tab</title>
+    <link rel="stylesheet" href="shared.css" />
+  </head>
+  <body>
+    <header class="brand">
+      <h1 class="brand__title">
+        diele<svg class="brand__tilde" viewBox="0 0 40 24" aria-hidden="true" focusable="false">
+          <path
+            d="M4,13 Q11,3 19,13 Q27,23 35,13"
+            stroke="var(--diele-accent)"
+            stroke-width="6"
+            fill="none"
+            stroke-linecap="round"
+          />
+        </svg>
+      </h1>
+      <p class="brand__subtitle">new tab</p>
+    </header>
+
+    <p class="lede">Every new tab opens this address, on each browser you are signed in to.</p>
+
+    <form id="form">
+      <div class="field">
+        <label class="label" for="url">Address</label>
+        <input
+          id="url"
+          type="text"
+          inputmode="url"
+          placeholder="diele.example.com"
+          autocomplete="off"
+          autocapitalize="off"
+          spellcheck="false"
+          required
+        />
+      </div>
+      <button type="submit">Save</button>
+      <p id="error" class="error" hidden></p>
+      <!-- The dialog cannot show whether the address actually works, so it offers to open it -->
+      <p id="saved" class="note note--action" hidden>
+        Saved.
+        <button id="open" type="button">Open it</button>
+      </p>
+    </form>
+
+    <script src="storage.js"></script>
+    <script src="options.js"></script>
+  </body>
+</html>

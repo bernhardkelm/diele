@@ -1,0 +1,137 @@
+/* Design tokens. Every pair reads light first, dark second, and `light-dark()` resolves it
+   against the root's `color-scheme` — which follows the OS until a stored override narrows
+   it to one value, so the whole theme turns on that single declaration. */
+:root {
+  /* Surfaces & text */
+  --diele-bg: light-dark(#f6f7f9, #0e0f12);
+  --diele-bg-accent: light-dark(#eef0f3, #15171c);
+  --diele-surface: light-dark(#ffffff, #181a20);
+  --diele-fg: light-dark(#1c2024, #e8eaed);
+  --diele-fg-muted: light-dark(#6b7280, #9097a1);
+  --diele-border: light-dark(#e3e6ea, #262a31);
+
+  /* Brand. One accent, drawn on the tilde and on every hover and focus state. Only the value
+     until the API answers, which overwrites this property with the configured colour; it is
+     the same green as `--diele-status-up` below, so an unbranded portal shows one colour
+     rather than two that nearly agree. */
+  --diele-accent: light-dark(#16a34a, #22c55e);
+  /* Selection marker, on the field and on every row alike. A text tilde rather than the svg
+     mark, so it shares a baseline with the type next to it. */
+  --diele-marker: '~';
+  /* raises the glyph off the baseline onto the x-height, the way the lockup seats the mark */
+  --diele-marker-lift: translateY(-0.12em);
+  /* The wordmark carries its own value, so it can sit brighter than body text in the dark */
+  --diele-wordmark: light-dark(#1c2024, #f2f4f7);
+  /* the specified #6b737f only carries against the light page, so the dark side keeps the
+     muted value it shares with the rest of the secondary text */
+  --diele-subtitle: light-dark(#6b737f, #9097a1);
+
+  /* Divider between project rows, reading as a light hairline on the tinted page bg; white
+     at low alpha in the dark, so it still reads as light against it */
+  --diele-rule: light-dark(#ffffff, rgb(255 255 255 / 0.08));
+
+  /* Backing behind the part of a result the search term matched */
+  --diele-hit: light-dark(rgb(28 32 36 / 0.1), rgb(232 234 237 / 0.18));
+
+  /* Shape & depth */
+  --diele-radius: 16px;
+  --diele-radius-sm: 10px;
+  --diele-shadow:
+    0 1px 2px light-dark(rgb(16 24 40 / 0.04), rgb(0 0 0 / 0.4)),
+    0 1px 3px light-dark(rgb(16 24 40 / 0.06), rgb(0 0 0 / 0.5));
+  --diele-shadow-hover:
+    0 8px 24px light-dark(rgb(16 24 40 / 0.1), rgb(0 0 0 / 0.55)),
+    0 2px 6px light-dark(rgb(16 24 40 / 0.06), rgb(0 0 0 / 0.4));
+
+  /* Monitor states, lifted in the dark for contrast against the dark surface */
+  --diele-status-up: light-dark(#16a34a, #22c55e);
+  --diele-status-down: light-dark(#dc2626, #f87171);
+  --diele-status-pending: light-dark(#d97706, #fbbf24);
+  --diele-status-maintenance: light-dark(#2563eb, #60a5fa);
+
+  /* Breathing room the arrow keys leave around the entry they scroll into view; without it
+     the highlight comes to rest flush against the edge of the window */
+  --diele-reveal-gap: 2rem;
+
+  /* Row grammar. Every result row is one line of label · detail · trail, laid out on the
+     same three tracks so the details of a list start on one x rather than each following
+     its own label. The label track holds this width even where a label is shorter, and
+     grows past it only for one that would otherwise be cut; both texts then ellipsize
+     rather than wrap, which is what keeps a row one line high. Rows are monospace, so ch
+     is an exact column count. Lists override it for the labels they carry. */
+  --diele-row-label: 26ch;
+
+  /* The one breakpoint, 640px: below it every row drops its three tracks and stacks. It cannot
+     be a token, because a custom property is not readable from a media query condition, and the
+     plugin that would preprocess one no longer exposes its definitions to a component's scoped
+     block. So it stays a literal in each `@media (max-width: 640px)`, and this is the note that
+     says all fourteen of them are the same decision rather than fourteen separate ones. */
+
+  /* Rhythm. The suffix is the step count on a 0.25rem grid, so -2 is 0.5rem and -12 is 3rem. */
+  --diele-space-1: 0.25rem;
+  --diele-space-2: 0.5rem;
+  --diele-space-3: 0.75rem;
+  --diele-space-4: 1rem;
+  --diele-space-6: 1.5rem;
+  --diele-space-8: 2rem;
+  --diele-space-12: 3rem;
+
+  /* Type. Inter and Space Grotesk are self-hosted through @fontsource; see main.ts for the
+     loaded weights. */
+  --diele-font: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  /* The rows and controls take the system's own monospace where there is a good one: SF Mono
+     wherever a browser exposes it, Menlo otherwise, which is what a Mac has been rendering all
+     along. Geist Mono is self-hosted and catches everything else, so a Windows or Linux visitor
+     gets a face that was chosen rather than whatever the platform happened to default to.
+     Deliberately no Consolas or Liberation Mono ahead of it: those are the defaults being
+     replaced. */
+  --diele-font-mono: ui-monospace, 'SF Mono', Menlo, 'Geist Mono', monospace;
+  /* The wordmark alone, which is the one place the display face earns its weight */
+  --diele-font-brand: 'Space Grotesk', var(--diele-font);
+
+  /* Type scale. Every step derives from the base, so moving the base moves the whole set
+     rather than the ~60 literals these replace. The portal is dense and monospace, so most
+     of the scale sits below the base rather than above it. */
+  --diele-text-base: 1rem;
+  --diele-text-2xs: calc(var(--diele-text-base) * 0.65);
+  --diele-text-xs: calc(var(--diele-text-base) * 0.7);
+  --diele-text-sm: calc(var(--diele-text-base) * 0.75);
+  --diele-text-md: calc(var(--diele-text-base) * 0.8);
+  --diele-text-lg: calc(var(--diele-text-base) * 0.85);
+  --diele-text-xl: calc(var(--diele-text-base) * 0.95);
+  /* the wordmark alone, which scales with the viewport rather than stepping */
+  --diele-text-display: clamp(
+    calc(var(--diele-text-base) * 1.75),
+    4vw,
+    calc(var(--diele-text-base) * 2.5)
+  );
+
+  /* Motion */
+  --diele-transition: 160ms cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* both values live, so the OS preference decides until an override narrows this */
+  color-scheme: light dark;
+}
+
+/* The stored override, written to the root by useTheme. Narrowing `color-scheme` re-resolves
+   every `light-dark()` above at once, and carries the form controls and scrollbars with it. */
+:root[data-theme='light'] {
+  color-scheme: light;
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+}
+
+/* The one token whose two sides differ in geometry rather than only in colour, so
+   `light-dark()` cannot express it: the dark shadow is larger and softer, the way a dark
+   surface needs. Keyed off both signals, to stay in step with the override above. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --diele-shadow-hover: 0 10px 28px rgb(0 0 0 / 0.55), 0 2px 8px rgb(0 0 0 / 0.4);
+  }
+}
+
+:root[data-theme='dark'] {
+  --diele-shadow-hover: 0 10px 28px rgb(0 0 0 / 0.55), 0 2px 8px rgb(0 0 0 / 0.4);
+}

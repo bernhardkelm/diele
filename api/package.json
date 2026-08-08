@@ -1,0 +1,63 @@
+{
+  "name": "@diele/api",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Backend for diele: sign-in and the configuration the launcher renders from.",
+  "license": "AGPL-3.0-or-later",
+  "author": "Bernhard Kelm",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bernhardkelm/diele.git",
+    "directory": "api"
+  },
+  "bugs": {
+    "url": "https://github.com/bernhardkelm/diele/issues"
+  },
+  "type": "module",
+  "main": "dist/server.js",
+  "imports": {
+    "#*.js": {
+      "types": "./src/*.ts",
+      "development": "./src/*.ts",
+      "default": "./dist/*.js"
+    }
+  },
+  "engines": {
+    "node": ">=24.7"
+  },
+  "scripts": {
+    "dev": "tsx watch --conditions=development src/server.ts",
+    "build": "tsc -b",
+    "start": "node dist/server.js",
+    "pretest": "rm -f .test.db .test.db-wal .test.db-shm",
+    "test": "AUTH_MODE=\"dev\" PUBLIC_ORIGIN=\"http://portal.test\" DIELE_SECRET_KEYS=\"insecure-test-key:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=\" DB_PATH=\"$PWD/.test.db\" node --test --test-concurrency=1 $DIELE_TEST_FLAGS --conditions=development --import tsx \"src/**/*.test.ts\"",
+    "test:coverage": "DIELE_TEST_FLAGS='--experimental-test-coverage --test-coverage-exclude=src/**/*.test.ts --test-coverage-exclude=src/testing/** --test-coverage-exclude=src/server.ts --test-coverage-lines=80 --test-coverage-branches=75 --test-coverage-functions=80' npm test",
+    "type-check": "run-s type-check:build type-check:test",
+    "type-check:build": "tsc -b",
+    "type-check:test": "tsc -b tsconfig.test.json",
+    "lint": "oxlint . --fix",
+    "lint:ci": "oxlint .",
+    "format": "oxfmt src/"
+  },
+  "dependencies": {
+    "@diele/common": "*",
+    "@xmldom/xmldom": "^0.9.10",
+    "better-sqlite3": "^13.0.3",
+    "cookie-parser": "^1.4.7",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "openid-client": "^6.8.4",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/cookie-parser": "^1.4.9",
+    "@types/express": "^5.0.6",
+    "@types/node": "^24.13.3",
+    "npm-run-all2": "^9.0.3",
+    "oxfmt": "^0.62.0",
+    "oxlint": "~1.77.0",
+    "tsx": "^4.23.10",
+    "typescript": "~6.0.3"
+  }
+}
