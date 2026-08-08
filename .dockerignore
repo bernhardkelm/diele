@@ -117,3 +117,7 @@ desktop.ini
 # Docker's own files, so editing one does not invalidate the layer that copies the sources
 Dockerfile
 .dockerignore
+
+# Release tooling, run on the host and never inside a build
+Makefile
+scripts
