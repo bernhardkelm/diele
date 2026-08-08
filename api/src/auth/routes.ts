@@ -12,8 +12,8 @@ import { canAdmin } from './permissions.js'
 import { loginSchema, setupSchema } from './schemas.js'
 import {
   createSession,
-  deleteOtherSessions,
   deleteSession,
+  deleteUserSessions,
   upsertUser,
   type IdentityClaims,
 } from './session.js'
@@ -154,9 +154,9 @@ authRouter.post('/login', (req, res, next) => {
       }
 
       clearAttempts(username)
-      // Signing in again would otherwise leave the previous session live and unreachable, which
-      // at ninety days is a credential nobody can see to revoke.
-      deleteOtherSessions(user.id)
+      // Nothing is evicted here: a portal is opened on a phone and a laptop both, and signing in
+      // on one is no reason to end the other. `/logout-all` is what revokes a session left
+      // behind on a device no longer to hand.
       markSignedIn(user.id)
       startSession(res, user.id, [], req.get('user-agent'), remember)
 
@@ -224,21 +224,23 @@ authRouter.post('/logout', (req, res, next) => {
     deleteSession(req.sessionId)
   }
 
-  clearSessionCookie(res)
+  answerLogout(res, next)
+})
 
-  // Only a real issuer has an end-session endpoint to send anyone to. Every other mode answers
-  // here, or the call reaches OIDC discovery with no issuer configured and fails after the
-  // session has already been destroyed, leaving the client believing it is still signed in.
-  if (config.authMode !== 'oidc') {
-    res.json({ ok: true })
+// Not among the public paths, so `requireSession` has already turned away a caller with no
+// session: ending every session an account has is not something an anonymous request may ask
+// for on someone else's behalf.
+authRouter.post('/logout-all', (req, res, next) => {
+  if (!req.user) {
+    next(unauthorized('authentication required'))
     return
   }
 
-  logoutUrl(config.publicOrigin)
-    .then((url) => {
-      res.json({ ok: true, logoutUrl: url ?? null })
-    })
-    .catch(next)
+  // This session included. Signing out everywhere is asked for when a device is out of reach,
+  // and one that spared the device doing the asking would be the one session still open.
+  deleteUserSessions(req.user.id)
+
+  answerLogout(res, next)
 })
 
 authRouter.get('/me', (req, res) => {
@@ -259,6 +261,31 @@ authRouter.get('/me', (req, res) => {
 
   res.json(payload)
 })
+
+/**
+ * Answers a request that has just destroyed a session: drops the cookie and says where, if
+ * anywhere, the browser has to go on to finish signing out.
+ * @param {import('express').Response} res - Response to clear the cookie on
+ * @param {import('express').NextFunction} next - Error channel, for a discovery that fails
+ * @returns {void}
+ */
+function answerLogout(res: import('express').Response, next: import('express').NextFunction): void {
+  clearSessionCookie(res)
+
+  // Only a real issuer has an end-session endpoint to send anyone to. Every other mode answers
+  // here, or the call reaches OIDC discovery with no issuer configured and fails after the
+  // session has already been destroyed, leaving the client believing it is still signed in.
+  if (config.authMode !== 'oidc') {
+    res.json({ ok: true })
+    return
+  }
+
+  logoutUrl(config.publicOrigin)
+    .then((url) => {
+      res.json({ ok: true, logoutUrl: url ?? null })
+    })
+    .catch(next)
+}
 
 /**
  * Opens a session for a user and puts the cookie on the response.

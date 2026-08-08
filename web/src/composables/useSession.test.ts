@@ -101,11 +101,27 @@ describe('signing out', () => {
   // would leave someone believing they had signed out while the session stayed open.
   it('keeps the caches when the server did not end the session', async () => {
     seedCaches()
-    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(new Response(null, { status: 500 }))))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.resolve(new Response(null, { status: 500 }))),
+    )
     vi.spyOn(console, 'error').mockImplementation(() => {})
 
     await useSession().signOut()
 
     expect(localStorage.getItem(ENTRIES_CACHE_KEY)).not.toBeNull()
+  })
+
+  // Two routes rather than a flag on one, so the endpoint that ends every session an account
+  // has is never one a mistyped body can reach.
+  it('asks the everywhere endpoint when the other devices are meant too', async () => {
+    seedCaches()
+    const fetchMock = vi.fn(() => Promise.resolve(new Response(JSON.stringify({ logoutUrl: '/' }))))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await useSession().signOutEverywhere()
+
+    expect(fetchMock.mock.calls.map((call) => call[0])).toContain('/api/auth/logout-all')
+    expect(localStorage.getItem(ENTRIES_CACHE_KEY)).toBeNull()
   })
 })

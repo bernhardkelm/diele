@@ -116,6 +116,7 @@ describe('what the list offers', () => {
 
     expect(actions).toContain('leave')
     expect(actions).toContain('signout')
+    expect(actions).toContain('signout-all')
   })
 })
 

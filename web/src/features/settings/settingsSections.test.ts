@@ -84,12 +84,23 @@ describe('searchSections', () => {
 })
 
 describe('buildSettingsStations', () => {
-  const actions = settingsActions({ leave: vi.fn(), signOut: vi.fn(), name: 'Ada' })
+  const actions = settingsActions({
+    leave: vi.fn(),
+    signOut: vi.fn(),
+    signOutEverywhere: vi.fn(),
+    name: 'Ada',
+  })
 
   it('places one station per section, then the closing actions', () => {
     const stations = buildSettingsStations(sections, undefined, actions)
 
-    expect(stations.map((s) => s.kind)).toEqual(['section', 'section', 'action', 'action'])
+    expect(stations.map((s) => s.kind)).toEqual([
+      'section',
+      'section',
+      'action',
+      'action',
+      'action',
+    ])
     expect(stations[0]!.key).toBe(sectionKey('appearance'))
   })
 
@@ -134,30 +145,61 @@ describe('settingsActions', () => {
   // Signing out is the one row with a consequence beyond this browser, so it belongs where
   // nothing is stepped through it by accident.
   it('puts leaving first and signing out last', () => {
-    const actions = settingsActions({ leave: vi.fn(), signOut: vi.fn(), name: 'Ada' })
+    const actions = settingsActions({
+      leave: vi.fn(),
+      signOut: vi.fn(),
+      signOutEverywhere: vi.fn(),
+      name: 'Ada',
+    })
 
-    expect(actions.map((action) => action.id)).toEqual(['leave', 'signout'])
+    expect(actions.map((action) => action.id)).toEqual(['leave', 'signout', 'signout-all'])
   })
 
   it('names who is being signed out when it knows', () => {
-    expect(settingsActions({ leave: vi.fn(), signOut: vi.fn(), name: 'Ada' })[1]!.description).toBe(
-      'ends the session for Ada',
-    )
-    expect(settingsActions({ leave: vi.fn(), signOut: vi.fn(), name: null })[1]!.description).toBe(
-      'ends the session',
-    )
+    expect(
+      settingsActions({
+        leave: vi.fn(),
+        signOut: vi.fn(),
+        signOutEverywhere: vi.fn(),
+        name: 'Ada',
+      })[1]!.description,
+    ).toBe('ends the session for Ada')
+    expect(
+      settingsActions({
+        leave: vi.fn(),
+        signOut: vi.fn(),
+        signOutEverywhere: vi.fn(),
+        name: null,
+      })[1]!.description,
+    ).toBe('ends the session')
   })
 
   it('runs what it was given', () => {
     const leave = vi.fn()
     const signOut = vi.fn()
-    const actions = settingsActions({ leave, signOut, name: null })
+    const signOutEverywhere = vi.fn()
+    const actions = settingsActions({ leave, signOut, signOutEverywhere, name: null })
 
     actions[0]!.run()
     actions[1]!.run()
+    actions[2]!.run()
 
     expect(leave).toHaveBeenCalled()
     expect(signOut).toHaveBeenCalled()
+    expect(signOutEverywhere).toHaveBeenCalled()
+  })
+
+  // The row that reaches beyond this browser says so, because the one above it reads almost the
+  // same and ends only the session in front of you.
+  it('says the everywhere row reaches the other devices', () => {
+    const actions = settingsActions({
+      leave: vi.fn(),
+      signOut: vi.fn(),
+      signOutEverywhere: vi.fn(),
+      name: 'Ada',
+    })
+
+    expect(actions[2]!.description).toBe('ends every session, on this device and any other')
   })
 })
 
@@ -220,7 +262,12 @@ describe('settingsHintsFor', () => {
       kind: 'action',
       key: 'k',
       label: 'l',
-      action: settingsActions({ leave: vi.fn(), signOut: vi.fn(), name: null })[0]!,
+      action: settingsActions({
+        leave: vi.fn(),
+        signOut: vi.fn(),
+        signOutEverywhere: vi.fn(),
+        name: null,
+      })[0]!,
       nested: false,
     } as const
 

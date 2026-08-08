@@ -119,25 +119,65 @@ test('the username is matched in its normalised form', async () => {
   assert.equal(response.status, 200)
 })
 
-// Ninety days is a long time for a credential nobody can see to revoke, which is what the
-// previous session becomes the moment a second one replaces it.
-test('signing in again ends the session it replaced', async () => {
-  const signIn = (): Promise<Response> =>
-    api.request('/api/auth/login', {
-      method: 'POST',
-      body: JSON.stringify({ username: USERNAME, password: PASSWORD }),
-    })
+/**
+ * Signs the account in and hands back the session cookie the response opened.
+ * @returns {Promise<string>} - The cookie header for that session
+ */
+async function signIn(): Promise<string> {
+  const response = await api.request('/api/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ username: USERNAME, password: PASSWORD }),
+  })
 
-  const first = sessionCookie(await signIn())
-  assert.ok(first)
-  assert.equal((await api.request('/api/auth/me', { headers: { cookie: first } })).status, 200)
+  const cookie = sessionCookie(response)
+  assert.ok(cookie)
 
-  const second = sessionCookie(await signIn())
-  assert.ok(second)
+  return cookie
+}
+
+// A portal is opened on a phone and a laptop both, so signing in on one is no reason to end
+// the other.
+test('signing in again leaves the session it did not replace alive', async () => {
+  const first = await signIn()
+  const second = await signIn()
   assert.notEqual(second, first)
 
+  assert.equal((await api.request('/api/auth/me', { headers: { cookie: first } })).status, 200)
   assert.equal((await api.request('/api/auth/me', { headers: { cookie: second } })).status, 200)
+})
+
+// The only way a session opened on a device no longer to hand is revoked, now that no login
+// evicts one.
+test('signing out everywhere ends every session the account has', async () => {
+  const first = await signIn()
+  const second = await signIn()
+
+  const response = await api.request('/api/auth/logout-all', {
+    method: 'POST',
+    headers: { cookie: second },
+  })
+
+  assert.equal(response.status, 200)
+  assert.ok(
+    response.headers.getSetCookie().some((value) => value.startsWith('diele_session=;')),
+    'the answering browser is handed a cleared cookie',
+  )
+
+  // the device that asked included, because one that spared it would be the session still open
   assert.equal((await api.request('/api/auth/me', { headers: { cookie: first } })).status, 401)
+  assert.equal((await api.request('/api/auth/me', { headers: { cookie: second } })).status, 401)
+})
+
+// Ending every session an account has is not something an anonymous caller may ask for on
+// someone else's behalf.
+test('signing out everywhere is refused without a session', async () => {
+  const live = await signIn()
+  api.forgetCookies()
+
+  const response = await api.request('/api/auth/logout-all', { method: 'POST' })
+
+  assert.equal(response.status, 401)
+  assert.equal((await api.request('/api/auth/me', { headers: { cookie: live } })).status, 200)
 })
 
 test('a wrong password and an unknown username answer the same thing', async () => {

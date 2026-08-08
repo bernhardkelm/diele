@@ -2,6 +2,7 @@ import { ref, type Ref } from 'vue'
 import { singleFlight } from '@/helpers/singleFlight'
 import {
   AUTH_LOGIN_URL,
+  AUTH_LOGOUT_ALL_URL,
   AUTH_LOGOUT_URL,
   AUTH_ME_URL,
   AUTH_PROVIDERS_URL,
@@ -46,6 +47,8 @@ export interface SessionSource {
   signInWithPassword: (credentials: Credentials) => Promise<void>
   completeSetup: (details: SetupDetails) => Promise<void>
   signOut: () => Promise<void>
+  /** Ends every session the account has, this browser's included */
+  signOutEverywhere: () => Promise<void>
   loadProviders: () => Promise<void>
 }
 
@@ -232,13 +235,32 @@ export function useSession(): SessionSource {
   }
 
   /**
-   * Ends the session and drops everything cached under it — the configuration and the connector
-   * entries both — so the next visitor to this browser does not paint the last one's portal.
+   * Ends this browser's session.
    * @returns {Promise<void>}
    */
   async function signOut(): Promise<void> {
+    await endSession(AUTH_LOGOUT_URL)
+  }
+
+  /**
+   * Ends every session the account has, this browser's included. The way back from a device that
+   * is signed in and no longer to hand, which nothing else revokes: a session is left alone by
+   * every later login, so it lives out its idle window otherwise.
+   * @returns {Promise<void>}
+   */
+  async function signOutEverywhere(): Promise<void> {
+    await endSession(AUTH_LOGOUT_ALL_URL)
+  }
+
+  /**
+   * Ends a session and drops everything cached under it — the configuration and the connector
+   * entries both — so the next visitor to this browser does not paint the last one's portal.
+   * @param {string} url - Endpoint that destroys the session, or every session
+   * @returns {Promise<void>}
+   */
+  async function endSession(url: string): Promise<void> {
     try {
-      const response = await fetch(AUTH_LOGOUT_URL, {
+      const response = await fetch(url, {
         method: 'POST',
         headers: { accept: 'application/json' },
       })
@@ -274,6 +296,7 @@ export function useSession(): SessionSource {
     signInWithPassword,
     completeSetup,
     signOut,
+    signOutEverywhere,
     loadProviders,
   }
 }

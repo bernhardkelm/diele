@@ -3,7 +3,7 @@ import { test } from 'node:test'
 import { getDb } from '#db/index.js'
 import {
   createSession,
-  deleteOtherSessions,
+  deleteUserSessions,
   deleteSession,
   readSession,
   touchSession,
@@ -79,12 +79,12 @@ test('touching a session keeps it readable', () => {
   assert.equal(readSession(token)?.id, id)
 })
 
-test('signing in again drops the other sessions and spares the current one', () => {
+test('sparing one session drops the rest, for a caller that stays signed in', () => {
   const id = user('session-superseded')
   const first = createSession(id, [])
   const second = createSession(id, [])
 
-  deleteOtherSessions(id, second)
+  deleteUserSessions(id, second)
 
   assert.equal(readSession(first), undefined)
   assert.equal(readSession(second)?.id, id)
@@ -94,7 +94,7 @@ test('sparing nothing drops every session the account has', () => {
   const id = user('session-all-dropped')
   const token = createSession(id, [])
 
-  deleteOtherSessions(id)
+  deleteUserSessions(id)
 
   assert.equal(readSession(token), undefined)
   assert.deepEqual(storedIds(id), [])

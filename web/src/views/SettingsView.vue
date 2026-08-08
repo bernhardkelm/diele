@@ -34,7 +34,7 @@ const { section: routeSection, go, replace } = useHashRoute()
 const { preference, set: setTheme } = useTheme()
 const { isHiddenIn, toggle, showAll } = useHiddenEntries()
 const { rows: entryRows, sources } = useConnectorEntries()
-const { user, signOut } = useSession()
+const { user, signOut, signOutEverywhere } = useSession()
 
 const query = ref('')
 
@@ -77,6 +77,7 @@ const actions = computed(() =>
   settingsActions({
     leave: () => go(ROUTES.portal),
     signOut: () => void signOut(),
+    signOutEverywhere: () => void signOutEverywhere(),
     name: user.value?.name ?? user.value?.email ?? null,
   }),
 )

@@ -5,6 +5,7 @@ export const CONFIG_URL = '/api/config'
 export const AUTH_ME_URL = '/api/auth/me'
 export const AUTH_PROVIDERS_URL = '/api/auth/providers'
 export const AUTH_LOGOUT_URL = '/api/auth/logout'
+export const AUTH_LOGOUT_ALL_URL = '/api/auth/logout-all'
 export const AUTH_LOGIN_URL = '/api/auth/login'
 export const AUTH_SETUP_URL = '/api/auth/setup'
 

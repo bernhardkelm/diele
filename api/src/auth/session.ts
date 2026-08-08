@@ -218,18 +218,21 @@ export function pruneExpired(): void {
 }
 
 /**
- * Ends every other session belonging to a user, so signing in again does not leave the previous
- * one live and unreachable.
+ * Ends a user's sessions, everywhere they were opened.
+ *
+ * This is what signing out everywhere runs, which is the only way a session opened on a device
+ * no longer to hand is revoked: nothing evicts one on login, because an account is meant to be
+ * signed in on a phone and a laptop at once.
  *
  * A password change has to call this too, once there is a route that performs one. Nothing
  * changes a password today, so there is no such call to find and copy: a session opened before
  * the change would otherwise outlive it by up to ninety days, which is the whole reason someone
  * changes a password in the first place.
- * @param {number} userId - User whose other sessions should end
- * @param {string | undefined} keep - Session to spare, when one has already been opened
+ * @param {number} userId - User whose sessions should end
+ * @param {string | undefined} keep - Session to spare, for a caller that stays signed in
  * @returns {void}
  */
-export function deleteOtherSessions(userId: number, keep?: string): void {
+export function deleteUserSessions(userId: number, keep?: string): void {
   getDb()
     .prepare('DELETE FROM sessions WHERE user_id = ? AND id IS NOT ?')
     .run(userId, keep === undefined ? null : sessionKey(keep))
