@@ -146,6 +146,7 @@ export const gitlabModule: ConnectorModule = {
   type: 'gitlab',
   label: 'GitLab',
   description: 'Repos of the token’s groups, listed below the cards.',
+  mark: 'gl',
   produces: ['row'],
   fields: FIELDS,
   secretKeys: ['token'],

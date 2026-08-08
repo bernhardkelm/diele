@@ -64,6 +64,7 @@ test('entries come back with the sources that produced them', async () => {
   const source = payload.sources.find((entry) => entry.connectorId === connectorId)
   assert.equal(source?.label, 'work')
   assert.equal(source?.type, 'gitlab')
+  assert.equal(source?.mark, 'gl')
   assert.ok(source?.syncedAt)
 })
 

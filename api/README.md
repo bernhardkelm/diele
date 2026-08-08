@@ -291,7 +291,7 @@ something it does not do. Only `entries` is built; `health`, `signals` and `sear
 Uptime Kuma, Prometheus and a document store land on.
 
 Connectors that are agreed on but not written yet are listed too, with `unavailable` set and nothing
-behind them: GitHub, Uptime Kuma, Prometheus, Grafana and Notion, in the order they are meant to
+behind them: Uptime Kuma, Prometheus, Grafana and Notion, in the order they are meant to
 land. Each already declares the capabilities it will answer to, which is where the shape it is
 expected to take is written down.
 

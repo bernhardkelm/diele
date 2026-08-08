@@ -8,6 +8,8 @@ import type { RowTarget } from '@/types/portal'
 
 interface EntryRowProps {
   entry: RowTarget
+  /** Tag naming the row's kind of source, shown only while several kinds mix in the list */
+  mark?: string
   /** Whether the launcher highlight currently sits on this row */
   active?: boolean
   /** Action the left and right keys selected, 0 being the entry itself; only set while active */
@@ -43,6 +45,7 @@ const links = computed(() => actionsFor(props.entry).slice(1))
           ><HighlightedText :text="entry.detail" :query="query" />/</span
         ><HighlightedText :text="entry.name" :query="query"
       /></span>
+      <span v-if="mark" class="row__mark">{{ mark }}</span>
     </a>
 
     <span class="row__links">
@@ -112,6 +115,14 @@ const links = computed(() => actionsFor(props.entry).slice(1))
 }
 
 .row__namespace {
+  color: var(--diele-fg-muted);
+}
+
+/* outside the truncating name span, so a long name never swallows the tag */
+.row__mark {
+  flex: none;
+  margin-left: var(--diele-space-3);
+  font-size: var(--diele-text-md);
   color: var(--diele-fg-muted);
 }
 

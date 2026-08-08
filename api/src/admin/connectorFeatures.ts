@@ -17,19 +17,6 @@ const DEFAULT_INTERVAL_S = 900
  */
 const PLANNED: ReadonlyArray<ApiFeature> = [
   {
-    id: 'github',
-    label: 'GitHub',
-    description: 'Repos of the configured orgs and users, alongside the GitLab ones.',
-    kind: 'connector',
-    produces: ['row'],
-    capabilities: ['entries'],
-    fields: [],
-    count: 0,
-    enabledCount: 0,
-    unavailable: 'not built yet',
-    unavailableReason: 'planned',
-  },
-  {
     id: 'uptime-kuma',
     label: 'Uptime Kuma',
     description: 'Monitor states, shown as a dot on the cards they belong to.',

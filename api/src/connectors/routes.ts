@@ -5,6 +5,7 @@ import { forbidden, unauthorized } from '#errors.js'
 import { listEntries } from './entries.js'
 import { readHidden, setHidden } from './hidden.js'
 import { listEnabledConnectors } from './repository.js'
+import { moduleFor } from './registry.js'
 import type { ApiEntries, ApiEntriesSource } from '@diele/common'
 import { toApiEntry } from './wire.js'
 
@@ -53,6 +54,7 @@ entriesRouter.get('/', (req, res) => {
     connectorId: connector.id,
     type: connector.type,
     label: connector.label,
+    mark: moduleFor(connector.type)?.mark ?? connector.type.slice(0, 2),
     syncedAt: connector.sync.lastOkAt,
     error: errorFor(connector.sync.lastError, detailed),
   }))

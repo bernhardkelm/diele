@@ -7,6 +7,8 @@ import type { RowTarget } from '@/types/portal'
 
 interface EntryListProps {
   entries: ReadonlyArray<Indexed<RowTarget>>
+  /** Tag per connector id, present only while rows of more than one kind of source mix here */
+  marks?: ReadonlyMap<number, string>
   sortKey: EntrySortKey
   sortDirection: SortDirection
   /** Position of the launcher highlight; omitted while the filter bar is closed */
@@ -69,6 +71,7 @@ function sortLabel(key: EntrySortKey, label: string): string {
         v-for="entry in entries"
         :key="entry.item.ref"
         :entry="entry.item"
+        :mark="entry.item.connectorId !== undefined ? marks?.get(entry.item.connectorId) : undefined"
         :active="entry.index === activeIndex"
         :active-action="entry.index === activeIndex ? activeAction : undefined"
         :query="query"
