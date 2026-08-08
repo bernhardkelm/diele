@@ -43,9 +43,6 @@ export async function startApi(env: Record<string, string> = {}): Promise<TestAp
     // keeps a `Secure` cookie from being dropped by the client below without a word.
     SESSION_COOKIE_SECURE: 'false',
     TRUST_PROXY: '',
-    // A test owns its tables: the stock rows carry keywords and ports a fixture would collide
-    // with, and counting rows means counting the ones the test wrote. A test about the seed
-    // itself asks for it back.
     DIELE_SEED_STOCK_CONFIG: 'false',
   }
 
