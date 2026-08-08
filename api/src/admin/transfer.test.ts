@@ -181,6 +181,26 @@ test('an import replaces the configuration and reports what it wrote', async () 
   assert.deepEqual(config.sites, [])
 })
 
+// The scheduler reads its queue from connector_sync, so an imported connector without a row
+// there is one nothing ever picks up: not on the next tick, not on any later one.
+test('an import leaves every connector it wrote due for a sync', async () => {
+  seedConnector()
+  const exported = await api.get<ExportPayload>('/api/admin/export')
+
+  await api.post('/api/admin/import', exported)
+
+  const rows = db
+    .prepare(
+      `SELECT c.label, s.next_run_at
+       FROM connectors c
+       LEFT JOIN connector_sync s ON s.connector_id = c.id`,
+    )
+    .all() as Array<{ label: string; next_run_at: string | null }>
+
+  assert.equal(rows.length, 1)
+  assert.ok(rows[0]?.next_run_at, `${rows[0]?.label} arrived without a sync row`)
+})
+
 test('an export taken after an import reproduces it', async () => {
   const first = await api.get<ExportPayload>('/api/admin/export')
 

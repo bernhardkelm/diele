@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { onMounted } from 'vue'
 import CredentialForm from '@/components/CredentialForm.vue'
-import PageFooter from '@/components/PageFooter.vue'
 import PortalHeader from '@/components/PortalHeader.vue'
 import { useSession } from '@/composables/useSession'
 
@@ -25,12 +24,10 @@ onMounted(() => void loadProviders())
     </template>
 
     <button v-else-if="mode" type="button" autofocus @click="signIn()">
-      Sign in{{ providers[0] ? ` with ${providers[0].name}` : '' }}
+      {{ mode === 'oidc' ? `Sign in with ${providers[0]?.name ?? 'SSO'}` : 'Sign in' }}
     </button>
 
     <div v-else class="gate__placeholder" aria-hidden="true" />
-
-    <PageFooter />
   </div>
 </template>
 

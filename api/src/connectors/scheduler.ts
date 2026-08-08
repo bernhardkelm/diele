@@ -66,6 +66,22 @@ export async function runDueConnectors(): Promise<void> {
 }
 
 /**
+ * Runs whatever is due now rather than on the next tick, for a caller that just made something
+ * due. Unawaited, because a run is a source per connector and nobody is waiting on it.
+ *
+ * A no-op where the scheduler is not running: a process that syncs nothing of its own accord has
+ * not asked to sync anything here either, and that is what keeps a test from reaching a source.
+ * @returns {void}
+ */
+export function wakeScheduler(): void {
+  if (timer === undefined) {
+    return
+  }
+
+  void runDueConnectors()
+}
+
+/**
  * Starts the connector scheduler. Called from the listen callback rather than at import, so a
  * slow source cannot delay the port opening and importing the app in a test starts no timers.
  * @returns {void}

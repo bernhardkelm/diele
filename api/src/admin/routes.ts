@@ -1,4 +1,5 @@
 import { Router } from 'express'
+import { wakeScheduler } from '#connectors/scheduler.js'
 import { badRequest } from '#errors.js'
 import { isToggleable, setEnabled } from '#settings/toggles.js'
 import { commandsRouter } from './commandsRoutes.js'
@@ -45,6 +46,11 @@ adminRouter.get('/export', (_req, res) => {
 
 adminRouter.post('/import', (req, res) => {
   const payload = importSchema.parse(req.body)
+  const written = applyImport(payload)
 
-  res.json({ ok: true, written: applyImport(payload) })
+  // Every connector the file brought is due as of this moment, so this only saves it the wait
+  // until the next tick.
+  wakeScheduler()
+
+  res.json({ ok: true, written })
 })

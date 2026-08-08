@@ -6,6 +6,7 @@ import {
   deleteUserSessions,
   deleteSession,
   readSession,
+  readSessionIdToken,
   touchSession,
 } from './session.js'
 
@@ -58,6 +59,25 @@ test('a session resolves back to the account it was opened for', () => {
 
 test('an unknown token resolves to nothing', () => {
   assert.equal(readSession('not-a-session'), undefined)
+})
+
+// Handed back to the issuer as `id_token_hint` when this session is signed out, which is what
+// makes it end the session there and return the browser rather than stopping on a page of its own.
+test('a session hands back the token it was opened with', () => {
+  const id = user('session-with-an-id-token')
+  const token = createSession(id, [], undefined, false, 'the.id.token')
+
+  assert.equal(readSessionIdToken(token), 'the.id.token')
+})
+
+// Every mode but oidc opens sessions without one, and so does an oidc session opened before this
+// column existed.
+test('a session opened without one hands back nothing', () => {
+  const id = user('session-without-an-id-token')
+  const token = createSession(id, [])
+
+  assert.equal(readSessionIdToken(token), undefined)
+  assert.equal(readSessionIdToken('not-a-session'), undefined)
 })
 
 test('ending a session stops its token working', () => {

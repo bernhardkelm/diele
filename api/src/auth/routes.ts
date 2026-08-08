@@ -14,6 +14,7 @@ import {
   createSession,
   deleteSession,
   deleteUserSessions,
+  readSessionIdToken,
   upsertUser,
   type IdentityClaims,
 } from './session.js'
@@ -72,7 +73,7 @@ function providers(): ReadonlyArray<{ id: string; name: string }> {
     return [{ id: 'local', name: 'Password' }]
   }
 
-  return [{ id: 'oidc', name: process.env.OIDC_DISPLAY_NAME ?? 'Single Sign-On' }]
+  return [{ id: 'oidc', name: process.env.OIDC_DISPLAY_NAME ?? 'SSO' }]
 }
 
 authRouter.get('/providers', (_req, res) => {
@@ -211,20 +212,23 @@ authRouter.get('/callback', (req, res, next) => {
   const currentUrl = new URL(req.originalUrl, config.publicOrigin)
 
   completeLogin(currentUrl, flow.codeVerifier, state, flow.nonce)
-    .then((claims) => {
+    .then(({ claims, idToken }) => {
       const userId = upsertUser(claims)
-      startSession(res, userId, claims.groups ?? [], req.get('user-agent'), flow.remember)
+      startSession(res, userId, claims.groups ?? [], req.get('user-agent'), flow.remember, idToken)
       res.redirect(safeRedirect(flow.redirectTo))
     })
     .catch(next)
 })
 
 authRouter.post('/logout', (req, res, next) => {
+  // Read before the row is destroyed, which is what carries it.
+  const idToken = req.sessionId ? readSessionIdToken(req.sessionId) : undefined
+
   if (req.sessionId) {
     deleteSession(req.sessionId)
   }
 
-  answerLogout(res, next)
+  answerLogout(res, next, idToken)
 })
 
 // Not among the public paths, so `requireSession` has already turned away a caller with no
@@ -236,11 +240,13 @@ authRouter.post('/logout-all', (req, res, next) => {
     return
   }
 
+  const idToken = req.sessionId ? readSessionIdToken(req.sessionId) : undefined
+
   // This session included. Signing out everywhere is asked for when a device is out of reach,
   // and one that spared the device doing the asking would be the one session still open.
   deleteUserSessions(req.user.id)
 
-  answerLogout(res, next)
+  answerLogout(res, next, idToken)
 })
 
 authRouter.get('/me', (req, res) => {
@@ -267,9 +273,14 @@ authRouter.get('/me', (req, res) => {
  * anywhere, the browser has to go on to finish signing out.
  * @param {import('express').Response} res - Response to clear the cookie on
  * @param {import('express').NextFunction} next - Error channel, for a discovery that fails
+ * @param {string | undefined} idToken - Token the session was opened with, for the issuer's hint
  * @returns {void}
  */
-function answerLogout(res: import('express').Response, next: import('express').NextFunction): void {
+function answerLogout(
+  res: import('express').Response,
+  next: import('express').NextFunction,
+  idToken?: string,
+): void {
   clearSessionCookie(res)
 
   // Only a real issuer has an end-session endpoint to send anyone to. Every other mode answers
@@ -280,7 +291,7 @@ function answerLogout(res: import('express').Response, next: import('express').N
     return
   }
 
-  logoutUrl(config.publicOrigin)
+  logoutUrl(config.publicOrigin, idToken)
     .then((url) => {
       res.json({ ok: true, logoutUrl: url ?? null })
     })
@@ -298,6 +309,7 @@ function answerLogout(res: import('express').Response, next: import('express').N
  * @param {ReadonlyArray<string>} groups - Group claims to carry alongside it
  * @param {string | undefined} userAgent - Client that logged in
  * @param {boolean} remember - Whether to use the longer idle window
+ * @param {string | undefined} idToken - Token the issuer vouched with, where one did
  * @returns {void}
  */
 function startSession(
@@ -306,7 +318,8 @@ function startSession(
   groups: ReadonlyArray<string>,
   userAgent: string | undefined,
   remember: boolean,
+  idToken?: string,
 ): void {
-  const sessionId = createSession(userId, groups, userAgent, remember)
+  const sessionId = createSession(userId, groups, userAgent, remember, idToken)
   setSessionCookie(res, sessionId)
 }

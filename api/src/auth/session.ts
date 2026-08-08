@@ -108,6 +108,7 @@ function windowSeconds(remember: boolean): number {
  * @param {ReadonlyArray<string>} groups - Group claims to carry alongside it
  * @param {string | undefined} userAgent - Client that logged in, kept for the session list
  * @param {boolean} remember - Whether to use the longer idle window
+ * @param {string | undefined} idToken - Token the issuer vouched with, for the logout hint
  * @returns {string} - Session token to hand to the browser as a cookie, stored only as its digest
  */
 export function createSession(
@@ -115,13 +116,15 @@ export function createSession(
   groups: ReadonlyArray<string>,
   userAgent?: string,
   remember = false,
+  idToken?: string,
 ): string {
   const token = randomBytes(SESSION_ID_BYTES).toString('base64url')
 
   getDb()
     .prepare(
-      `INSERT INTO sessions (id, user_id, expires_at, user_agent, groups, remember, auth_mode)
-       VALUES (?, ?, datetime('now', ?), ?, ?, ?, ?)`,
+      `INSERT INTO sessions
+         (id, user_id, expires_at, user_agent, groups, remember, auth_mode, id_token)
+       VALUES (?, ?, datetime('now', ?), ?, ?, ?, ?, ?)`,
     )
     .run(
       sessionKey(token),
@@ -131,9 +134,24 @@ export function createSession(
       JSON.stringify(groups),
       remember ? 1 : 0,
       config.authMode,
+      idToken ?? null,
     )
 
   return token
+}
+
+/**
+ * Reads the token a session was opened with, so signing out can hand it back to the issuer.
+ * Asked for before the session is destroyed, since it goes with the row.
+ * @param {string} id - Session id from the cookie
+ * @returns {string | undefined} - The id token, or undefined for a session that kept none
+ */
+export function readSessionIdToken(id: string): string | undefined {
+  const row = getDb().prepare('SELECT id_token FROM sessions WHERE id = ?').get(sessionKey(id)) as
+    | { id_token: string | null }
+    | undefined
+
+  return row?.id_token ?? undefined
 }
 
 /**

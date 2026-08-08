@@ -255,7 +255,8 @@ describe('a portal that signs in elsewhere', () => {
     const wrapper = await open({ mode: 'oidc' })
 
     expect(wrapper.findComponent(CredentialForm).exists()).toBe(false)
-    expect(wrapper.text()).toContain('Single Sign-On')
+    // The name the deployment configured, not a fixed one: OIDC_DISPLAY_NAME exists to be shown.
+    expect(wrapper.text()).toContain('Sign in with Single Sign-On')
   })
 
   it('leaves the page for the issuer when asked', async () => {
@@ -272,6 +273,24 @@ describe('a portal that signs in elsewhere', () => {
 
     expect(assign).toHaveBeenCalledWith(expect.stringContaining('/api/auth/login?redirect='))
   })
+})
+
+// Only an issuer is signed in with elsewhere, so only an issuer is named on the button.
+describe('a portal signed in to as the developer', () => {
+  it('names nothing on the button', async () => {
+    const wrapper = await open({ mode: 'dev' })
+    const control = wrapper.findAll('button').find((button) => !button.classes('brand__home'))!
+
+    expect(control.text()).toBe('Sign in')
+  })
+})
+
+// The gate is the one screen a visitor reaches without an account, and the footer's link leaves
+// the portal for somewhere it says nothing to them.
+it('carries no link away from the portal', async () => {
+  const wrapper = await open({ mode: 'oidc' })
+
+  expect(wrapper.find('.page-footer').exists()).toBe(false)
 })
 
 // Local mode has nowhere to go: the form is already in this app, so signing in drops the

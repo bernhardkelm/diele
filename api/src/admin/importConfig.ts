@@ -144,6 +144,9 @@ export function applyImport(payload: ImportPayload): Record<string, number> {
      VALUES (@type, @label, @config, @interval, @position, 0)`,
   )
   const enableConnector = db.prepare('UPDATE connectors SET enabled = 1 WHERE id = ?')
+  // The scheduler reads its queue from this table, so a connector without a row is one it never
+  // sees. `next_run_at` defaults to now, which makes an imported connector due immediately.
+  const insertSync = db.prepare('INSERT INTO connector_sync (connector_id) VALUES (?)')
 
   db.transaction(() => {
     db.prepare('DELETE FROM links').run()
@@ -222,6 +225,8 @@ export function applyImport(payload: ImportPayload): Record<string, number> {
       })
 
       const id = Number(lastInsertRowid)
+      insertSync.run(id)
+
       const stored = importSecrets(id, connector.secrets)
 
       // Only once every credential the file carried actually opened. A connector missing one of
