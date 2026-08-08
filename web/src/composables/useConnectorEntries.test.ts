@@ -24,7 +24,9 @@ const ENTRY = {
 
 const PAYLOAD = {
   entries: [ENTRY],
-  sources: [{ connectorId: 1, type: 'gitlab', label: 'work', syncedAt: null, error: null }],
+  sources: [
+    { connectorId: 1, type: 'gitlab', label: 'work', mark: 'gl', syncedAt: null, error: null },
+  ],
   hidden: { all: [], mine: [] },
 }
 
@@ -150,6 +152,81 @@ describe('reading the entries', () => {
     resetConnectorEntries()
 
     expect(source.rows.value).toEqual([])
+  })
+})
+
+describe('marking rows by their source', () => {
+  const OTHER_ENTRY = {
+    ...ENTRY,
+    ref: 'github:2:1',
+    connectorId: 2,
+    connectorType: 'github',
+    label: 'app',
+  }
+  const OTHER_SOURCE = {
+    connectorId: 2,
+    type: 'github',
+    label: 'home',
+    mark: 'gh',
+    syncedAt: null,
+    error: null,
+  }
+
+  it('carries no marks while every row comes from one kind of source', async () => {
+    vi.stubGlobal('fetch', stubApi())
+
+    const source = useConnectorEntries()
+    await refreshConnectorEntries()
+
+    expect(source.marks.value).toBeUndefined()
+  })
+
+  it('marks every row once two kinds of source mix in the list', async () => {
+    vi.stubGlobal(
+      'fetch',
+      stubApi({
+        payload: {
+          ...PAYLOAD,
+          entries: [ENTRY, OTHER_ENTRY],
+          sources: [...PAYLOAD.sources, OTHER_SOURCE],
+        },
+      }),
+    )
+
+    const source = useConnectorEntries()
+    await refreshConnectorEntries()
+
+    expect(source.marks.value?.get(1)).toBe('gl')
+    expect(source.marks.value?.get(2)).toBe('gh')
+  })
+
+  // Two instances of one forge produce rows that need no telling apart.
+  it('counts two instances of the same kind as one', async () => {
+    vi.stubGlobal(
+      'fetch',
+      stubApi({
+        payload: {
+          ...PAYLOAD,
+          entries: [ENTRY, { ...OTHER_ENTRY, ref: 'gitlab:2:1' }],
+          sources: [...PAYLOAD.sources, { ...OTHER_SOURCE, type: 'gitlab', mark: 'gl' }],
+        },
+      }),
+    )
+
+    const source = useConnectorEntries()
+    await refreshConnectorEntries()
+
+    expect(source.marks.value).toBeUndefined()
+  })
+
+  it('reads a cache written before sources carried marks without throwing', async () => {
+    const bare = { connectorId: 1, type: 'gitlab', label: 'work', syncedAt: null, error: null }
+    vi.stubGlobal('fetch', stubApi({ payload: { ...PAYLOAD, sources: [bare] } }))
+
+    const source = useConnectorEntries()
+    await refreshConnectorEntries()
+
+    expect(source.marks.value).toBeUndefined()
   })
 })
 

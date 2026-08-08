@@ -546,6 +546,37 @@ describe('walking the panel by keyboard', () => {
     expect(document.activeElement?.getAttribute('data-station')).toBeNull()
   })
 
+  // One key rather than a walk to the trail word, so a token someone just entered can be tried
+  // without arrowing across the row's other actions first.
+  it('syncs a connector row on s', async () => {
+    const wrapper = await open()
+
+    await press(wrapper, 'ArrowDown')
+    await press(wrapper, 'ArrowDown')
+    await press(wrapper, 'ArrowDown')
+    expect(document.activeElement?.getAttribute('data-station')).toBe('feature:gitlab')
+
+    await press(wrapper, 'Enter')
+    await vi.waitFor(() =>
+      expect(wrapper.findAllComponents(AdminEntryRow).length).toBeGreaterThan(0),
+    )
+
+    await press(wrapper, 'ArrowDown')
+    await press(wrapper, 'ArrowDown')
+    expect(document.activeElement?.getAttribute('data-station')).toBe('entry:gitlab:1')
+
+    await press(wrapper, 's')
+
+    await vi.waitFor(() =>
+      expect(
+        calls.some(
+          (call) =>
+            call.method === 'POST' && call.url.includes('/api/admin/connectors/gitlab/1/sync'),
+        ),
+      ).toBe(true),
+    )
+  })
+
   /**
    * Marks the open form's controls as being on screen, which jsdom lays nothing out to be.
    * @param {VueWrapper} wrapper - The mounted panel

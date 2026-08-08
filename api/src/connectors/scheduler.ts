@@ -1,5 +1,6 @@
 import { config } from '#config.js'
 import { getDb } from '#db/index.js'
+import { isEnabled } from '#settings/toggles.js'
 import { messageOf } from './redact.js'
 import { moduleFor } from './registry.js'
 import { runSync } from './sync.js'
@@ -24,7 +25,11 @@ function dueConnectors(): ReadonlyArray<number> {
     )
     .all() as Array<{ id: number; type: string }>
 
-  return rows.filter((row) => moduleFor(row.type)?.collect !== undefined).map((row) => row.id)
+  // A type switched off as a whole pauses here rather than being rescheduled: next_run_at
+  // stays due, so switching it back on picks every instance up on the following tick.
+  return rows
+    .filter((row) => moduleFor(row.type)?.collect !== undefined && isEnabled(row.type))
+    .map((row) => row.id)
 }
 
 /**

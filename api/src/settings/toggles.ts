@@ -1,3 +1,4 @@
+import { moduleFor } from '#connectors/registry.js'
 import { badRequest } from '#errors.js'
 import { readSetting, writeSetting } from './repository.js'
 
@@ -27,12 +28,23 @@ const KEYS: Readonly<Record<string, string>> = {
 const DEFAULT_OFF: ReadonlySet<string> = new Set(['localhost'])
 
 /**
+ * Resolves the setting a feature's switch is held in. Connector types are not listed in `KEYS`
+ * because the registry already names them: every registered connector can be switched off as a
+ * whole, the way a built-in feature can.
+ * @param {string} id - Feature being addressed
+ * @returns {string | undefined} - Setting key, or undefined when there is nothing to switch
+ */
+function keyFor(id: string): string | undefined {
+  return KEYS[id] ?? (moduleFor(id) ? `connector.${id}.enabled` : undefined)
+}
+
+/**
  * Returns whether a feature is one that can be turned off at all.
  * @param {string} id - Feature being addressed
  * @returns {boolean} - True when it has a setting behind it
  */
 export function isToggleable(id: string): boolean {
-  return id in KEYS
+  return keyFor(id) !== undefined
 }
 
 /**
@@ -41,7 +53,7 @@ export function isToggleable(id: string): boolean {
  * @returns {boolean} - True when the portal should offer it
  */
 export function isEnabled(id: string): boolean {
-  const key = KEYS[id]
+  const key = keyFor(id)
   if (!key) {
     return false
   }
@@ -58,7 +70,7 @@ export function isEnabled(id: string): boolean {
  * @returns {void}
  */
 export function setEnabled(id: string, enabled: boolean): void {
-  const key = KEYS[id]
+  const key = keyFor(id)
   if (!key) {
     throw badRequest('that feature cannot be turned off')
   }

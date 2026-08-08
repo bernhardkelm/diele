@@ -1,6 +1,7 @@
 import { config } from '#config.js'
 import { listConnectors } from '#connectors/repository.js'
 import { capabilitiesOf, listModules } from '#connectors/registry.js'
+import { isEnabled } from '#settings/toggles.js'
 import { connectorFields } from './fields.js'
 import type { ApiFeature } from '@diele/common'
 
@@ -16,19 +17,6 @@ const DEFAULT_INTERVAL_S = 900
  * `unavailable` is what stops the row being opened in the meantime.
  */
 const PLANNED: ReadonlyArray<ApiFeature> = [
-  {
-    id: 'github',
-    label: 'GitHub',
-    description: 'Repos of the configured orgs and users, alongside the GitLab ones.',
-    kind: 'connector',
-    produces: ['row'],
-    capabilities: ['entries'],
-    fields: [],
-    count: 0,
-    enabledCount: 0,
-    unavailable: 'not built yet',
-    unavailableReason: 'planned',
-  },
   {
     id: 'uptime-kuma',
     label: 'Uptime Kuma',
@@ -119,6 +107,9 @@ export function connectorFeatures(): ReadonlyArray<ApiFeature> {
       collection: `/api/admin/connectors/${module.type}`,
       count: rows.length,
       enabledCount: rows.filter((row) => row.enabled).length,
+      toggleable: true,
+      enabled: isEnabled(module.type),
+      toggleHint: 'its rows leave the portal and its instances stop syncing until it is back on',
       ...(unavailable ? { unavailable, unavailableReason: 'blocked' as const } : {}),
     }
   })

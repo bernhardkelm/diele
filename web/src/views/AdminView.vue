@@ -316,6 +316,17 @@ function onKeydown(event: KeyboardEvent): void {
     return
   }
 
+  // one key rather than a walk to the word: on a row that fetches, `s` runs its sync now
+  if (!form && !inSearch && inList.value && event.key === 's') {
+    const station = active.value
+
+    if (station && rowActionsFor(station).some((action) => action.id === 'sync')) {
+      event.preventDefault()
+      runAction(station, 0, 'sync')
+      return
+    }
+  }
+
   if (event.key !== 'Escape') {
     return
   }

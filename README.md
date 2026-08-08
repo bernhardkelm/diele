@@ -29,10 +29,10 @@ same ring, so nothing is reachable only by mouse.
 **Slash commands.** `/` lists them. `/admin`, `/settings` and `/logout` are built in; the rest are
 a keyword plus a query url carrying `{query}`, so `/yt cats` goes straight to YouTube.
 
-**Connectors.** A connector is a feature whose rows come from somewhere else. GitLab ships today:
-give it a token and some groups and your repos appear under the cards, each with its own quick
-jumps. Entries are synced on a timer into diele's own store, so a restart never shows an empty
-list and a revoked token leaves the last good sync standing rather than wiping it.
+**Connectors.** A connector is a feature whose rows come from somewhere else. GitLab and GitHub
+ship today: give one a token and some groups or orgs and your repos appear under the cards, each
+with its own quick jumps. Entries are synced on a timer into diele's own store, so a restart never
+shows an empty list and a revoked token leaves the last good sync standing rather than wiping it.
 
 **Local ports.** Dev servers on the machine holding the browser are probed on load and get a dot
 when something is listening, so `vue` finds `:5173` rather than only the number doing. Off by
@@ -240,7 +240,7 @@ anywhere in the codebase.
 
 ## Not here yet
 
-- **Connectors** for GitHub, Uptime Kuma, Prometheus, Grafana and Notion. They are listed in the
+- **Connectors** for Uptime Kuma, Prometheus, Grafana and Notion. They are listed in the
   admin panel already, each declaring the capabilities it will answer to, which is where the
   shape they are expected to take is written down.
 - **User management and role-based permissions.** The `groups` claim is already carried onto the

@@ -13,6 +13,8 @@ export interface ConnectorEntriesSource {
   targets: ComputedRef<ReadonlyArray<PortalTarget>>
   /** The subset drawn as list rows, which is what the repo section sorts and renders */
   rows: ComputedRef<ReadonlyArray<RowTarget>>
+  /** Tag per connector id, set only while rows of more than one kind of source share the list */
+  marks: ComputedRef<ReadonlyMap<number, string> | undefined>
   /** One per enabled connector, carrying when it last synced and whether it is failing */
   sources: ComputedRef<ReadonlyArray<ApiEntriesSource>>
   /** True only while a load runs with nothing to show, so a cached list never blinks */
@@ -125,6 +127,29 @@ const rows = computed<ReadonlyArray<RowTarget>>(
   () => targets.value.filter((target) => target.kind === 'row') as ReadonlyArray<RowTarget>,
 )
 
+// Undefined until rows of two kinds of source actually share the list: a list fed by one forge
+// needs no tags, however many instances of it are enabled, and two GitLab instances carry the
+// same mark and so still count as one kind.
+const marks = computed<ReadonlyMap<number, string> | undefined>(() => {
+  const bySource = new Map<number, string>()
+  for (const source of payload.value.sources) {
+    // guarded, a cache written by an older build carries sources without a mark
+    if (typeof source.mark === 'string' && source.mark) {
+      bySource.set(source.connectorId, source.mark)
+    }
+  }
+
+  const kinds = new Set<string>()
+  for (const row of rows.value) {
+    const mark = row.connectorId === undefined ? undefined : bySource.get(row.connectorId)
+    if (mark) {
+      kinds.add(mark)
+    }
+  }
+
+  return kinds.size > 1 ? bySource : undefined
+})
+
 /**
  * Exposes what the connectors produced: repos, groups and whatever a later connector adds.
  * Painted from the last visit's cache immediately and revalidated behind it, so opening a new
@@ -138,6 +163,7 @@ export function useConnectorEntries(): ConnectorEntriesSource {
   return {
     targets,
     rows,
+    marks,
     sources: computed(() => payload.value.sources),
     isLoading: computed(() => isFetching.value && payload.value.entries.length === 0),
     isRefreshing: computed(() => isFetching.value && payload.value.entries.length > 0),

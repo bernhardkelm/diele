@@ -29,6 +29,7 @@ import type { PortalTarget } from '@/types/portal'
 
 const {
   rows: entryRows,
+  marks: entryMarks,
   isLoading: isLoadingEntries,
   isRefreshing: isRefreshingEntries,
 } = useConnectorEntries()
@@ -203,6 +204,7 @@ const altHeld = useAltHeld()
       <EntryList
         v-if="sections.rows.length"
         :entries="sections.rows"
+        :marks="entryMarks"
         :sort-key="sortKey"
         :sort-direction="sortDirection"
         :active-index="highlight"

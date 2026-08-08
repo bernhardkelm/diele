@@ -64,6 +64,7 @@ test('entries come back with the sources that produced them', async () => {
   const source = payload.sources.find((entry) => entry.connectorId === connectorId)
   assert.equal(source?.label, 'work')
   assert.equal(source?.type, 'gitlab')
+  assert.equal(source?.mark, 'gl')
   assert.ok(source?.syncedAt)
 })
 
@@ -175,4 +176,29 @@ test('a source that is syncing cleanly carries no error either way', async () =>
   const source = payload.sources.find((entry) => entry.connectorId === connectorId)
 
   assert.equal(source?.error, null)
+})
+
+// The whole type can be switched off the way a built-in feature can. Its stored rows stand
+// untouched, so switching it back on needs no sync to fill the list again.
+test('a type switched off leaves the wire entirely and comes back whole', async () => {
+  const { connectorId, ref } = seedEntry('switched-off')
+
+  const off = await api.request('/api/admin/features/gitlab/enabled', {
+    method: 'PUT',
+    body: JSON.stringify({ enabled: false }),
+  })
+  assert.equal(off.status, 200)
+
+  const hidden = await api.get<ApiEntries>('/api/entries')
+  assert.equal(hidden.entries.some((entry) => entry.ref === ref), false)
+  assert.equal(hidden.sources.some((source) => source.connectorId === connectorId), false)
+
+  await api.request('/api/admin/features/gitlab/enabled', {
+    method: 'PUT',
+    body: JSON.stringify({ enabled: true }),
+  })
+
+  const restored = await api.get<ApiEntries>('/api/entries')
+  assert.ok(restored.entries.some((entry) => entry.ref === ref))
+  assert.ok(restored.sources.some((source) => source.connectorId === connectorId))
 })

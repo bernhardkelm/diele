@@ -182,8 +182,8 @@ shape to draw it as, and its actions already expanded into absolute urls:
 }
 ```
 
-That is what makes a second forge free here: GitHub produces `kind: 'row'` entries whose actions
-point at `/actions`, `/pulls` and `/releases`, and not a line of this package changes.
+That is what made the second forge free here: GitHub produces `kind: 'row'` entries whose actions
+point at `/actions`, `/pulls` and `/releases`, and not a line of this package changed.
 
 The token, the instance and the groups are rows in the admin view under **GitLab**, stored
 encrypted by the API. Adding a group is an edit in the browser rather than a config change and a

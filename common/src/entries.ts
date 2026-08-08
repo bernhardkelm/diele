@@ -36,6 +36,8 @@ export interface ApiEntriesSource {
   readonly connectorId: number
   readonly type: string
   readonly label: string
+  /** Short tag rows carry when several kinds of source mix in one list, e.g. `gl` */
+  readonly mark: string
   readonly syncedAt: string | null
   /** Set when the last run failed, so the page can say the list is old rather than short */
   readonly error: string | null

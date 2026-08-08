@@ -100,6 +100,8 @@ export interface ConnectorModule {
   readonly type: string
   readonly label: string
   readonly description: string
+  /** Short tag rows carry when several kinds of source mix in one list, e.g. `gl` */
+  readonly mark?: string
   /** Where this connector's entries show up, which is admin-facing prose */
   readonly produces: ReadonlyArray<DisplayMode>
   /** The admin form renders from these, the same ApiFieldSpec the built-ins use */
