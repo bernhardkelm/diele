@@ -1,5 +1,12 @@
 import { onBeforeUnmount, onMounted } from 'vue'
 
+export interface StickyFocusOptions {
+  /** Marks the elements worth keeping the caret on */
+  selector: string
+  /** Class the held row wears while the caret is away, so its marker stays lit meanwhile */
+  heldClass: string
+}
+
 /**
  * Puts the caret back on the row a press dropped it from.
  *
@@ -8,10 +15,14 @@ import { onBeforeUnmount, onMounted } from 'vue'
  * press itself is left to happen rather than cancelled, so a drag still selects text to copy;
  * the caret is put back on release, once that selection has been made. Restoring it any earlier
  * lands mid-drag and collapses the selection being made.
- * @param {string} selector - Marks the elements worth keeping the caret on
+ *
+ * The row wears a class for the length of that round trip, because the marker is drawn by
+ * `:focus` and a press held long enough to select text would otherwise unmark the row it is
+ * about to hand the caret straight back to.
+ * @param {StickyFocusOptions} options - What counts as a row, and what marks the one being held
  * @returns {void}
  */
-export function useStickyFocus(selector: string): void {
+export function useStickyFocus(options: StickyFocusOptions): void {
   let pressing = false
   let pending: HTMLElement | null = null
 
@@ -24,7 +35,7 @@ export function useStickyFocus(selector: string): void {
   }
 
   /**
-   * Remembers the row a press is about to take the caret off.
+   * Remembers the row a press is about to take the caret off, and keeps it marked.
    * @param {FocusEvent} event - Focus leaving an element
    * @returns {void}
    */
@@ -35,7 +46,8 @@ export function useStickyFocus(selector: string): void {
       return
     }
 
-    pending = (event.target as HTMLElement | null)?.closest<HTMLElement>(selector) ?? null
+    pending = (event.target as HTMLElement | null)?.closest<HTMLElement>(options.selector) ?? null
+    pending?.classList.add(options.heldClass)
   }
 
   /**
@@ -45,8 +57,7 @@ export function useStickyFocus(selector: string): void {
   function onPointerup(): void {
     pressing = false
 
-    const row = pending
-    pending = null
+    const row = release()
 
     // A row the press removed from the list has nothing to go back to, and anything that took
     // the caret in the meantime keeps it.
@@ -61,7 +72,19 @@ export function useStickyFocus(selector: string): void {
    */
   function onBlur(): void {
     pressing = false
+    release()
+  }
+
+  /**
+   * Hands back the row being held and unmarks it.
+   * @returns {HTMLElement | null} - The row, or null when none was being held
+   */
+  function release(): HTMLElement | null {
+    const row = pending
     pending = null
+    row?.classList.remove(options.heldClass)
+
+    return row
   }
 
   onMounted(() => {
@@ -72,6 +95,7 @@ export function useStickyFocus(selector: string): void {
   })
 
   onBeforeUnmount(() => {
+    release()
     document.removeEventListener('pointerdown', onPointerdown, true)
     document.removeEventListener('focusout', onFocusout, true)
     document.removeEventListener('pointerup', onPointerup, true)

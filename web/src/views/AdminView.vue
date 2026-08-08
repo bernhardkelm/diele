@@ -103,7 +103,7 @@ const { activeAction, walkDelta, openPicker, stepInForm, enterForm, moveAction }
   },
 )
 
-useStickyFocus('[data-station]')
+useStickyFocus({ selector: '[data-station]', heldClass: 'row-marker-held' })
 
 // Every write reloads the rows, so the element that held focus is gone when the call resolves;
 // these pair each write with where the caret should land afterwards.

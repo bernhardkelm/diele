@@ -100,7 +100,7 @@ const {
   syncTo,
 } = useStationRing(stations, list, () => bar.value?.focus())
 
-useStickyFocus('[data-station]')
+useStickyFocus({ selector: '[data-station]', heldClass: 'row-marker-held' })
 
 const hints = computed(() =>
   settingsHintsFor(

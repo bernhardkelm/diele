@@ -112,7 +112,8 @@ svg {
    a nested row sits a gutter deeper and the field seats the glyph on its own baseline. */
 .row-marker::before,
 .row-marker-focus:focus::before,
-.row-marker-within:focus-within::before {
+.row-marker-within:focus-within::before,
+.row-marker-held::before {
   content: var(--diele-marker);
   position: absolute;
   left: var(--row-marker-left, var(--diele-space-2));

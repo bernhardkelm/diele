@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { useStickyFocus } from '@/composables/useStickyFocus'
+import { useStickyFocus, type StickyFocusOptions } from '@/composables/useStickyFocus'
 import { withSetup } from '@/testing/withSetup'
+
+const OPTIONS: StickyFocusOptions = { selector: '[data-station]', heldClass: 'row-marker-held' }
 
 /**
  * Builds a focusable row of the kind the list is made of.
@@ -34,7 +36,7 @@ afterEach(() => {
 
 describe('useStickyFocus', () => {
   it('puts the caret back on the row a press took it off', () => {
-    withSetup(() => useStickyFocus('[data-station]'))
+    withSetup(() => useStickyFocus(OPTIONS))
     const element = row()
     element.focus()
 
@@ -43,9 +45,28 @@ describe('useStickyFocus', () => {
     expect(document.activeElement).toBe(element)
   })
 
+  // The marker is drawn by `:focus`, so a press held long enough to select text would unmark
+  // the row it is about to hand the caret straight back to.
+  it('keeps the row marked for the length of the press', () => {
+    withSetup(() => useStickyFocus(OPTIONS))
+    const element = row()
+    element.focus()
+
+    document.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }))
+    element.dispatchEvent(new FocusEvent('focusout', { bubbles: true, relatedTarget: null }))
+    element.blur()
+    expect(element.classList.contains(OPTIONS.heldClass)).toBe(true)
+
+    document.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }))
+
+    // handed back to `:focus`, which draws it from here on
+    expect(element.classList.contains(OPTIONS.heldClass)).toBe(false)
+    expect(document.activeElement).toBe(element)
+  })
+
   // Anything that can hold the caret taking it is a move to honour rather than one to undo.
   it('leaves the caret with whatever took it', () => {
-    withSetup(() => useStickyFocus('[data-station]'))
+    withSetup(() => useStickyFocus(OPTIONS))
     const element = row()
     const field = document.createElement('input')
     document.body.append(field)
@@ -59,7 +80,7 @@ describe('useStickyFocus', () => {
 
   // A caret the page moved itself is not one a press dropped, so there is nothing to put back.
   it('leaves a caret no press was behind alone', () => {
-    withSetup(() => useStickyFocus('[data-station]'))
+    withSetup(() => useStickyFocus(OPTIONS))
     const element = row()
     element.focus()
 
@@ -72,7 +93,7 @@ describe('useStickyFocus', () => {
 
   // A row the write removed has nothing to go back to.
   it('drops a row that left the list before the press ended', () => {
-    withSetup(() => useStickyFocus('[data-station]'))
+    withSetup(() => useStickyFocus(OPTIONS))
     const element = row()
     element.focus()
 
@@ -90,7 +111,7 @@ describe('useStickyFocus', () => {
   // A press that ends outside the window never reports up, and would otherwise leave the row
   // waiting to be restored by whatever press comes next.
   it('forgets a press the window lost', () => {
-    withSetup(() => useStickyFocus('[data-station]'))
+    withSetup(() => useStickyFocus(OPTIONS))
     const element = row()
     element.focus()
 
@@ -104,7 +125,7 @@ describe('useStickyFocus', () => {
   })
 
   it('stops listening once the view is gone', () => {
-    const { wrapper } = withSetup(() => useStickyFocus('[data-station]'))
+    const { wrapper } = withSetup(() => useStickyFocus(OPTIONS))
     const element = row()
     element.focus()
     wrapper.unmount()
