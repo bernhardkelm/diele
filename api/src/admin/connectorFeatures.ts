@@ -1,6 +1,7 @@
 import { config } from '#config.js'
 import { listConnectors } from '#connectors/repository.js'
 import { capabilitiesOf, listModules } from '#connectors/registry.js'
+import { isEnabled } from '#settings/toggles.js'
 import { connectorFields } from './fields.js'
 import type { ApiFeature } from '@diele/common'
 
@@ -106,6 +107,9 @@ export function connectorFeatures(): ReadonlyArray<ApiFeature> {
       collection: `/api/admin/connectors/${module.type}`,
       count: rows.length,
       enabledCount: rows.filter((row) => row.enabled).length,
+      toggleable: true,
+      enabled: isEnabled(module.type),
+      toggleHint: 'its rows leave the portal and its instances stop syncing until it is back on',
       ...(unavailable ? { unavailable, unavailableReason: 'blocked' as const } : {}),
     }
   })

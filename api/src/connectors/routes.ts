@@ -6,6 +6,7 @@ import { listEntries } from './entries.js'
 import { readHidden, setHidden } from './hidden.js'
 import { listEnabledConnectors } from './repository.js'
 import { moduleFor } from './registry.js'
+import { isEnabled } from '#settings/toggles.js'
 import type { ApiEntries, ApiEntriesSource } from '@diele/common'
 import { toApiEntry } from './wire.js'
 
@@ -50,14 +51,18 @@ entriesRouter.get('/', (req, res) => {
   // stale, which is all they can act on anyway.
   const detailed = canAdmin(req.user)
 
-  const sources: ReadonlyArray<ApiEntriesSource> = listEnabledConnectors().map((connector) => ({
-    connectorId: connector.id,
-    type: connector.type,
-    label: connector.label,
-    mark: moduleFor(connector.type)?.mark ?? connector.type.slice(0, 2),
-    syncedAt: connector.sync.lastOkAt,
-    error: errorFor(connector.sync.lastError, detailed),
-  }))
+  // A type switched off as a whole leaves the wire entirely, entries and source alike. The
+  // stored rows stand untouched, so switching it back on needs no sync to fill the list again.
+  const sources: ReadonlyArray<ApiEntriesSource> = listEnabledConnectors()
+    .filter((connector) => isEnabled(connector.type))
+    .map((connector) => ({
+      connectorId: connector.id,
+      type: connector.type,
+      label: connector.label,
+      mark: moduleFor(connector.type)?.mark ?? connector.type.slice(0, 2),
+      syncedAt: connector.sync.lastOkAt,
+      error: errorFor(connector.sync.lastError, detailed),
+    }))
 
   // Every entry is served, hidden or not, and the client leaves the hidden ones out. Hiding is
   // a display preference rather than a permission — the lists that manage it have to show what
@@ -65,6 +70,7 @@ entriesRouter.get('/', (req, res) => {
   // everyone. Anything that must not be seen belongs behind the connector's own token.
   const payload: ApiEntries = {
     entries: listEntries()
+      .filter((record) => isEnabled(record.connectorType))
       .map(toApiEntry)
       .filter((entry) => entry !== undefined),
     sources,

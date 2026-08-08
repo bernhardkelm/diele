@@ -6,6 +6,7 @@ import {
   stopConnectorScheduler,
 } from '#connectors/scheduler.js'
 import { getDb } from '#db/index.js'
+import { setEnabled } from '#settings/toggles.js'
 import { createConnector } from './repository.js'
 
 after(() => {
@@ -97,5 +98,25 @@ test('a connector deleted mid-tick neither crashes the tick nor stops the ones b
       .get(id) as { last_error: string | null } | undefined
 
     assert.ok(row?.last_error, `connector ${id} was never run`)
+  }
+})
+
+// A type switched off as a whole must not keep reaching its source in the background. The row
+// stays due rather than being rescheduled, so switching it back on picks it up again.
+test('a connector whose type is switched off is left out of the tick', async () => {
+  const id = overdueConnector('type-switched-off', 1)
+
+  setEnabled('gitlab', false)
+  try {
+    await runDueConnectors()
+
+    const row = getDb()
+      .prepare('SELECT last_error, running_since FROM connector_sync WHERE connector_id = ?')
+      .get(id) as { last_error: string | null; running_since: string | null } | undefined
+
+    assert.equal(row?.last_error, null)
+    assert.equal(row?.running_since, null)
+  } finally {
+    setEnabled('gitlab', true)
   }
 })
