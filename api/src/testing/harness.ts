@@ -43,6 +43,7 @@ export async function startApi(env: Record<string, string> = {}): Promise<TestAp
     // keeps a `Secure` cookie from being dropped by the client below without a word.
     SESSION_COOKIE_SECURE: 'false',
     TRUST_PROXY: '',
+    DIELE_SEED_STOCK_CONFIG: 'false',
   }
 
   for (const [key, value] of Object.entries({ ...defaults, ...env })) {

@@ -1,7 +1,7 @@
 import { resolve } from 'node:path'
 import type { AuthMode } from '@diele/common'
 import dotenv from 'dotenv'
-import { cookieSecure, hexOr, parseTrustProxy, positiveInt } from './configValues.js'
+import { boolOr, cookieSecure, hexOr, parseTrustProxy, positiveInt } from './configValues.js'
 import { parseKeyring, type SecretKeyring } from './secrets/keys.js'
 
 // Every file is optional and none overrides a variable the environment already carries, so an
@@ -91,6 +91,10 @@ export const config = {
   dbPath,
   webRoot,
   trustProxy,
+  // Whether a database created by this boot is given the search engines, slash commands and
+  // local ports every portal would hold anyway. Read once, when the schema is created, so
+  // turning it off afterwards changes nothing that is already there.
+  seedStockConfig: boolOr('DIELE_SEED_STOCK_CONFIG', process.env.DIELE_SEED_STOCK_CONFIG, true),
   // Written into the image at build time from the git tag, so a running instance can say which
   // one it is. A checkout has no tag, and says so rather than claiming a release number.
   version: process.env.DIELE_VERSION ?? '0.0.0-dev',

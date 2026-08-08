@@ -307,6 +307,7 @@ these is a real environment variable.
 | `BRAND_ACCENT_LIGHT`, `BRAND_ACCENT_DARK` | the accent, one six-digit hex per theme |
 | `LOCAL_SETUP_TOKEN` | gates creating the first account; generated and printed when unset |
 | `SESSION_MAX_AGE_MS`, `SESSION_REMEMBER_MAX_AGE_MS` | idle windows, not lifetimes; they roll forward on use |
+| `DIELE_SEED_STOCK_CONFIG` | `false` creates the database without the stock engines, commands and ports |
 
 Losing `DIELE_SECRET_KEYS` means re-entering every credential by hand, so back it up somewhere
 other than the database. The [full variable list](api/README.md#configuration), including the ones
@@ -323,9 +324,15 @@ mkdir -p /srv/diele && sudo chown 1000:1000 /srv/diele    # then -v /srv/diele:/
 `/status` answers without a session and names the running build, which is what the image's own
 `HEALTHCHECK` reads.
 
-A fresh database is **empty** on purpose: an instance showing rows nobody added would be guessing.
-To get something to look at, open `#/admin` → *Import* and pick
-[`api/example-seed.json`](api/example-seed.json).
+A fresh database holds what **every** portal holds anyway and nothing more: four search engines,
+ten slash commands and three local ports, most of them switched off and waiting in the admin view.
+Nothing that guesses at your infrastructure, because an instance showing cards nobody added would
+be doing exactly that. `DIELE_SEED_STOCK_CONFIG=false` gives you the bare database instead.
+
+For something to look at, open `#/admin` → *Import* and pick
+[`api/example-seed.json`](api/example-seed.json), which adds example cards and saved sites. Note
+that an import **replaces** the whole configuration rather than adding to it, so it is a first-run
+move, not a way to top up a portal you have already set up.
 
 ### Making it your new tab page
 

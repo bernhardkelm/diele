@@ -1,4 +1,5 @@
 import type { Migration } from '#db/migrate.js'
+import { seedStockConfig } from '#db/seed.js'
 
 export const init: Migration = {
   id: 1,
@@ -275,5 +276,10 @@ export const init: Migration = {
       CREATE UNIQUE INDEX idx_hidden_entries ON hidden_entries (ref, COALESCE(user_id, 0));
       CREATE INDEX idx_hidden_entries_user ON hidden_entries (user_id);
     `)
+
+    // Here rather than in a migration of its own, because this one carries the guarantee the
+    // seed needs: it runs only where there was no database a moment ago. A later migration
+    // would run on every install and put back rows someone had deliberately deleted.
+    seedStockConfig(db)
   },
 }
