@@ -57,7 +57,7 @@ let site: RunningSite
 before(async () => {
   root = mkdtempSync(join(tmpdir(), 'diele-site-'))
   mkdirSync(join(root, 'assets'))
-  writeFileSync(join(root, 'index.html'), `<!doctype html>${INDEX_MARKER}`)
+  writeFileSync(join(root, 'index.html'), `<!doctype html>${INDEX_MARKER}<!--diele:brand-->`)
   writeFileSync(join(root, 'assets', HASHED_ASSET), 'export default 1\n')
   writeFileSync(join(root, 'favicon.svg'), '<svg xmlns="http://www.w3.org/2000/svg" />')
 
@@ -76,6 +76,17 @@ test('the root serves the document, and never from a cache', async () => {
   assert.match(response.headers.get('content-type') ?? '', /text\/html/)
   assert.match(response.headers.get('cache-control') ?? '', /no-cache/)
   assert.match(await response.text(), new RegExp(INDEX_MARKER))
+})
+
+// So the login screen paints in the deployment's own brand rather than in the defaults, and the
+// footer can name the build without a request of its own.
+test('the document is served carrying the brand and the version', async () => {
+  const response = await fetch(`${site.url}/`)
+  const html = await response.text()
+
+  assert.match(html, /<meta name="diele:brand" content="[^"]*">/)
+  assert.match(html, /<meta name="diele:version" content="[^"]*">/)
+  assert.equal(html.includes('<!--diele:brand-->'), false)
 })
 
 // The filename carries the content hash, so the url changes whenever the file does and the old

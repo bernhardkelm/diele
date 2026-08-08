@@ -19,8 +19,8 @@ export interface SlashInput {
 const KEYWORD = /^[a-z0-9][a-z0-9._-]*$/i
 
 /**
- * Reads a term written as a slash command. Anything that is not one — an ordinary search, a
- * pasted path, a subreddit — returns undefined, which is what leaves the rest of the launcher
+ * Reads a term written as a slash command. Anything that is not one - an ordinary search, a
+ * pasted path, a subreddit - returns undefined, which is what leaves the rest of the launcher
  * untouched.
  * @param {string} term - Current search term
  * @returns {SlashInput | undefined} - The parsed command, or undefined

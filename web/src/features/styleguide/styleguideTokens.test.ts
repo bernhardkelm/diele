@@ -45,7 +45,7 @@ describe('the token catalogue', () => {
   })
 
   // A token listed here that the stylesheet does not declare renders as a blank swatch, which
-  // is the failure this page exists to make visible — so it must not be one of ours.
+  // is the failure this page exists to make visible - so it must not be one of ours.
   it('lists only tokens the stylesheet actually declares', () => {
     const missing = TOKEN_GROUPS.flatMap((group) => group.tokens)
       .map((token) => token.name)

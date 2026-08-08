@@ -9,7 +9,7 @@ import vueDevTools from 'vite-plugin-vue-devtools'
 const packageRoot = fileURLToPath(new URL('.', import.meta.url))
 const repoRoot = resolve(packageRoot, '..')
 
-// The same four files, in the same order, as `api/src/config.ts` — so one documented precedence
+// The same four files, in the same order, as `api/src/config.ts` - so one documented precedence
 // covers both halves rather than each resolving its settings its own way. Most specific first:
 // the nearest scope wins outright, and within a scope the untracked file beats the committed one.
 //

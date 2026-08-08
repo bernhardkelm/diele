@@ -84,7 +84,7 @@ function onKeydown(event: KeyboardEvent): void {
 <style scoped>
 /* Its own tracks rather than the list's, the way the form these sit under has its own: a repo
    name is far longer than a card's label, and on the shared tracks it would widen the first one
-   for every row in the list — so opening a connection stepped the whole panel sideways. Spanning
+   for every row in the list - so opening a connection stepped the whole panel sideways. Spanning
    instead, nothing here is measured against the rows above.
    The gutter lines them up with the form they belong to, rather than sitting one step short of
    it: see the list's own `--row-deep-gutter`. */

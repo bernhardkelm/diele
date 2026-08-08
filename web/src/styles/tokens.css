@@ -1,5 +1,5 @@
 /* Design tokens. Every pair reads light first, dark second, and `light-dark()` resolves it
-   against the root's `color-scheme` — which follows the OS until a stored override narrows
+   against the root's `color-scheme` - which follows the OS until a stored override narrows
    it to one value, so the whole theme turns on that single declaration. */
 :root {
   /* Surfaces & text */

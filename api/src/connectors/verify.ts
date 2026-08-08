@@ -13,7 +13,7 @@ const VERIFY_TIMEOUT_MS = 15_000
  * Nothing is written until this passes: a connector saved with a token that does not work would
  * otherwise sit there failing on a schedule, and the first anyone hears of it is an empty list.
  *
- * A module with no check of its own is stored as entered — there is nothing to ask.
+ * A module with no check of its own is stored as entered - there is nothing to ask.
  * @param {ConnectorModule} module - Module whose settings are being saved
  * @param {Record<string, unknown>} config - Validated config to test
  * @param {Record<string, string>} secrets - Credentials to test, decrypted

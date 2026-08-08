@@ -7,7 +7,7 @@ import type { CreateCommandInput, UpdateCommandInput } from './schemas.js'
 
 /**
  * The commands the portal answers to without anyone configuring them. They navigate rather
- * than search, so they are not rows and cannot be edited — but the admin list shows them, so
+ * than search, so they are not rows and cannot be edited - but the admin list shows them, so
  * the two kinds are visible in one place and a keyword collision is obvious.
  */
 export const BUILT_IN_COMMANDS: ReadonlyArray<{ keyword: string; label: string }> = [
