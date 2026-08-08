@@ -119,7 +119,7 @@ function onKeydown(event: KeyboardEvent): void {
   color: var(--diele-status-pending);
 }
 
-@media (max-width: 640px) {
+@media (--diele-compact) {
   .produced {
     --row-gutter: var(--diele-space-6);
     --row-marker-left: var(--diele-space-2);

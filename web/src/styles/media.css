@@ -1,0 +1,6 @@
+/* The one breakpoint, 640px: below it every row drops its three tracks and stacks. A custom
+   property is not readable from a media query condition, so it is an @custom-media instead.
+   This file is not imported anywhere: postcss.config.js injects it into every style block via
+   @csstools/postcss-global-data, and postcss-custom-media compiles each `@media (--diele-compact)`
+   down to the literal, so the value is written once and ships as plain CSS. */
+@custom-media --diele-compact (max-width: 640px);

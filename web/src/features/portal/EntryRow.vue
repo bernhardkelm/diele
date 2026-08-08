@@ -165,7 +165,7 @@ const links = computed(() => actionsFor(props.entry).slice(1))
 
 /* the gutter is the well the marker sits in, and a phone has too little width to hold one
    open for every row; the marker indents the one row it is on instead */
-@media (max-width: 640px) {
+@media (--diele-compact) {
   .row {
     padding-left: 0;
   }

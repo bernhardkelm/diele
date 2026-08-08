@@ -61,11 +61,12 @@
      is an exact column count. Lists override it for the labels they carry. */
   --diele-row-label: 26ch;
 
-  /* The one breakpoint, 640px: below it every row drops its three tracks and stacks. It cannot
-     be a token, because a custom property is not readable from a media query condition, and the
-     plugin that would preprocess one no longer exposes its definitions to a component's scoped
-     block. So it stays a literal in each `@media (max-width: 640px)`, and this is the note that
-     says all fourteen of them are the same decision rather than fourteen separate ones. */
+  /* Layout. The column every list measures itself against, and the narrowest a tile may get
+     before the grid drops a column. The one breakpoint is the one layout value not here: a
+     custom property is not readable from a media query condition, so it lives in media.css as
+     `@custom-media --diele-compact`, written `@media (--diele-compact)` at every use. */
+  --diele-content-width: 720px;
+  --diele-tile-min: 140px;
 
   /* Rhythm. The suffix is the step count on a 0.25rem grid, so -2 is 0.5rem and -12 is 3rem. */
   --diele-space-1: 0.25rem;

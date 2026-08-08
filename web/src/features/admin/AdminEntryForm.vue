@@ -139,7 +139,7 @@ onMounted(() => {
   border-top: 1px solid var(--diele-rule);
 }
 
-@media (max-width: 640px) {
+@media (--diele-compact) {
   .entry-form {
     padding-left: var(--diele-space-4);
   }

@@ -1,6 +1,6 @@
 # diele
 
-A self-hosted new tab page for everything you run.
+Do more with your new tab page: search, launch and admin for everything you run.
 
 Open a tab and the cursor is already in the search bar. Type, and diele searches your service
 cards, your saved sites, your repos and your local dev servers together — by name, by url and by

@@ -30,7 +30,7 @@ const emit = defineEmits<{ run: [command: CommandTarget] }>()
 
 <style scoped>
 /* the rows stack at this width and lay themselves out, so the list holds no tracks */
-@media (max-width: 640px) {
+@media (--diele-compact) {
   .commands {
     display: block;
   }
@@ -38,7 +38,7 @@ const emit = defineEmits<{ run: [command: CommandTarget] }>()
 
 .commands {
   width: 100%;
-  max-width: 720px;
+  max-width: var(--diele-content-width);
   padding: 0;
   list-style: none;
   border-bottom: 3px solid var(--diele-rule);

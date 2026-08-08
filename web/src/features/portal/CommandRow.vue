@@ -77,7 +77,7 @@ useRevealOnActive(useTemplateRef<HTMLElement>('root'), () => props.active)
 }
 
 /* the row stacks at this width, so it stops passing the list's tracks down */
-@media (max-width: 640px) {
+@media (--diele-compact) {
   .command {
     display: block;
   }
@@ -86,7 +86,7 @@ useRevealOnActive(useTemplateRef<HTMLElement>('root'), () => props.active)
 /* see ProjectRow: the marker indents its own row rather than every row reserving a gutter.
    A phone has no width to set a hint beside its name, and the hint is what says what an
    entry does, so it takes a line of its own rather than being cut. */
-@media (max-width: 640px) {
+@media (--diele-compact) {
   .command__button {
     grid-template-columns: minmax(0, 1fr) auto;
     /* tighter than the column gap, so the hint reads as belonging to the name above it */

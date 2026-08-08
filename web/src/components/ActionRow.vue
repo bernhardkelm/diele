@@ -108,7 +108,7 @@ function onKeydown(event: KeyboardEvent): void {
   min-width: 0;
 }
 
-@media (max-width: 640px) {
+@media (--diele-compact) {
   .action {
     --row-marker-left: 0;
 

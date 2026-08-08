@@ -111,7 +111,7 @@ function onKeydown(event: KeyboardEvent): void {
   opacity: 1;
 }
 
-@media (max-width: 640px) {
+@media (--diele-compact) {
   .add {
     --entry-gutter: var(--diele-space-4);
 

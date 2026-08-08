@@ -233,10 +233,10 @@ const altHeld = useAltHeld()
 
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(var(--diele-tile-min), 1fr));
   gap: var(--diele-space-6);
   width: 100%;
-  max-width: 720px;
+  max-width: var(--diele-content-width);
 }
 
 .page__empty {

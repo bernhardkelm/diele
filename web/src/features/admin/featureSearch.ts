@@ -1,6 +1,5 @@
-import { scoreFields } from '@/helpers/scoreFields'
+import { rankByScore } from '@/helpers/rankByScore'
 import type { SearchField } from '@/helpers/searchFields'
-import { tokenize } from '@/helpers/searchTokens'
 import type { ApiFeature } from '@diele/common'
 
 /**
@@ -34,23 +33,5 @@ export function searchFeatures(
   features: ReadonlyArray<ApiFeature>,
   query: string,
 ): ReadonlyArray<ApiFeature> {
-  const tokens = tokenize(query)
-  if (tokens.length === 0) {
-    return features
-  }
-
-  const ranked: Array<{ feature: ApiFeature; score: number; order: number }> = []
-
-  features.forEach((feature, order) => {
-    const score = scoreFields(fieldsOf(feature), tokens)
-    if (score === undefined) {
-      return
-    }
-
-    ranked.push({ feature, score, order })
-  })
-
-  ranked.sort((a, b) => b.score - a.score || a.order - b.order)
-
-  return ranked.map((entry) => entry.feature)
+  return rankByScore(features, query, fieldsOf)
 }

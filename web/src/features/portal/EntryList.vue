@@ -82,7 +82,7 @@ function sortLabel(key: EntrySortKey, label: string): string {
 .projects {
   position: relative;
   width: 100%;
-  max-width: 720px;
+  max-width: var(--diele-content-width);
 }
 
 /* corner of the section rather than the head, so it never crowds the sort labels */
@@ -147,7 +147,7 @@ function sortLabel(key: EntrySortKey, label: string): string {
 }
 
 /* follows the rows, which drop their gutter at this width, so the labels stay over them */
-@media (max-width: 640px) {
+@media (--diele-compact) {
   .projects__head {
     padding-left: 0;
   }

@@ -12,7 +12,13 @@ function edits(accepted = true) {
   const remove = vi.fn().mockResolvedValue(accepted)
   const restore = vi.fn().mockResolvedValue(undefined)
 
-  return { rows: useAdminRowEdits({ create, update, remove, restore }), create, update, remove, restore }
+  return {
+    rows: useAdminRowEdits({ create, update, remove, restore }),
+    create,
+    update,
+    remove,
+    restore,
+  }
 }
 
 describe('saving an edited row', () => {

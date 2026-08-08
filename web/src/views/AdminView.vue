@@ -612,7 +612,7 @@ onMounted(() => void loadFeatures())
   gap: var(--diele-space-3);
   align-items: flex-start;
   width: 100%;
-  max-width: 720px;
+  max-width: var(--diele-content-width);
   padding: var(--diele-space-4);
   border: 1px solid var(--diele-border);
   border-radius: var(--diele-radius-sm);
@@ -627,7 +627,7 @@ onMounted(() => void loadFeatures())
 
 .admin__error {
   width: 100%;
-  max-width: 720px;
+  max-width: var(--diele-content-width);
   margin: 0;
   padding: var(--diele-space-3);
   font-family: var(--diele-font-mono);
@@ -639,10 +639,10 @@ onMounted(() => void loadFeatures())
 
 .admin__body {
   width: 100%;
-  max-width: 720px;
+  max-width: var(--diele-content-width);
 }
 
-@media (max-width: 640px) {
+@media (--diele-compact) {
   .admin__features {
     display: block;
   }
@@ -661,7 +661,7 @@ onMounted(() => void loadFeatures())
   border-bottom: 3px solid var(--diele-rule);
 }
 
-@media (max-width: 640px) {
+@media (--diele-compact) {
   .admin__features {
     --row-deep-gutter: var(--diele-space-6);
   }
