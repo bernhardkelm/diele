@@ -34,7 +34,10 @@ async function freePort(): Promise<number> {
  */
 function waitForOutput(pattern: RegExp): Promise<void> {
   return new Promise<void>((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error(`never printed ${pattern}:\n${output}`)), 15_000)
+    const timer = setTimeout(
+      () => reject(new Error(`never printed ${pattern}:\n${output}`)),
+      15_000,
+    )
 
     const check = (): void => {
       if (pattern.test(output)) {
@@ -60,6 +63,7 @@ before(async () => {
       AUTH_MODE: 'dev',
       PUBLIC_ORIGIN: `http://127.0.0.1:${port}`,
       SESSION_COOKIE_SECURE: 'false',
+      DIELE_VERSION: 'test-build',
     },
   })
 
@@ -96,15 +100,17 @@ test('it warns that a fixed identity is being handed out in dev mode', async () 
   await waitForOutput(/AUTH_MODE=dev/)
 })
 
-test('it answers the status endpoint without a session', async () => {
+// The build it reports is what an operator reads to tell which image answered, and it comes from
+// the environment the image stamps rather than from anything in the tree.
+test('it answers the status endpoint without a session, naming the build', async () => {
   const response = await fetch(`http://127.0.0.1:${port}/status`)
 
   assert.equal(response.status, 200)
-  assert.deepEqual(await response.json(), { status: 'ok' })
+  assert.deepEqual(await response.json(), { status: 'ok', version: 'test-build' })
 })
 
-// Deny-by-default: everything but the handful of public paths needs a session, including the
-// root, so an unauthenticated caller is turned away rather than served an empty portal.
+// Deny-by-default: everything that reads data needs a session. The document at the root does not,
+// because the sign-in screen is that document.
 test('it holds the door on everything else', async () => {
   const response = await fetch(`http://127.0.0.1:${port}/api/config`)
 

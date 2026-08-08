@@ -176,4 +176,3 @@ test('a source that is syncing cleanly carries no error either way', async () =>
 
   assert.equal(source?.error, null)
 })
-

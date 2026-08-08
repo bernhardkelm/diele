@@ -37,3 +37,4 @@ export type {
   DisplayMode,
   InputMode,
 } from './features.js'
+export type { ApiStatus } from './status.js'

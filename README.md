@@ -136,12 +136,87 @@ sit in the same files without reaching the bundle.
 | `SESSION_COOKIE_SECURE` | `auto` (default) derives it from the `PUBLIC_ORIGIN` scheme, which is almost always right; `true` or `false` override |
 | `SESSION_COOKIE_NAME` | name of the session cookie, default `diele_session`; only worth changing to run two instances on one host |
 | `TRUST_PROXY` | off by default; set to the number of proxies in front (`1` behind nginx) so `req.ip` is the caller and not a header |
+| `DIELE_VERSION` | what `/status` reports as the running build; the image stamps it from the git tag it was built at |
 | `VITE_API_TARGET` | **web, development only:** where the dev server proxies `/api`; a build talks to whatever origin serves it |
 
 `AUTH_MODE` falls back to `local` — the mode that needs nothing configured and still holds the
 door, since the first account is created through a setup form gated by a token printed at
 startup. A misspelled value therefore lands on the safe mode rather than refusing to boot, and
 says so on stderr.
+
+## Deploy
+
+One container, one port, one volume. The api serves the built launcher itself, so both halves are
+on one origin without a proxy in front to put them there.
+
+```sh
+docker volume create diele-data
+
+docker run -d --name diele \
+  -p 3000:3000 \
+  -e PUBLIC_ORIGIN="http://localhost:3000" \
+  -v diele-data:/data \
+  --read-only --tmpfs /tmp \
+  --cap-drop ALL \
+  --security-opt no-new-privileges \
+  --init \
+  --restart unless-stopped \
+  ghcr.io/bernhardkelm/diele:latest
+```
+
+Open it and the first page is the setup screen; the token that gates it is in `docker logs diele`.
+
+`PUBLIC_ORIGIN` is the one value that is not optional. It is the address people actually open, and
+a wrong one paints the portal and then rejects every write — including the form that claims the
+first account. Everything else in the table above is a real environment variable here, because the
+image ships no `.env` at all: set `DIELE_SECRET_KEYS` before adding a connector, and `TRUST_PROXY=1`
+when something terminates TLS in front.
+
+The process runs as uid 1000 against a read-only root filesystem with no capabilities, so `/data`
+is the only path it can write. A named volume takes its ownership from the image and needs nothing
+further; a bind mount is a directory the host already owns, so it has to be handed over:
+
+```sh
+mkdir -p /srv/diele && sudo chown 1000:1000 /srv/diele    # then -v /srv/diele:/data
+```
+
+`/status` answers without a session and names the running build, which is what the image's own
+`HEALTHCHECK` reads.
+
+### Backing up
+
+A database in WAL mode is three files, so copying `diele.db` out from under a running portal gives
+you one that is missing whatever the write-ahead log still holds. It can copy itself instead:
+
+```sh
+docker exec diele node -e \
+  "require('better-sqlite3')(process.env.DB_PATH).exec(\"VACUUM INTO '/data/backup.db'\")"
+docker cp diele:/data/backup.db "./diele-$(date +%F).db"
+```
+
+`VACUUM INTO` takes a read transaction, so it is safe while the portal is serving, and it refuses
+to overwrite a file that is already there.
+
+### Which tag
+
+`latest` follows the newest release and `0.4` the newest patch of that minor, while `0.4.0` never
+moves. Prereleases are published under their full version and move neither of the first two.
+
+diele is 0.x: a minor may change behaviour, and migrations are forward-only and immutable, so a
+database a newer image has already migrated is not one an older image can open. Pin a version you
+have run, back up before moving to another, and treat going back as a restore rather than a
+rollback.
+
+### From source
+
+```sh
+npm ci
+npm run build
+npm start
+```
+
+`npm start` serves `web/dist` as well, so this is the same single origin the image is, minus the
+container.
 
 ## Layout
 
@@ -165,24 +240,6 @@ anywhere in the codebase.
 
 ## Not here yet
 
-- **Docker images**, three of them: one combined, and one each for the api and the web app
-  alone. They will be configured by environment variables and carry no `.env`, which is what the
-  precedence above is for.
-
-  Until then, self-hosting is two processes behind whatever already serves your other things:
-
-  ```sh
-  npm ci
-  npm run build
-
-  npm start                        # the api, on PORT
-  npm run preview -w @diele/web    # the built web app, for a quick look
-  ```
-
-  `preview` is Vite's own static server and is meant for checking a build, not for running one.
-  For anything lasting, point nginx or Caddy at `web/dist` as the site root with a fallback to
-  `index.html`, and proxy `/api` to the api process. Both halves have to answer on one origin, so
-  that `PUBLIC_ORIGIN` matches and the session cookie stays first-party.
 - **Connectors** for GitHub, Uptime Kuma, Prometheus, Grafana and Notion. They are listed in the
   admin panel already, each declaring the capabilities it will answer to, which is where the
   shape they are expected to take is written down.

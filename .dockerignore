@@ -1,0 +1,119 @@
+# What the builder never sees. The whole context is uploaded before the first instruction runs, so
+# a line here is both a smaller upload and a file that cannot end up in a layer by accident.
+#
+# `node_modules` and `dist` are load-bearing rather than hygiene: the build stage installs and then
+# copies the sources over the top, and a host-built tree would land on the one it just installed.
+
+# Dependencies, reinstalled from the lockfile
+node_modules
+**/node_modules
+
+# Version control and CI
+.git
+.gitignore
+.gitattributes
+.github
+
+# Build output and incremental state
+dist
+**/dist
+dist-ssr
+**/dist-ssr
+*.tsbuildinfo
+**/*.tsbuildinfo
+*.timestamp-*-*.mjs
+
+# Environment. An image is configured by real environment variables and ships no .env at all;
+# `.env.local` carries this machine's secrets and must never reach a layer.
+.env
+.env.*
+**/.env
+**/.env.*
+
+# The database and the siblings WAL leaves beside it
+data
+*.db
+*.db-shm
+*.db-wal
+.test.db*
+**/.test.db*
+
+# Tests and their harnesses. `web/tsconfig.vitest.json` stays: `web/tsconfig.json` references it,
+# and vite resolves every reference in the solution file before it transforms a line, so the build
+# fails without it. Its `include` then matches nothing but `env.d.ts`, which is enough.
+**/*.test.ts
+api/src/testing
+api/tsconfig.test.json
+web/src/testing
+web/vitest.config.ts
+web/vitest.setup.ts
+
+# Coverage output
+coverage
+**/coverage
+.nyc_output
+*.lcov
+**/__screenshots__
+
+# The browser extension: not a workspace, no build step, installed by hand from a checkout
+extension
+
+# Seed data, imported through the admin panel from wherever the operator keeps it
+api/example-seed.json
+
+# Documentation. LICENSE has no extension and stays: AGPL section 13 obliges offering source to
+# people who reach an instance over a network.
+*.md
+**/*.md
+
+# Linters and formatters, none of which run during the build
+.editorconfig
+.oxfmtrc.json
+**/.oxlintrc.json
+web/eslint.config.ts
+.eslintcache
+**/.eslintcache
+.nvmrc
+
+# Caches
+.cache
+.npm
+
+# Editor and agent directories
+.vscode
+.idea
+.claude
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Credentials, in case one is ever left lying about
+*.pem
+*.key
+*.crt
+*.cert
+*.p12
+*.pfx
+
+# Packed extension builds, logs and merge leftovers
+*.zip
+*.crx
+*.tgz
+logs
+*.log
+*.orig
+*.rej
+
+# OS
+.DS_Store
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+desktop.ini
+
+# Docker's own files, so editing one does not invalidate the layer that copies the sources
+Dockerfile
+.dockerignore

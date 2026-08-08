@@ -6,7 +6,7 @@ import { startApi, type TestApi } from '#testing/harness.js'
 let api: TestApi
 
 before(async () => {
-  api = await startApi({ AUTH_MODE: 'dev' })
+  api = await startApi({ AUTH_MODE: 'dev', DIELE_VERSION: 'test-build' })
 })
 
 after(async () => {
@@ -17,7 +17,7 @@ test('the status probe answers without a session, since that is what it is for',
   const response = await api.request('/status')
 
   assert.equal(response.status, 200)
-  assert.deepEqual(await response.json(), { status: 'ok' })
+  assert.deepEqual(await response.json(), { status: 'ok', version: 'test-build' })
 })
 
 // Deny by default: the gate runs before every router, so this holds for routes nobody has

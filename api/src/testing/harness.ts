@@ -70,7 +70,10 @@ export async function startApi(env: Record<string, string> = {}): Promise<TestAp
     )
   }
 
-  const server: Server = createApp().listen(0)
+  // Pointed at a directory that holds no build, so these tests see the api alone. Left to find
+  // the real `web/dist`, every assertion about a path the api does not own would answer the
+  // frontend on a machine that has built it and 404 on one that has not.
+  const server: Server = createApp(join(tmpdir(), 'diele-test-no-web-build')).listen(0)
   await new Promise<void>((resolve, reject) => {
     server.once('listening', resolve)
     server.once('error', reject)
