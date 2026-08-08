@@ -300,10 +300,10 @@ function onFocusin(event: FocusEvent): void {
 <style scoped>
 .settings__body {
   width: 100%;
-  max-width: 720px;
+  max-width: var(--diele-content-width);
 }
 
-@media (max-width: 640px) {
+@media (--diele-compact) {
   .settings__list {
     display: block;
   }

@@ -101,7 +101,7 @@ const host = computed(() => {
 }
 
 /* see ProjectRow: the marker indents its own row rather than every row reserving a gutter */
-@media (max-width: 640px) {
+@media (--diele-compact) {
   .site__link {
     padding-left: 0;
   }

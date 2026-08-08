@@ -194,7 +194,7 @@ onMounted(() => {
 <style scoped>
 .launcher {
   width: 100%;
-  max-width: 720px;
+  max-width: var(--diele-content-width);
   scroll-margin-block: var(--diele-reveal-gap);
 }
 
@@ -298,7 +298,7 @@ onMounted(() => {
 
 /* a phone has no hardware keyboard for these to describe; tablets are wide enough to keep
    them and often do have one */
-@media (max-width: 640px) {
+@media (--diele-compact) {
   .hint--key {
     display: none;
   }

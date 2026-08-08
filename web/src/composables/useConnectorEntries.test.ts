@@ -277,4 +277,3 @@ describe('a payload that is not the shape it should be', () => {
     expect(source.rows.value).toHaveLength(1)
   })
 })
-

@@ -213,7 +213,7 @@ const secretPlaceholder = computed(() =>
 }
 
 /* too narrow for a label beside a control, so the label goes back above it */
-@media (max-width: 640px) {
+@media (--diele-compact) {
   .field {
     grid-template-columns: minmax(0, 1fr);
     row-gap: var(--diele-space-2);

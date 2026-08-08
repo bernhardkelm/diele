@@ -9,7 +9,7 @@ import LoadingDots from '@/components/LoadingDots.vue'
 <style scoped>
 .loading {
   width: 100%;
-  max-width: 720px;
+  max-width: var(--diele-content-width);
   padding-left: var(--diele-space-6);
   font-family: var(--diele-font-mono);
   font-size: var(--diele-text-sm);

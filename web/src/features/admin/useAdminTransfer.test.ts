@@ -98,7 +98,10 @@ describe('exporting', () => {
   })
 
   it('reports a refused export rather than downloading nothing', async () => {
-    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(new Response(null, { status: 403 }))))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.resolve(new Response(null, { status: 403 }))),
+    )
 
     const source = transfer()
     await source.exportSettings()
@@ -168,7 +171,9 @@ describe('importing', () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(() =>
-        Promise.resolve(new Response(JSON.stringify({ error: 'invalid request' }), { status: 400 })),
+        Promise.resolve(
+          new Response(JSON.stringify({ error: 'invalid request' }), { status: 400 }),
+        ),
       ),
     )
     const onImported = vi.fn()
@@ -195,7 +200,10 @@ describe('importing', () => {
   })
 
   it('reports an unreachable API rather than leaving the panel busy', async () => {
-    vi.stubGlobal('fetch', vi.fn(() => Promise.reject(new Error('offline'))))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.reject(new Error('offline'))),
+    )
 
     const source = transfer()
     await source.importSettings(chooseFile(JSON.stringify(EXPORT)))
@@ -209,7 +217,10 @@ describe('importing', () => {
 // One panel's last action is nobody else's business, and a message that outlived the panel
 // would greet the next one with the previous session's result.
 it('keeps its state to the panel that asked for it', async () => {
-  vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(new Response(null, { status: 403 }))))
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(() => Promise.resolve(new Response(null, { status: 403 }))),
+  )
 
   const first = transfer()
   await first.exportSettings()

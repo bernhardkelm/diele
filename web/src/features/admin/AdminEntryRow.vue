@@ -264,7 +264,7 @@ function onFocusout(event: FocusEvent): void {
   opacity: 1;
 }
 
-@media (max-width: 640px) {
+@media (--diele-compact) {
   .entry {
     --entry-gutter: var(--diele-space-4);
 

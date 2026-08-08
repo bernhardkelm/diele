@@ -39,7 +39,7 @@ const emit = defineEmits<{ launch: [site: SuggestionTarget] }>()
   --diele-row-label: 16ch;
 
   width: 100%;
-  max-width: 720px;
+  max-width: var(--diele-content-width);
   padding: 0;
   list-style: none;
   border-bottom: 3px solid var(--diele-rule);

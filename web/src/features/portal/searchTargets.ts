@@ -1,6 +1,5 @@
-import { scoreFields } from '@/helpers/scoreFields'
+import { rankByScore } from '@/helpers/rankByScore'
 import { fieldsFor } from '@/helpers/searchFields'
-import { tokenize } from '@/helpers/searchTokens'
 import type { PortalTarget } from '@/types/portal'
 
 /**
@@ -39,28 +38,5 @@ export function searchTargets<T extends PortalTarget>(
   query: string,
   boostFor?: (target: T) => number,
 ): ReadonlyArray<T> {
-  const tokens = tokenize(query)
-  if (tokens.length === 0) {
-    return targets
-  }
-
-  const ranked: Array<{ target: T; section: number; score: number; order: number }> = []
-
-  targets.forEach((target, order) => {
-    const score = scoreFields(fieldsFor(target), tokens)
-    if (score === undefined) {
-      return
-    }
-
-    ranked.push({
-      target,
-      section: sectionOf(target),
-      score: score + (boostFor?.(target) ?? 0),
-      order,
-    })
-  })
-
-  ranked.sort((a, b) => a.section - b.section || b.score - a.score || a.order - b.order)
-
-  return ranked.map((entry) => entry.target)
+  return rankByScore(targets, query, fieldsFor, { boostFor, sectionOf })
 }

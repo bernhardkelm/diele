@@ -179,7 +179,7 @@ function onKeydown(event: KeyboardEvent): void {
   opacity: 1;
 }
 
-@media (max-width: 640px) {
+@media (--diele-compact) {
   .feature {
     --row-marker-left: 0;
 

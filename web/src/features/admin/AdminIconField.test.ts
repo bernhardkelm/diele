@@ -4,7 +4,11 @@ import AdminIconField from '@/features/admin/AdminIconField.vue'
 import AdminSelectField from '@/features/admin/AdminSelectField.vue'
 import { resetIcons } from '@/composables/useIcons'
 
-const SQUARE = { id: 3, name: 'square', svg: '<svg viewBox="0 0 8 8"><path d="M0 0h8v8H0z"/></svg>' }
+const SQUARE = {
+  id: 3,
+  name: 'square',
+  svg: '<svg viewBox="0 0 8 8"><path d="M0 0h8v8H0z"/></svg>',
+}
 const CIRCLE = { id: 4, name: 'circle', svg: '<svg viewBox="0 0 8 8"><circle r="4"/></svg>' }
 
 /**
@@ -16,9 +20,7 @@ function stubApi(options: { upload?: { status: number; body: unknown } } = {}) {
   return vi.fn((_input: RequestInfo | URL, init?: RequestInit) => {
     if (init?.method === 'POST') {
       const answer = options.upload ?? { status: 201, body: { icon: CIRCLE } }
-      return Promise.resolve(
-        new Response(JSON.stringify(answer.body), { status: answer.status }),
-      )
+      return Promise.resolve(new Response(JSON.stringify(answer.body), { status: answer.status }))
     }
 
     return Promise.resolve(new Response(JSON.stringify({ icons: [SQUARE] })))
