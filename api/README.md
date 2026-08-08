@@ -154,13 +154,18 @@ Register diele as a confidential client and hand it three values: `OIDC_ISSUER`,
   a proxy cannot decide it. Register both the production one and
   `http://localhost:5173/api/auth/callback` on the same client, and one provider serves local
   development and the deployment.
+- **The post-logout redirect uri** is `PUBLIC_ORIGIN` itself. Register it as well, or the issuer
+  drops the return address and signing out leaves the browser on the issuer's page instead of back
+  at diele's login screen. The id token the session was opened with is sent along as
+  `id_token_hint`, which is what most issuers want before they skip their own confirmation page.
 - **Grant types** must include `authorization_code`. Some providers create a client with none
   enabled and then reject the flow with a bare "invalid grant_type", which is a confusing way to
   find out.
 - **Scopes** default to `openid email profile`. `OIDC_SCOPES` widens them; the `groups` claim is
   carried onto the session if the issuer sends one, ready for role-based permissions later.
 
-`OIDC_DISPLAY_NAME` is what the sign-in button says.
+`OIDC_DISPLAY_NAME` is what the sign-in button offers to sign in with, defaulting to `SSO`. It is
+the only mode that names anything: local mode shows a form, and dev mode signs in as itself.
 
 ## Data
 

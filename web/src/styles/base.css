@@ -19,9 +19,7 @@ body {
   font-size: var(--diele-text-base);
   line-height: 1.5;
   color: var(--diele-fg);
-  background:
-    radial-gradient(1200px 600px at 50% -10%, var(--diele-bg-accent), transparent 70%),
-    var(--diele-bg);
+  background: var(--diele-bg);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }

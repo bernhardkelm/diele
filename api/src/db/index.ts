@@ -4,12 +4,13 @@ import Database from 'better-sqlite3'
 import { config } from '#config.js'
 import { migrate } from './migrate.js'
 import { init } from './migrations/001_init.js'
+import { sessionIdToken } from './migrations/002_session_id_token.js'
 
 export type DB = Database.Database
 
 // A fresh database starts empty on purpose: configuration is entered through the API, and
 // seeding it here would mean a portal that shows rows nobody added.
-const MIGRATIONS = [init]
+const MIGRATIONS = [init, sessionIdToken]
 
 let db: DB | null = null
 

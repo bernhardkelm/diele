@@ -31,8 +31,8 @@ export interface SyncOutcome {
 function claim(connectorId: number): boolean {
   const db = getDb()
 
-  // A connector that arrived through an import has no sync row yet, and without one the claim
-  // would match nothing and the connector would never run.
+  // Every path that stores a connector stores its sync row too, so this stands in for one that
+  // went missing: without a row the claim below matches nothing and the connector never runs.
   db.prepare('INSERT OR IGNORE INTO connector_sync (connector_id) VALUES (?)').run(connectorId)
 
   const result = db

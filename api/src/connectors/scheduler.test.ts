@@ -4,6 +4,7 @@ import {
   runDueConnectors,
   startConnectorScheduler,
   stopConnectorScheduler,
+  wakeScheduler,
 } from '#connectors/scheduler.js'
 import { getDb } from '#db/index.js'
 import { setEnabled } from '#settings/toggles.js'
@@ -100,6 +101,45 @@ test('a connector deleted mid-tick neither crashes the tick nor stops the ones b
     assert.ok(row?.last_error, `connector ${id} was never run`)
   }
 })
+
+// What an import asks for, having just made every connector it wrote due at once. `claim` stamps
+// last_run_at before the source is reached, so this says a run started without waiting on one.
+test('waking a running scheduler starts what is due rather than waiting for the tick', () => {
+  startConnectorScheduler()
+  const id = overdueConnector('woken-early', 1)
+
+  try {
+    wakeScheduler()
+
+    assert.ok(lastRunOf(id), 'the connector was left for the next tick')
+  } finally {
+    stopConnectorScheduler()
+  }
+})
+
+// A process that runs no scheduler has not asked to reach anyone's source, which is what keeps a
+// request in a test from doing it.
+test('waking a scheduler that is not running starts nothing', () => {
+  stopConnectorScheduler()
+  const id = overdueConnector('nobody-is-scheduling', 1)
+
+  wakeScheduler()
+
+  assert.equal(lastRunOf(id), null)
+})
+
+/**
+ * Reads when a connector last started a run, which `claim` writes at the head of one.
+ * @param {number} id - Connector to look up
+ * @returns {string | null} - Timestamp of its last run, null when it has never had one
+ */
+function lastRunOf(id: number): string | null {
+  const row = getDb()
+    .prepare('SELECT last_run_at FROM connector_sync WHERE connector_id = ?')
+    .get(id) as { last_run_at: string | null } | undefined
+
+  return row?.last_run_at ?? null
+}
 
 // A type switched off as a whole must not keep reaching its source in the background. The row
 // stays due rather than being rescheduled, so switching it back on picks it up again.

@@ -2,6 +2,12 @@ import * as client from 'openid-client'
 import { config } from '#config.js'
 import type { IdentityClaims } from './session.js'
 
+export interface CompletedLogin {
+  readonly claims: IdentityClaims
+  /** Presented back to the issuer as `id_token_hint` when the session it opens is signed out */
+  readonly idToken: string | undefined
+}
+
 export interface LoginHandshake {
   /** Where to send the browser to authenticate */
   readonly url: string
@@ -70,14 +76,14 @@ export async function beginLogin(): Promise<LoginHandshake> {
  * @param {string} codeVerifier - PKCE verifier stored when the login began
  * @param {string} expectedState - State stored when the login began
  * @param {string} expectedNonce - Nonce stored when the login began
- * @returns {Promise<IdentityClaims>} - Identity the issuer vouched for
+ * @returns {Promise<CompletedLogin>} - Identity the issuer vouched for, and the token it vouched with
  */
 export async function completeLogin(
   currentUrl: URL,
   codeVerifier: string,
   expectedState: string,
   expectedNonce: string,
-): Promise<IdentityClaims> {
+): Promise<CompletedLogin> {
   const oidc = await getOidcConfig()
 
   const tokens = await client.authorizationCodeGrant(oidc, currentUrl, {
@@ -92,27 +98,42 @@ export async function completeLogin(
   }
 
   return {
-    issuer: claims.iss,
-    subject: claims.sub,
-    email: typeof claims.email === 'string' ? claims.email : null,
-    name: typeof claims.name === 'string' ? claims.name : null,
-    picture: typeof claims.picture === 'string' ? claims.picture : null,
-    groups: Array.isArray(claims.groups)
-      ? claims.groups.filter((entry): entry is string => typeof entry === 'string')
-      : [],
+    claims: {
+      issuer: claims.iss,
+      subject: claims.sub,
+      email: typeof claims.email === 'string' ? claims.email : null,
+      name: typeof claims.name === 'string' ? claims.name : null,
+      picture: typeof claims.picture === 'string' ? claims.picture : null,
+      groups: Array.isArray(claims.groups)
+        ? claims.groups.filter((entry): entry is string => typeof entry === 'string')
+        : [],
+    },
+    idToken: tokens.id_token,
   }
 }
 
 /**
  * Builds the issuer's logout url, so ending the local session can end the issuer's too.
+ *
+ * The hint is what decides where the browser comes to rest. Without one an issuer has no
+ * session to tie the request to, so it stops on a confirmation page of its own and drops the
+ * return address; with one it ends the session and sends the browser back to the portal, which
+ * is a login screen by then. `client_id` the library appends itself.
  * @param {string} postLogoutRedirect - Absolute url to return to afterwards
+ * @param {string | undefined} idToken - Token the session was opened with, when it kept one
  * @returns {Promise<string | undefined>} - Logout url, or undefined when the issuer advertises none
  */
-export async function logoutUrl(postLogoutRedirect: string): Promise<string | undefined> {
+export async function logoutUrl(
+  postLogoutRedirect: string,
+  idToken?: string,
+): Promise<string | undefined> {
   const oidc = await getOidcConfig()
   if (!oidc.serverMetadata().end_session_endpoint) {
     return undefined
   }
 
-  return client.buildEndSessionUrl(oidc, { post_logout_redirect_uri: postLogoutRedirect }).href
+  return client.buildEndSessionUrl(oidc, {
+    post_logout_redirect_uri: postLogoutRedirect,
+    ...(idToken ? { id_token_hint: idToken } : {}),
+  }).href
 }
