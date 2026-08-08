@@ -159,6 +159,31 @@ describe('stepping through an open form', () => {
   })
 })
 
+describe('stepping into an open form', () => {
+  // The walk out of a form leaves it open, so it has to be reversible: entering at the end the
+  // step arrives from is what makes crossing the form read the same in both directions.
+  it('enters at the first control coming down and the last coming up', () => {
+    const { board } = keyboard(entryStation())
+    const { form, controls } = openForm(3)
+
+    expect(board.enterForm(form, 1)).toBe(true)
+    expect(document.activeElement).toBe(controls[0])
+
+    expect(board.enterForm(form, -1)).toBe(true)
+    expect(document.activeElement).toBe(controls[2])
+  })
+
+  // Said rather than assumed, so the caller can fall back to a plain step instead of swallowing
+  // the key on a form with nowhere to put the caret.
+  it('refuses a form holding nothing to land on', () => {
+    const { board } = keyboard(entryStation())
+    const { form } = openForm(0)
+
+    expect(board.enterForm(form, 1)).toBe(false)
+    expect(board.enterForm(form, -1)).toBe(false)
+  })
+})
+
 describe('walking a row actions', () => {
   it('moves right and wraps back round to the row itself', () => {
     const { board } = keyboard(entryStation())

@@ -14,6 +14,7 @@ import { useHiddenEntries } from '@/composables/useHiddenEntries'
 import { usePortalConfig } from '@/composables/usePortalConfig'
 import { useSession } from '@/composables/useSession'
 import { useStationRing } from '@/composables/useStationRing'
+import { useStickyFocus } from '@/composables/useStickyFocus'
 import { useTheme } from '@/composables/useTheme'
 import { entrySection } from '@/features/settings/entrySection'
 import { searchActions } from '@/helpers/listActions'
@@ -95,8 +96,11 @@ const {
   focusAt,
   move: step,
   leave,
+  release,
   syncTo,
 } = useStationRing(stations, list, () => bar.value?.focus())
+
+useStickyFocus('[data-station]')
 
 const hints = computed(() =>
   settingsHintsFor(
@@ -211,21 +215,25 @@ const collapseTo = useCollapseToStation(stations, focusAt, sectionKey, () => {
 })
 
 /**
- * Adopts the station the pointer put focus on, so clicking a row and arrowing to it leave the
- * ring in the same place.
- * @param {FocusEvent} event - Focus landing inside the list
+ * Adopts the station the caret landed on, so clicking a row and arrowing to it leave the ring
+ * in the same place, and lets the ring go when it landed anywhere else.
+ * @param {FocusEvent} event - Focus landing anywhere in the view
  * @returns {void}
  */
 function onFocusin(event: FocusEvent): void {
   const row = (event.target as HTMLElement | null)?.closest<HTMLElement>('[data-station]')
+
   if (row?.dataset.station) {
     syncTo(row.dataset.station)
+    return
   }
+
+  release()
 }
 </script>
 
 <template>
-  <div class="settings view-shell" @keydown="onKeydown">
+  <div class="settings view-shell" @keydown="onKeydown" @focusin="onFocusin">
     <PortalHeader :title="brand.title" subtitle="settings" />
 
     <LauncherBar
@@ -246,7 +254,6 @@ function onFocusin(event: FocusEvent): void {
         class="settings__list row-tracks"
         role="tree"
         aria-label="Settings"
-        @focusin="onFocusin"
       >
         <template v-for="(station, index) in stations" :key="station.key">
           <SettingsSectionRow

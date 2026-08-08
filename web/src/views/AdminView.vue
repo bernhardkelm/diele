@@ -17,6 +17,7 @@ import { useCollapseToStation } from '@/composables/useCollapseToStation'
 import { useHashRoute } from '@/composables/useHashRoute'
 import { usePortalConfig } from '@/composables/usePortalConfig'
 import { useSession } from '@/composables/useSession'
+import { useStickyFocus } from '@/composables/useStickyFocus'
 import { searchActions, type ListAction } from '@/helpers/listActions'
 import { hintsFor } from '@/features/admin/adminHints'
 import { rowActionsFor, type RowActionId } from '@/features/admin/adminRowActions'
@@ -89,15 +90,20 @@ const {
   focusAt,
   move: step,
   leave,
+  release,
   syncTo,
   restore,
 } = useStationRing(stations, list, () => bar.value?.focus())
 
-const { activeAction, walkDelta, openPicker, stepInForm, moveAction } = useAdminKeyboard({
-  active: () => active.value,
-  step,
-  leave,
-})
+const { activeAction, walkDelta, openPicker, stepInForm, enterForm, moveAction } = useAdminKeyboard(
+  {
+    active: () => active.value,
+    step,
+    leave,
+  },
+)
+
+useStickyFocus('[data-station]')
 
 // Every write reloads the rows, so the element that held focus is gone when the call resolves;
 // these pair each write with where the caret should land afterwards.
@@ -219,13 +225,7 @@ function onKeydown(event: KeyboardEvent): void {
 
   if (delta !== 0) {
     event.preventDefault()
-
-    if (form && target) {
-      stepInForm(form, target, delta)
-    } else {
-      step(delta)
-    }
-
+    walk(target, form, delta)
     return
   }
 
@@ -276,6 +276,42 @@ function onKeydown(event: KeyboardEvent): void {
   }
 
   go(expanded.value ? '/admin' : '/')
+}
+
+/**
+ * Takes one step through the panel. An open form is a level below the row holding it, so the
+ * walk crosses its controls rather than stepping from that row straight to its neighbour.
+ * @param {HTMLElement | null} target - Element the step is leaving
+ * @param {HTMLElement | null} form - Open form the target sits in, when it does
+ * @param {number} delta - 1 forwards, -1 back
+ * @returns {void}
+ */
+function walk(target: HTMLElement | null, form: HTMLElement | null, delta: number): void {
+  if (form && target) {
+    stepInForm(form, target, delta)
+    return
+  }
+
+  // The two ways into a form a plain step misses. Every other way in passes the row the form
+  // hangs from first, which a step already lands on: down, that row is where the walk is
+  // standing, and up it is the one being stepped onto.
+  const key = delta > 0 ? active.value?.key : stations.value[activeIndex.value - 1]?.key
+  const open = key && key === editing.value ? formFor(key) : null
+
+  if (open && enterForm(open, delta)) {
+    return
+  }
+
+  step(delta)
+}
+
+/**
+ * Finds the form a station is rendering.
+ * @param {string} key - Station holding the form
+ * @returns {HTMLElement | null} - Its form, or null when it has none open
+ */
+function formFor(key: string): HTMLElement | null {
+  return list.value?.querySelector<HTMLElement>(`[data-station="${key}"] .entry-form`) ?? null
 }
 
 const collapseTo = useCollapseToStation(stations, focusAt, featureKey, () => {
@@ -329,23 +365,27 @@ function runAction(station: AdminStation, index: number, id: RowActionId): void 
 }
 
 /**
- * Adopts the station the pointer put focus on, so clicking a row and arrowing to it leave the
- * ring in the same place.
- * @param {FocusEvent} event - Focus landing inside the list
+ * Adopts the station the caret landed on, so clicking a row and arrowing to it leave the ring
+ * in the same place, and lets the ring go when it landed anywhere else.
+ * @param {FocusEvent} event - Focus landing anywhere in the view
  * @returns {void}
  */
 function onFocusin(event: FocusEvent): void {
   const row = (event.target as HTMLElement | null)?.closest<HTMLElement>('[data-station]')
+
   if (row?.dataset.station) {
     syncTo(row.dataset.station)
+    return
   }
+
+  release()
 }
 
 onMounted(() => void loadFeatures())
 </script>
 
 <template>
-  <div class="admin view-shell" @keydown="onKeydown">
+  <div class="admin view-shell" @keydown="onKeydown" @focusin="onFocusin">
     <PortalHeader :title="brand.title" subtitle="admin" />
 
     <LauncherBar
@@ -390,7 +430,6 @@ onMounted(() => void loadFeatures())
         class="admin__features row-tracks"
         role="tree"
         aria-label="Settings and integrations"
-        @focusin="onFocusin"
       >
         <template v-for="(station, index) in stations" :key="station.key">
           <AdminFeatureRow

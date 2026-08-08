@@ -386,6 +386,72 @@ describe('walking the panel by keyboard', () => {
     expect(document.activeElement?.getAttribute('data-station')).toBeNull()
   })
 
+  /**
+   * Marks the open form's controls as being on screen, which jsdom lays nothing out to be.
+   * @param {VueWrapper} wrapper - The mounted panel
+   * @returns {Array<HTMLElement>} - The controls a step walks through
+   */
+  function layOutForm(wrapper: VueWrapper): Array<HTMLElement> {
+    const form = wrapper.find('.entry-form').element
+    const controls = [...form.querySelectorAll<HTMLElement>('input, select, textarea, button')]
+
+    for (const control of controls) {
+      Object.defineProperty(control, 'offsetParent', { configurable: true, value: form })
+    }
+
+    return controls
+  }
+
+  // The index is what a step is measured from, and the caret going back to the field by any
+  // route leaves the list behind: a step from there starts at the top rather than one past the
+  // row the arrows were last on.
+  it('starts at the top of the list once the caret is back in the field', async () => {
+    const wrapper = await open()
+
+    await press(wrapper, 'ArrowDown')
+    await press(wrapper, 'ArrowDown')
+    expect(document.activeElement?.getAttribute('data-station')).toBe('feature:engines')
+
+    wrapper.find<HTMLInputElement>('.launcher__input').element.focus()
+    await nextTick()
+
+    await press(wrapper, 'ArrowDown')
+
+    expect(document.activeElement?.getAttribute('data-station')).toBe('feature:cards')
+  })
+
+  // A form stays open when a step walks out of it, so the way back in has to exist. Without it
+  // the arrows only ever pass the row the form hangs from, and a form left by one keystroke
+  // takes a click to get back into.
+  it('steps into a form the row has open, from above and from below', async () => {
+    const wrapper = await open()
+    await expand(wrapper, 'cards')
+
+    await press(wrapper, 'ArrowDown')
+    await press(wrapper, 'ArrowDown')
+    await press(wrapper, 'ArrowDown')
+    await press(wrapper, 'e')
+    await vi.waitFor(() => expect(wrapper.findComponent(AdminEntryForm).exists()).toBe(true))
+
+    const controls = layOutForm(wrapper)
+
+    await press(wrapper, 'ArrowUp')
+    expect(document.activeElement?.getAttribute('data-station')).toBe('entry:cards:1')
+
+    await press(wrapper, 'ArrowDown')
+    expect(document.activeElement).toBe(controls[0])
+
+    // out of the bottom of the form, which leaves it open behind the row below
+    for (let taken = 0; taken < controls.length; taken += 1) {
+      await press(wrapper, 'ArrowDown')
+    }
+
+    expect(document.activeElement?.getAttribute('data-station')).toBe('entry:cards:2')
+
+    await press(wrapper, 'ArrowUp')
+    expect(document.activeElement).toBe(controls[controls.length - 1])
+  })
+
   it('switches a row off with its own key', async () => {
     const wrapper = await open()
     await expand(wrapper, 'cards')

@@ -25,6 +25,8 @@ export interface StationRing<T extends RingStation> {
   move: (delta: number) => void
   /** Hands focus back to the search field */
   leave: () => void
+  /** Drops the ring's position without moving focus, for a caret that landed elsewhere */
+  release: () => void
   /** Adopts a station the pointer put focus on, so clicking and arrowing agree */
   syncTo: (key: string) => void
   /** Puts focus back after a write has rebuilt the list */
@@ -135,8 +137,20 @@ export function useStationRing<T extends RingStation>(
    * @returns {void}
    */
   function leave(): void {
-    activeIndex.value = -1
+    release()
     focusField()
+  }
+
+  /**
+   * Forgets where the ring was, leaving focus wherever it already is.
+   *
+   * The index is what a step is measured from, so one kept while the caret sits somewhere else
+   * makes the next step start from a row nothing is focused on: arrowing down out of the search
+   * field would land one past the row the caret was last on rather than at the top of the list.
+   * @returns {void}
+   */
+  function release(): void {
+    activeIndex.value = -1
   }
 
   /**
@@ -206,5 +220,5 @@ export function useStationRing<T extends RingStation>(
     focusAt(index)
   }
 
-  return { activeIndex, active, inList, focusAt, move, leave, syncTo, restore }
+  return { activeIndex, active, inList, focusAt, move, leave, release, syncTo, restore }
 }

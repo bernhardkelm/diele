@@ -274,4 +274,21 @@ describe('walking the list by keyboard', () => {
 
     expect(document.activeElement?.getAttribute('data-station')).toBeNull()
   })
+
+  // The index is what a step is measured from, and the caret going back to the field by any
+  // route leaves the list behind: a step from there starts at the top rather than one past the
+  // row the arrows were last on, which here is the row that ends the session.
+  it('starts at the top of the list once the caret is back in the field', async () => {
+    const wrapper = await open()
+
+    await press(wrapper, 'ArrowDown')
+    await press(wrapper, 'ArrowDown')
+
+    wrapper.find<HTMLInputElement>('.launcher__input').element.focus()
+    await nextTick()
+
+    await press(wrapper, 'ArrowDown')
+
+    expect(document.activeElement?.getAttribute('data-station')).toBe('section:appearance')
+  })
 })

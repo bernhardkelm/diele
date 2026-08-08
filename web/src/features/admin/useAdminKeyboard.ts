@@ -18,6 +18,8 @@ export interface AdminKeyboard {
   walkDelta: (event: KeyboardEvent, inSearch: boolean) => number
   openPicker: (select: HTMLSelectElement) => void
   stepInForm: (form: HTMLElement, from: HTMLElement, delta: number) => void
+  /** Steps into an open form from outside it; false when it has no control to land on */
+  enterForm: (form: HTMLElement, delta: number) => boolean
   moveAction: (delta: number) => void
 }
 
@@ -45,6 +47,41 @@ export function useAdminKeyboard(options: AdminKeyboardOptions): AdminKeyboard {
   }
 
   /**
+   * Reads a form's controls in the order the arrows walk them.
+   * @param {HTMLElement} form - Form being walked
+   * @returns {ReadonlyArray<HTMLElement>} - Its controls, minus the ones not on screen
+   */
+  function controlsOf(form: HTMLElement): ReadonlyArray<HTMLElement> {
+    return [...form.querySelectorAll<HTMLElement>('input, select, textarea, button')].filter(
+      // the file picker behind the upload button is never on screen to be stepped onto
+      (control) => control.offsetParent !== null,
+    )
+  }
+
+  /**
+   * Steps into an open form from outside it, entering at the end the step arrives from: forwards
+   * at the first control, back at the last.
+   *
+   * A form stays open when a step walks out of it, so that walk has to be reversible. Without
+   * this the arrows only ever pass the row the form hangs from, and a form left by one keystroke
+   * takes a click to get back into.
+   * @param {HTMLElement} form - Form being entered
+   * @param {number} delta - 1 entering from above, -1 from below
+   * @returns {boolean} - False when the form holds nothing to land on
+   */
+  function enterForm(form: HTMLElement, delta: number): boolean {
+    const controls = controlsOf(form)
+    const landing = delta > 0 ? controls[0] : controls[controls.length - 1]
+
+    if (!landing) {
+      return false
+    }
+
+    landing.focus()
+    return true
+  }
+
+  /**
    * Steps between the controls of an open form, and out of it at either end: forwards past the
    * last control carries on to the row below, back past the first returns to the row the form
    * belongs to.
@@ -54,9 +91,7 @@ export function useAdminKeyboard(options: AdminKeyboardOptions): AdminKeyboard {
    * @returns {void}
    */
   function stepInForm(form: HTMLElement, from: HTMLElement, delta: number): void {
-    const controls = [...form.querySelectorAll<HTMLElement>('input, select, textarea, button')]
-      // the file picker behind the upload button is never on screen to be stepped onto
-      .filter((control) => control.offsetParent !== null)
+    const controls = controlsOf(form)
 
     // A control the walk does not know about, such as the label a click landed on, has no place
     // to step from. Without this its index reads as -1 and a step forwards lands on the first
@@ -111,5 +146,5 @@ export function useAdminKeyboard(options: AdminKeyboardOptions): AdminKeyboard {
     }
   }
 
-  return { activeAction, walkDelta, openPicker, stepInForm, moveAction }
+  return { activeAction, walkDelta, openPicker, stepInForm, enterForm, moveAction }
 }
