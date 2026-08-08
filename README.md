@@ -24,29 +24,33 @@ next tab has it.
 
 ## Table of contents
 
-- [Features](#features)
-  - [Search](#search)
-  - [Keyboard control](#keyboard-control)
-  - [Slash commands](#slash-commands)
-  - [Search engines](#search-engines)
-  - [Cards](#cards)
-  - [Saved sites](#saved-sites)
-  - [Local ports](#local-ports)
-  - [Subreddit jump](#subreddit-jump)
-  - [Light and dark](#light-and-dark)
-  - [The admin panel](#the-admin-panel)
-  - [Export and import](#export-and-import)
-  - [Signing in](#signing-in)
-  - [Connectors](#connectors)
-  - [Planned](#planned)
-- [Installation](#installation)
-  - [Docker](#docker)
-  - [Making it your new tab page](#making-it-your-new-tab-page)
-  - [Backing up](#backing-up)
-  - [Which tag](#which-tag)
-  - [From source](#from-source)
-- [Documentation](#documentation)
-- [License](#license)
+- [diele](#diele)
+  - [Table of contents](#table-of-contents)
+  - [Features](#features)
+    - [Search](#search)
+    - [Keyboard control](#keyboard-control)
+    - [Slash commands](#slash-commands)
+    - [Search engines](#search-engines)
+    - [Cards](#cards)
+    - [Saved sites](#saved-sites)
+    - [Local ports](#local-ports)
+    - [Subreddit jump](#subreddit-jump)
+    - [Light and dark](#light-and-dark)
+    - [The admin panel](#the-admin-panel)
+    - [Export and import](#export-and-import)
+    - [Signing in](#signing-in)
+    - [Connectors](#connectors)
+      - [GitLab](#gitlab)
+      - [GitHub](#github)
+    - [Planned](#planned)
+  - [Installation](#installation)
+    - [Docker](#docker)
+    - [Making it your new tab page](#making-it-your-new-tab-page)
+    - [Backing up](#backing-up)
+    - [Which tag](#which-tag)
+    - [From source](#from-source)
+  - [Documentation](#documentation)
+  - [License](#license)
 
 ## Features
 
@@ -251,8 +255,6 @@ plain links to GitHub, not API calls, which is why the permission set stays this
 Listed in the admin panel already, each declaring the capabilities it will answer to, which is
 where the shape it is expected to take is written down.
 
-| | |
-| --- | --- |
 | **Uptime Kuma** | monitor states, shown as a dot on the cards they belong to |
 | **Prometheus** | firing alerts at the top of the page, and card states from a query |
 | **Grafana** | dashboards, suggested as results when the term matches them |
