@@ -4,6 +4,7 @@ import HighlightedText from '@/components/HighlightedText.vue'
 import StatusDot from '@/components/StatusDot.vue'
 import { useRevealOnActive } from '@/composables/useRevealOnActive'
 import type { SuggestionTarget } from '@/types/portal'
+import type { ApiHealthReading } from '@diele/common'
 
 interface SiteRowProps {
   site: SuggestionTarget
@@ -11,6 +12,8 @@ interface SiteRowProps {
   active?: boolean
   /** Whether a local server answered this port; only ever set for localhost entries */
   live?: boolean
+  /** How it last answered; only ever set for a site someone bound a liveness source to */
+  status?: ApiHealthReading
   /** Current search term, marked up in the row's name and host */
   query?: string
 }
@@ -19,6 +22,16 @@ const props = defineProps<SiteRowProps>()
 const emit = defineEmits<{ launch: [] }>()
 
 useRevealOnActive(useTemplateRef<HTMLElement>('root'), () => props.active)
+
+// A binding wins over the loopback probe: someone said what this row reports, and the probe can
+// only ever say "something answered" where a binding says how.
+const dot = computed<{ status: ApiHealthReading; name: string } | undefined>(() => {
+  if (props.status) {
+    return { status: props.status, name: props.site.name }
+  }
+
+  return props.live ? { status: { state: 'up' }, name: `${props.site.name} is running` } : undefined
+})
 
 const host = computed(() => {
   if (props.site.display) {
@@ -43,7 +56,7 @@ const host = computed(() => {
     <a class="site__link row-grammar" :href="site.url" rel="noopener" @click="emit('launch')">
       <!-- dot inside the label cell, so a row that has one keeps the shared columns -->
       <span class="site__name truncate">
-        <StatusDot v-if="live" :status="{ state: 'up' }" :name="`${site.name} is running`" />
+        <StatusDot v-if="dot" :status="dot.status" :name="dot.name" />
         <HighlightedText :text="site.name" :query="query" />
       </span>
       <span class="site__host truncate"><HighlightedText :text="host" :query="query" /></span>

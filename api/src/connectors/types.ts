@@ -1,4 +1,4 @@
-import type { ApiFieldSpec, DisplayMode, EntryAction } from '@diele/common'
+import type { ApiFieldSpec, DisplayMode, EntryAction, HealthState } from '@diele/common'
 
 /**
  * What a connectivity check is given. Narrower than a run's context on purpose: it happens
@@ -56,8 +56,7 @@ export interface EntriesResult {
   readonly partial?: boolean
 }
 
-export type HealthState = 'up' | 'down' | 'pending' | 'maintenance'
-
+/** The reading a module hands back, which is what the wire type is built from. */
 export interface HealthReading {
   readonly state: HealthState
   /** Share of the last 24h the target was up, 0-1; absent when the source reports none */
@@ -106,6 +105,13 @@ export interface ConnectorModule {
   readonly produces: ReadonlyArray<DisplayMode>
   /** The admin form renders from these, the same ApiFieldSpec the built-ins use */
   readonly fields: ReadonlyArray<ApiFieldSpec>
+  /**
+   * The field this decorator needs on each entry it is bound to, declared here rather than by
+   * the entry's own feature: what identifies a target is the decorator's business, and a card
+   * knows nothing about monitor names or PromQL. Only read from a module implementing
+   * `resolveHealth`; its `showWhen` is filled in by the feature list.
+   */
+  readonly healthSelectorField?: ApiFieldSpec
   /** Keys of `fields` that are write-only, so the API can refuse to read them back */
   readonly secretKeys: ReadonlyArray<string>
   /** Validates and normalises config before anything is stored or run against it */

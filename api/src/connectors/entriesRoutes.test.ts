@@ -190,8 +190,14 @@ test('a type switched off leaves the wire entirely and comes back whole', async 
   assert.equal(off.status, 200)
 
   const hidden = await api.get<ApiEntries>('/api/entries')
-  assert.equal(hidden.entries.some((entry) => entry.ref === ref), false)
-  assert.equal(hidden.sources.some((source) => source.connectorId === connectorId), false)
+  assert.equal(
+    hidden.entries.some((entry) => entry.ref === ref),
+    false,
+  )
+  assert.equal(
+    hidden.sources.some((source) => source.connectorId === connectorId),
+    false,
+  )
 
   await api.request('/api/admin/features/gitlab/enabled', {
     method: 'PUT',

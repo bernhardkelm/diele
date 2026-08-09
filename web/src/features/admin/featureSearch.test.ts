@@ -136,6 +136,15 @@ describe('hintsFor', () => {
     expect(hints(entryStation, [{ id: 'edit', label: '' }])).not.toContain('d on/off')
   })
 
+  // The same key asks a connector to sync and a bound entry to probe, so the hint says which.
+  it('names the fetch key by the word the row uses for it', () => {
+    expect(hints(entryStation, [{ id: 'sync', label: 'sync' }])).toContain('s syncs')
+    expect(hints(entryStation, [{ id: 'sync', label: 'probe' }])).toContain('s probes')
+    expect(
+      hints(entryStation, [{ id: 'edit', label: '' }]).some((text) => text.startsWith('s ')),
+    ).toBe(false)
+  })
+
   // Only where there is somewhere to move to: a list of one, or an end of it, has neither.
   it('names the reorder keys only where a move is possible', () => {
     const stuck: ReadonlyArray<RowAction> = [

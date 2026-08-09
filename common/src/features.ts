@@ -4,6 +4,8 @@
  * app at all.
  */
 
+import type { ApiHealthReading } from './health.js'
+
 /**
  * How a feature's entries render. A feature declares what it produces and the client already
  * knows how to draw each.
@@ -29,6 +31,17 @@ export type InputMode =
  */
 export type Capability = 'entries' | 'health' | 'signals' | 'search'
 
+export interface ApiFieldOption {
+  readonly value: string
+  readonly label: string
+  /**
+   * Shown but not choosable, for a choice that exists in principle and cannot be taken yet: a
+   * decorator this build registers but no instance of has been configured. Leaving it out
+   * entirely would say the option does not exist rather than that it is not set up.
+   */
+  readonly disabled?: boolean
+}
+
 export interface ApiFieldSpec {
   readonly key: string
   readonly label: string
@@ -46,7 +59,14 @@ export interface ApiFieldSpec {
   /** Set on a field that is shown but cannot be edited yet, so the form says so */
   readonly unavailable?: string
   /** Choices for a `select`, which the form renders instead of a free text box */
-  readonly options?: ReadonlyArray<{ value: string; label: string }>
+  readonly options?: ReadonlyArray<ApiFieldOption>
+  /**
+   * Renders this field only while another one holds one of these values. What a decorator's
+   * selector means depends on which decorator was picked, and one box standing for a monitor
+   * name, a path and a PromQL expression at once could carry neither its own label nor its own
+   * validation. Each variant is its own field instead, and this is what hides the rest.
+   */
+  readonly showWhen?: { readonly key: string; readonly value: ReadonlyArray<unknown> }
 }
 
 export interface ApiFeature {
@@ -70,6 +90,13 @@ export interface ApiFeature {
    * is what keeps the client from having to know which endpoint belongs to which feature.
    */
   readonly collection?: string
+  /**
+   * Id of the feature this one is configured inside rather than beside, shown one level in when
+   * that one is open. For a switch that belongs to another feature's rows and would read as
+   * unrelated on a line of its own. A parent that is not on screen leaves it at the top level,
+   * so a search matching only the child still finds it.
+   */
+  readonly parent?: string
   /** How many rows exist, and how many of those are on */
   readonly count: number
   readonly enabledCount: number
@@ -105,4 +132,10 @@ export type ApiRow = Record<string, unknown> & {
   enabled?: boolean
   /** Built-in rows the admin view shows but cannot edit */
   readonly?: boolean
+  /**
+   * How this entry last answered, on a feature whose rows can carry a liveness binding. Null
+   * where nothing is bound or nothing has answered yet, so the list draws the same dot the
+   * portal does without asking a second endpoint for it.
+   */
+  healthReading?: ApiHealthReading | null
 }

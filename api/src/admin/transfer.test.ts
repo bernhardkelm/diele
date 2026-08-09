@@ -266,6 +266,60 @@ test('a card pointing at an icon the file did not carry keeps its row and loses 
   assert.equal(config.cards[0]?.iconId, null)
 })
 
+// A ref is built from a row id, and a liveness binding is keyed by ref. Renumbering on the way
+// in would restore a portal whose dots point at whichever card happened to land on that number.
+test('a round trip keeps the ids the refs are built from', async () => {
+  await seed()
+  seedConnector()
+
+  const before = await api.get<ExportPayload>('/api/admin/export')
+  await api.post('/api/admin/import', before)
+  const after = await api.get<ExportPayload>('/api/admin/export')
+
+  assert.equal(after.cards[0]?.id, before.cards[0]?.id)
+  assert.equal(after.sites[0]?.id, before.sites[0]?.id)
+  assert.equal(after.connectors[0]?.id, before.connectors[0]?.id)
+})
+
+test('a round trip restores which source reports liveness for what', async () => {
+  await seed()
+  const exported = await api.get<ExportPayload>('/api/admin/export')
+  const cardId = Number(exported.cards[0]?.id)
+
+  await api.request(`/api/admin/links/card/${cardId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ label: 'Grafana', health: 'http', healthPath: '/healthz' }),
+  })
+
+  const withBinding = await api.get<ExportPayload>('/api/admin/export')
+  assert.deepEqual(withBinding.healthBindings, [
+    { ref: `card:${cardId}`, provider: 'http', connectorId: null, selector: '/healthz' },
+  ])
+
+  await api.post('/api/admin/import', withBinding)
+
+  const rows = await api.get<{ rows: Array<Record<string, unknown>> }>('/api/admin/links/card')
+  assert.equal(rows.rows[0]?.health, 'http')
+  assert.equal(rows.rows[0]?.healthPath, '/healthz')
+})
+
+// An imported document can name a card it does not carry, and the ref is not a foreign key.
+test('a binding whose target the file did not carry is dropped rather than restored', async () => {
+  const exported = await api.get<ExportPayload>('/api/admin/export')
+
+  await api.post('/api/admin/import', {
+    ...exported,
+    cards: [],
+    sites: [],
+    healthBindings: [
+      { ref: 'card:4242', provider: 'http', connectorId: null, selector: '/healthz' },
+    ],
+  })
+
+  const after = await api.get<ExportPayload>('/api/admin/export')
+  assert.deepEqual(after.healthBindings, [])
+})
+
 // Version 1 files predate connectors and simply carry none.
 test('a version 1 file still applies', async () => {
   const response = await api.post<{ ok: boolean }>('/api/admin/import', {
@@ -282,7 +336,8 @@ test('a version 1 file still applies', async () => {
 })
 
 test('a file from a version this build does not know is refused rather than half applied', async () => {
-  for (const version of [0, 4, 99, 'two']) {
+  // Relative to the current version, so bumping it does not turn this into a test of nothing
+  for (const version of [0, VERSION + 1, 99, 'two']) {
     const response = await api.request('/api/admin/import', {
       method: 'POST',
       body: JSON.stringify({ version, cards: [] }),

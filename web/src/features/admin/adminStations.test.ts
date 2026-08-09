@@ -218,6 +218,46 @@ describe('buildStations', () => {
   })
 })
 
+describe('buildStations, a feature configured inside another', () => {
+  const cards = feature()
+  const health = feature({
+    id: 'health',
+    label: 'Liveness',
+    parent: 'cards',
+    switchOnly: true,
+    toggleable: true,
+  })
+
+  it('is left out of the top level while its parent is on screen', () => {
+    const keys = buildStations([cards, health], undefined, [], []).map((station) => station.key)
+
+    expect(keys).toEqual([featureKey('cards')])
+  })
+
+  // Settings for the whole section, so a switch found below the rows it governs would read as
+  // belonging to the last of them.
+  it('leads its parent’s rows, ahead of the add line', () => {
+    const keys = buildStations([cards, health], 'cards', [row(1)], []).map((station) => station.key)
+
+    expect(keys).toEqual([featureKey('cards'), featureKey('health'), 'add:cards', 'entry:cards:1'])
+  })
+
+  it('sits at the depth of the rows it is listed among', () => {
+    const nested = buildStations([cards, health], 'cards', [], []).find(
+      (station) => station.key === featureKey('health'),
+    )
+
+    expect(nested).toMatchObject({ kind: 'feature', nested: true })
+  })
+
+  // A term matching the child alone would otherwise leave it nowhere at all.
+  it('stands on its own when its parent is not in the list', () => {
+    const keys = buildStations([health], undefined, [], []).map((station) => station.key)
+
+    expect(keys).toEqual([featureKey('health')])
+  })
+})
+
 describe('rowActionsFor', () => {
   it('offers nothing when nothing holds focus', () => {
     expect(rowActionsFor(undefined)).toEqual([])
@@ -267,6 +307,22 @@ describe('rowActionsFor', () => {
     ).filter((s) => s.kind === 'entry')
 
     expect(rowActionsFor(fetching[0]).map((action) => action.id)).toContain('sync')
+  })
+
+  // The same question one row down: a bound entry can be asked again whether it is up, which is
+  // what says whether the path or the query someone just typed reaches anything.
+  it('offers a probe on a row that carries a liveness binding', () => {
+    const bound = buildStations([feature()], 'cards', [row(1, { health: 'http' })], []).filter(
+      (s) => s.kind === 'entry',
+    )
+    const unbound = buildStations([feature()], 'cards', [row(1, { health: null })], []).filter(
+      (s) => s.kind === 'entry',
+    )
+
+    expect(rowActionsFor(bound[0]).find((action) => action.id === 'sync')).toMatchObject({
+      label: 'probe',
+    })
+    expect(rowActionsFor(unbound[0]).map((action) => action.id)).not.toContain('sync')
   })
 
   // The word is the state it is in, not the state it would move to.

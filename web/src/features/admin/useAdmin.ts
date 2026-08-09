@@ -208,14 +208,33 @@ async function run(action: () => Promise<unknown>, label?: string): Promise<bool
 }
 
 /**
- * Returns what to say while a save runs, which is only worth saying for a feature whose save
- * reaches an outside source: everything else answers before a word could be read.
+ * Returns what to say while a save runs, which is only worth saying for a save that reaches an
+ * outside source: everything else answers before a word could be read.
+ *
+ * A liveness binding makes an ordinary row one of those, so the values decide as well as the
+ * feature does - a card bound to a probe is checked on save the way a connector's token is.
+ * @param {Record<string, unknown> | undefined} values - What the form is submitting
  * @returns {string | undefined} - The word, or undefined for a write that stays local
  */
-function probeLabel(): string | undefined {
+function probeLabel(values?: Record<string, unknown>): string | undefined {
   const feature = features.value.find((entry) => entry.id === expanded.value)
 
-  return feature?.capabilities?.length ? 'checking' : undefined
+  if (feature?.capabilities?.length) {
+    return 'checking'
+  }
+
+  return values?.health ? 'checking' : undefined
+}
+
+/**
+ * Returns what to say while a row action fetches. The same action word on both, since a
+ * connector re-reads its source and a bound entry re-asks whether it is up.
+ * @returns {string} - The word
+ */
+function syncLabel(): string {
+  const feature = features.value.find((entry) => entry.id === expanded.value)
+
+  return feature?.capabilities?.includes('entries') ? 'syncing' : 'probing'
 }
 
 /**
@@ -305,7 +324,7 @@ export function useAdmin(): AdminSource {
     create: (values) =>
       run(
         () => call(collectionOf(expanded.value), { method: 'POST', body: JSON.stringify(values) }),
-        probeLabel(),
+        probeLabel(values),
       ),
     update: (id, values) =>
       run(
@@ -314,7 +333,7 @@ export function useAdmin(): AdminSource {
             method: 'PATCH',
             body: JSON.stringify(values),
           }),
-        probeLabel(),
+        probeLabel(values),
       ),
     setFeatureEnabled: (featureId, enabled) =>
       run(() =>
@@ -332,7 +351,10 @@ export function useAdmin(): AdminSource {
       ),
     remove: (id) => run(() => call(`${collectionOf(expanded.value)}/${id}`, { method: 'DELETE' })),
     sync: (id) =>
-      run(() => call(`${collectionOf(expanded.value)}/${id}/sync`, { method: 'POST' }), 'syncing'),
+      run(
+        () => call(`${collectionOf(expanded.value)}/${id}/sync`, { method: 'POST' }),
+        syncLabel(),
+      ),
     move: (id, delta) =>
       run(() => {
         const current = rows.value.map((row) => row.id)

@@ -1,15 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
 import StatusDot from '@/components/StatusDot.vue'
-import type { ServiceState } from '@/helpers/uptime'
+import type { HealthState } from '@diele/common'
 
 /**
  * Mounts the dot for one status.
- * @param {ServiceState} state - State to render
+ * @param {HealthState} state - State to render
  * @param {number | undefined} uptime - Share of the last 24h the monitor was up
  * @returns {ReturnType<typeof mount>} - The mounted dot
  */
-function dot(state: ServiceState, uptime?: number) {
+function dot(state: HealthState, uptime?: number) {
   return mount(StatusDot, { props: { status: { state, uptime }, name: 'Grafana' } })
 }
 

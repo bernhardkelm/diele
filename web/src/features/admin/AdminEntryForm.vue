@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref, useTemplateRef } from 'vue'
+import { computed, onMounted, ref, useTemplateRef } from 'vue'
 import AdminField from '@/features/admin/AdminField.vue'
 import LoadingDots from '@/components/LoadingDots.vue'
 import type { ApiFeature, ApiRow } from '@diele/common'
@@ -51,6 +51,15 @@ function seed(): Record<string, unknown> {
   )
 }
 
+// A field that depends on another is drawn only while that one holds a value it applies to. What
+// a decorator's selector means depends on which decorator was picked, so the variants are
+// separate fields rather than one box standing for all of them.
+const visible = computed(() =>
+  props.feature.fields.filter(
+    (field) => !field.showWhen || field.showWhen.value.includes(values.value[field.showWhen.key]),
+  ),
+)
+
 /**
  * Returns whether a field already holds a stored credential, which is all the API reports.
  * @param {string} key - Field being rendered
@@ -86,7 +95,7 @@ onMounted(() => {
     @keydown.esc.stop.prevent="emit('cancel')"
   >
     <AdminField
-      v-for="field in feature.fields"
+      v-for="field in visible"
       :key="field.key"
       :field="field"
       :model-value="values[field.key]"

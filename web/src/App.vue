@@ -17,12 +17,12 @@ import { useEntrySort } from '@/composables/useEntrySort'
 import { useGridColumns } from '@/composables/useGridColumns'
 import { ROUTES } from '@/composables/routes'
 import { useHashRoute } from '@/composables/useHashRoute'
+import { useHealth } from '@/composables/useHealth'
 import { useHiddenEntries } from '@/composables/useHiddenEntries'
 import { useLocalhostStatus } from '@/composables/useLocalhostStatus'
 import { usePortalConfig } from '@/composables/usePortalConfig'
 import { usePortalLauncher } from '@/features/portal/usePortalLauncher'
 import { useSearchEngine } from '@/features/portal/useSearchEngine'
-import { useServiceStatus } from '@/composables/useServiceStatus'
 import { useSession } from '@/composables/useSession'
 import { shortcutFor } from '@/features/portal/useLauncher'
 import type { PortalTarget } from '@/types/portal'
@@ -137,7 +137,7 @@ const {
   signOut: () => void signOut(),
 })
 
-const { statusFor } = useServiceStatus(() => cards.value)
+const { readingFor } = useHealth()
 const { isLive } = useLocalhostStatus(() => sites.value)
 const altHeld = useAltHeld()
 </script>
@@ -182,6 +182,7 @@ const altHeld = useAltHeld()
         :sites="sections.suggestions"
         :active-index="highlight"
         :is-live="isLive"
+        :reading-for="readingFor"
         :query="query"
         @launch="recordLaunch($event)"
       />
@@ -192,7 +193,7 @@ const altHeld = useAltHeld()
           :key="entry.item.ref"
           :service="entry.item"
           :shortcut="altHeld ? shortcutFor(position) : undefined"
-          :status="statusFor(entry.item)"
+          :status="readingFor(entry.item.ref)"
           :active="entry.index === highlight"
           :query="query"
           @launch="recordLaunch(entry.item)"

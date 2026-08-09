@@ -249,21 +249,38 @@ The feature carries a switch of its own, which is not the same as having no rows
 request per port on every load, so an instance that is not a development machine turns it off
 outright. It is **off by default**; `settings` holds the flag under `localhost.enabled`.
 
+This is the one probe that stays in the browser, and it has to: the machine holding the browser is
+the only one that can see these ports. It is also why it reports only what answered and never marks
+anything down - a cross-origin `no-cors` request comes back opaque, so reaching the port at all is
+the entire question it can ask. Everything else the portal probes runs server-side, where the
+status code is readable; see [Liveness](#liveness).
+
 ## Export and import
 
 `GET /api/admin/export` returns cards, saved sites, search engines, slash commands, local ports,
-icons and settings as one versioned document, for backup, for moving a configuration between
-deployments, or for seeding a new one. `POST /api/admin/import` **replaces** all of it, in a single
-transaction so a rejected row cannot leave half a configuration behind.
+icons, connectors, liveness bindings and settings as one versioned document, for backup, for moving
+a configuration between deployments, or for seeding a new one. `POST /api/admin/import`
+**replaces** all of it, in a single transaction so a rejected row cannot leave half a configuration
+behind.
 
-Two things the import does deliberately: it re-sanitises every icon, because the file may have been
-edited or come from somewhere else and is about to be inlined; and it drops an `iconId` the file
-did not carry, since losing a logo beats failing the whole import on a foreign key.
+Three things the import does deliberately: it re-sanitises every icon, because the file may have
+been edited or come from somewhere else and is about to be inlined; it drops an `iconId` the file
+did not carry, since losing a logo beats failing the whole import on a foreign key; and it drops a
+liveness binding whose target the file did not carry, since a ref is not a foreign key and nothing
+would otherwise catch it.
 
-Connector credentials are **not** in the export and must stay out of it. An export is a file that
-gets mailed around and committed, which is the last place a token belongs. A connector comes back
-**off** for the same reason: without its credential it would only spend the next interval failing,
-and entering the token is what turns it back on.
+**Row ids travel and are restored as they were.** Cards, saved sites and connectors keep their ids,
+the way icons always have, because a ref is built from an id and the liveness bindings are keyed by
+ref. Renumbering on arrival would restore a portal whose dots point at whichever card happened to
+land on that number. A file from before this carried no ids and is numbered on the way in, which is
+safe because it carries no bindings either.
+
+Connector credentials **do** travel, still sealed under the key that wrote them, never in the
+clear. What opens them is `DIELE_SECRET_KEYS`, which belongs to the deployment rather than to the
+file: an instance holding the same key restores a working connector, and one holding a different
+key finds nothing it can open. A connector whose credentials did not open comes back **off**,
+because without them it would only spend the next interval failing, and entering the token is what
+turns it back on.
 
 ## Endpoints
 
@@ -280,6 +297,7 @@ and entering the token is what turns it back on.
 | `GET` | `/api/config` | brand, cards, sites, engines and settings in one payload |
 | `GET` | `/api/entries` | what the connectors produced, one line per source saying when it last synced, and what is hidden |
 | `PUT` | `/api/entries/hidden` | hide an entry or bring it back, for yourself or for everyone |
+| `GET` | `/api/health` | how each bound entry last answered, and when to ask again |
 | `GET` | `/api/admin/features` | the registry the admin view renders from |
 | `GET`&nbsp;`POST` | `/api/admin/links/:kind` | list and create cards (`card`) or saved sites (`site`) |
 | `PATCH`&nbsp;`DELETE` | `/api/admin/links/:kind/:id` | edit and remove one |
@@ -356,13 +374,12 @@ what clock, which is a different question and the one the runtime cares about:
 | `search` | a keystroke | per query | nothing, silently |
 
 They are **read off the methods a module implements** rather than declared, so a module cannot claim
-something it does not do. Only `entries` is built; `health`, `signals` and `search` are the seams
-Uptime Kuma, Prometheus and a document store land on.
+something it does not do. `entries` and `health` are built; `signals` and `search` are the seams a
+banner and a document store land on.
 
 Connectors that are agreed on but not written yet are listed too, with `unavailable` set and nothing
-behind them: Uptime Kuma, Prometheus, Grafana and Notion, in the order they are meant to
-land. Each already declares the capabilities it will answer to, which is where the shape it is
-expected to take is written down.
+behind them: Grafana and Notion, in the order they are meant to land. Each already declares the
+capabilities it will answer to, which is where the shape it is expected to take is written down.
 
 `unavailable` carries the sentence; `unavailableReason` says which of two things it is, so the
 panel can label the row without reading the sentence:
@@ -377,9 +394,33 @@ A connector with no usable encryption key is `blocked`, not `planned`: nothing i
 deployment is missing `DIELE_SECRET_KEYS`, and calling that "soon" tells someone to wait for
 what is already there.
 
-Uptime and Prometheus are `health`, not `entries`: they decorate entries someone else produced
-rather than supplying any. Their binding is keyed by **ref**, so one table can bind a card, a saved
-site and a connector-produced repo alike.
+### Liveness
+
+Uptime Kuma and Prometheus are `health`, not `entries`: they **decorate** entries someone else
+produced rather than supplying any. `produces` is empty, `collect` is absent, and both fall out of
+the sync scheduler and the row editor without either having to know about them.
+
+`health_bindings` is keyed by **ref** and its primary key is that ref alone, so one table binds a
+card, a saved site and a connector-produced repo, and every entry has exactly one source. The
+built-in HTTP probe sits in the same table under the provider `http`, with no connector behind it
+at all - it needs no source, no credential and no row.
+
+What identifies a target belongs to whatever resolves it, so a module declares its own
+`healthSelectorField` and the card editor renders it. The dropdown's options are built per request
+from the decorators that actually have an enabled instance, and each selector field carries a
+`showWhen` naming the options it applies to. A decorator this build registers but no instance of
+is offered **disabled**: "there is no such thing" and "it is not set up yet" are different answers.
+
+Resolution runs on read with a per-provider TTL, single-flighted and stale-while-revalidate, so N
+tabs and M people are one request upstream and nobody ever waits on a source. Readings live in
+memory and are **never persisted** - the opposite call from entries, and deliberately. A repo list
+a quarter of an hour old beats an empty section; an `up` a quarter of an hour old is not old, it
+is wrong. Anything past 3× its own interval is dropped rather than served.
+
+A source that fails yields no readings rather than a map of `down`: a decorator that cannot be
+reached knows nothing about the services it watches. `detail` is admin-only for the same reason a
+sync error is narrowed - a monitor name or a label set says which internal hosts exist and how
+they answer.
 
 ### Refs
 

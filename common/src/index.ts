@@ -32,9 +32,11 @@ export type {
 export type {
   ApiFeature,
   ApiFieldSpec,
+  ApiFieldOption,
   ApiRow,
   Capability,
   DisplayMode,
   InputMode,
 } from './features.js'
+export type { ApiHealth, ApiHealthReading, HealthState } from './health.js'
 export type { ApiStatus } from './status.js'

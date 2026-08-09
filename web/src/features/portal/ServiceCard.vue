@@ -4,14 +4,14 @@ import HighlightedText from '@/components/HighlightedText.vue'
 import StatusDot from '@/components/StatusDot.vue'
 import { useRevealOnActive } from '@/composables/useRevealOnActive'
 import type { CardTarget } from '@/types/portal'
-import type { ServiceStatus } from '@/helpers/uptime'
+import type { ApiHealthReading } from '@diele/common'
 
 interface ServiceCardProps {
   service: CardTarget
   /** Digit key that launches this card, 1-9 then 0; omitted past the tenth card */
   shortcut?: string
-  /** Monitor state; omitted for unmonitored cards and whenever Kuma is unreachable */
-  status?: ServiceStatus
+  /** How it last answered; omitted for an unbound card and whenever its source is unreachable */
+  status?: ApiHealthReading
   /** Whether the launcher highlight currently sits on this card */
   active?: boolean
   /** Current search term, marked up in the card's name */

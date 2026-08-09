@@ -536,6 +536,7 @@ onMounted(() => void loadFeatures())
             :focused="index === activeIndex"
             :query="query"
             :busy="busy"
+            :nested="station.nested"
             :refreshing="refreshing && expanded === station.feature.id"
             :actions="rowActionsFor(station)"
             :active-action="index === activeIndex ? activeAction : 0"

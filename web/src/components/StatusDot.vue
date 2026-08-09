@@ -1,16 +1,16 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { ServiceState, ServiceStatus } from '@/helpers/uptime'
+import type { ApiHealthReading, HealthState } from '@diele/common'
 
 interface StatusDotProps {
-  status: ServiceStatus
+  status: ApiHealthReading
   /** Service name, used to build the screen reader label */
   name: string
 }
 
 const props = defineProps<StatusDotProps>()
 
-const WORDING: Record<ServiceState, string> = {
+const WORDING: Record<HealthState, string> = {
   up: 'up',
   down: 'down',
   pending: 'pending',
@@ -19,10 +19,13 @@ const WORDING: Record<ServiceState, string> = {
 
 const label = computed(() => {
   const state = `${props.name}: ${WORDING[props.status.state]}`
+  const detail = props.status.detail ? ` (${props.status.detail})` : ''
+
   if (props.status.uptime === undefined) {
-    return state
+    return `${state}${detail}`
   }
-  return `${state}, ${(props.status.uptime * 100).toFixed(2)}% uptime over 24h`
+
+  return `${state}, ${(props.status.uptime * 100).toFixed(2)}% uptime over 24h${detail}`
 })
 </script>
 

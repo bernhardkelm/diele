@@ -15,6 +15,7 @@ next tab has it.
 - **One bar over everything you own** - cards, saved sites, repos and local ports, ranked above the web
 - **A keyboard the whole way down** - nothing is reachable only by mouse
 - **Connectors** - GitLab and GitHub repos sync in on a timer, each with their own quick jumps
+- **Liveness** - a dot per card, from an HTTP probe, Uptime Kuma or a Prometheus query
 - **An admin panel, not a config file** - every row edited in the page, the whole configuration exportable as one document
 - **Three ways to sign in** - OpenID Connect, local accounts, or a dev mode while you build
 - **One container** - one port, one volume, and a database that is a file
@@ -42,6 +43,9 @@ next tab has it.
     - [Connectors](#connectors)
       - [GitLab](#gitlab)
       - [GitHub](#github)
+      - [Uptime Kuma](#uptime-kuma)
+      - [Prometheus](#prometheus)
+    - [Liveness](#liveness)
     - [Planned](#planned)
   - [Installation](#installation)
     - [Docker](#docker)
@@ -205,6 +209,10 @@ revoked token leaves the last good sync standing rather than wiping it. A connec
 once its settings actually reach the source, so one cannot be stored in a state where every run is
 going to fail.
 
+Some connectors bring no rows at all and **decorate** the ones already there: Uptime Kuma and
+Prometheus report [liveness](#liveness) rather than entries, so they are configured the same way
+and show up in a different place.
+
 Set `DIELE_SECRET_KEYS` before adding one: without a key there is nowhere safe to put a token, and
 the panel says so instead of taking it.
 
@@ -250,6 +258,67 @@ plain links to GitHub, not API calls, which is why the permission set stays this
 
 ![The GitHub connector, the same form from a different declaration](docs/images/connector-github.png)
 
+#### Uptime Kuma
+
+| field | |
+| --- | --- |
+| **Instance** | origin only, where Uptime Kuma itself is served |
+| **API key** | stored encrypted, never returned |
+
+Create one under *Settings → API Keys*. It reads Kuma's Prometheus `/metrics` endpoint, which
+carries **every** monitor whether or not a status page publishes it, so nothing has to be made
+public to be used here.
+
+Bind a card to it and leave **Monitor** blank to match by the card's own hostname, or name the
+monitor when the two do not line up. `/metrics` reports the current state and no uptime
+percentage, so the dot has a state and no figure beside it.
+
+#### Prometheus
+
+| field | |
+| --- | --- |
+| **Instance** | origin only; the query api is found under it |
+| **Bearer token** | optional, only where the instance asks for one; stored encrypted |
+
+Each bound entry carries a **PromQL expression** of its own, run as an instant query: non-zero is
+up, zero is down, and a result with no samples leaves the dot off rather than turning it red - a
+query matching nothing is a mistake in the query, not an outage.
+
+That means one request per bound entry on every refresh, so this is the connector to be sparing
+with. An unauthenticated instance needs no `DIELE_SECRET_KEYS` at all, because there is no
+credential to store.
+
+### Liveness
+
+The dot on a card or a saved site. Every entry picks **one** source, from a dropdown in its own
+editor that offers whatever is configured: the built-in HTTP probe, or any Uptime Kuma or
+Prometheus connector you have added. The field below it changes with the choice, because a path,
+a monitor name and a PromQL expression are not the same thing.
+
+The **HTTP probe** needs nothing configured. It requests the entry's url and calls a `2xx` up.
+Everything else is down, redirects included: a `302` to a login page is the most common way for a
+service to look alive while answering nothing.
+
+Its one field takes either a **path**, resolved under the entry's url, or a **whole url**, which
+replaces it. The second is for a service this server reaches under a different address than the
+one on the card - an in-cluster name, or a port the public url does not expose.
+
+Probing happens on the server rather than in the browser, which is what makes the status code
+readable at all - a cross-origin request from the page comes back opaque, with a `200`, a `500`
+and a login redirect all indistinguishable. It also means one request per entry however many tabs
+are open. Local ports are the deliberate exception and stay a browser probe, because the machine
+holding the browser is the only one that can see them.
+
+Saving a binding resolves it there and then, the way a connector's token is checked on save, so
+the panel says whether it works while you are still looking at it - and unlike a connector it
+cannot refuse the save, because a service being down is a fact about the service. The admin list
+carries the same dot each entry shows on the portal, and `s` asks any bound row again.
+
+Readings are held in memory and never written down. A quarter-hour-old repo list is worth keeping;
+a quarter-hour-old *"up"* is not old, it is wrong. So a restart shows no dots until the first
+refresh answers, an unreachable source drops its dots rather than reddening them, and the whole
+feature has a switch of its own, inside **Cards** in the panel.
+
 ### Planned
 
 Listed in the admin panel already, each declaring the capabilities it will answer to, which is
@@ -257,8 +326,7 @@ where the shape it is expected to take is written down.
 
 | | |
 | --- | --- |
-| **Uptime Kuma** | monitor states, shown as a dot on the cards they belong to |
-| **Prometheus** | firing alerts at the top of the page, and card states from a query |
+| **Alert banners** | Prometheus and Alertmanager alerts at the top of the page; the connector reports liveness today and the `signals` seam is where the banner lands |
 | **Grafana** | dashboards, suggested as results when the term matches them |
 | **Notion** | pages from a private workspace, suggested as you type |
 | **Users and roles** | only the first account exists today; the `groups` claim is already carried onto the session, so the seam is there |

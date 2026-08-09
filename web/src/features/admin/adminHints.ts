@@ -83,6 +83,13 @@ export function hintsFor(
     hints.push({ text: 'd on/off', key: true })
   }
 
+  // Named by the action's own word, because the same key asks a connector to sync and a bound
+  // entry to probe, and the hint is where the difference is worth saying.
+  const sync = actions.find((action) => action.id === 'sync')
+  if (sync) {
+    hints.push({ text: `s ${sync.label}s`, key: true })
+  }
+
   // only where there is somewhere to move to: a list of one, or an end of it, has neither
   if (actions.some((action) => (action.id === 'up' || action.id === 'down') && !action.disabled)) {
     hints.push({ text: 'alt+↑↓ reorders', key: true })

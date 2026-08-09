@@ -22,6 +22,8 @@ interface AdminFeatureRowProps {
   busy?: boolean
   /** Whether this feature's rows are being reloaded behind the ones already on screen */
   refreshing?: boolean
+  /** Whether it sits inside another feature's rows rather than in the top-level list */
+  nested?: boolean
   actions: ReadonlyArray<RowAction>
   /** Index the left and right keys selected, 0 being the row itself */
   activeAction?: number
@@ -31,10 +33,11 @@ const props = defineProps<AdminFeatureRowProps>()
 
 const emit = defineEmits<{ run: [id: RowActionId] }>()
 
+// Read once: a station's depth is fixed by its key, and the list keys each row by that.
 const { attrs: stationAttrs, ownsEvent } = useStationRow({
   stationKey: () => props.stationKey,
   active: () => props.active,
-  level: 1,
+  level: props.nested ? 2 : 1,
 })
 
 const off = computed(() => Boolean(props.feature.toggleable) && !props.feature.enabled)
@@ -96,7 +99,7 @@ function onKeydown(event: KeyboardEvent): void {
   <li
     class="feature row-shell row-marker-focus row-grammar"
     v-bind="stationAttrs"
-    :class="{ 'feature--off': off }"
+    :class="{ 'feature--off': off, 'feature--nested': nested }"
     :aria-expanded="feature.unavailable || feature.switchOnly ? undefined : expanded"
     :aria-disabled="feature.unavailable ? true : undefined"
     @keydown="onKeydown"
@@ -143,6 +146,13 @@ function onKeydown(event: KeyboardEvent): void {
    only the state below */
 .feature[aria-disabled='true'] {
   cursor: default;
+}
+
+/* see AdminEntryRow .entry: a feature configured inside another one sits at the depth of that
+   one's rows, so the two read as one list rather than as a heading among entries */
+.feature--nested {
+  --row-gutter: calc(var(--diele-space-6) * 2);
+  --row-marker-left: var(--diele-space-8);
 }
 
 /* see ScrollingText: it owns the clipping, because it has to lift it while looping */

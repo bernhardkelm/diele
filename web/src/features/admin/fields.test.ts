@@ -91,6 +91,23 @@ describe('AdminSelectField', () => {
     expect(wrapper.emitted('update:modelValue')).toEqual([['http']])
   })
 
+  // A decorator this build knows but no instance of is worth showing: "there is no such thing"
+  // and "it is not set up yet" are different answers.
+  it('shows a choice that exists but cannot be taken, without letting it be taken', () => {
+    const wrapper = mount(AdminSelectField, {
+      props: {
+        modelValue: 'http',
+        options: [...options, { value: 'uptime-kuma', label: 'Uptime Kuma', disabled: true }],
+      },
+    })
+
+    const rendered = wrapper.findAll('option')
+
+    expect(rendered.map((option) => option.text())).toContain('Uptime Kuma')
+    expect((rendered.at(-1)!.element as HTMLOptionElement).disabled).toBe(true)
+    expect((rendered[0]!.element as HTMLOptionElement).disabled).toBe(false)
+  })
+
   it('copes with a feature that declared no options at all', () => {
     const wrapper = mount(AdminSelectField, { props: { modelValue: null, options: [] } })
 

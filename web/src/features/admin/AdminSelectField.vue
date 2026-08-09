@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import type { ApiFieldOption } from '@diele/common'
 
 interface AdminSelectFieldProps {
   /** Stored value, or null while the field has never been set */
   modelValue: unknown
-  options: ReadonlyArray<{ value: string; label: string }>
+  options: ReadonlyArray<ApiFieldOption>
   disabled?: boolean
 }
 
@@ -23,7 +24,13 @@ const value = computed({
 <template>
   <span class="select">
     <select v-model="value" class="select__input" :disabled="disabled">
-      <option v-for="option in options" :key="option.value" :value="option.value">
+      <!-- a disabled option is a choice that exists but is not set up, which is worth saying -->
+      <option
+        v-for="option in options"
+        :key="option.value"
+        :value="option.value"
+        :disabled="option.disabled"
+      >
         {{ option.label }}
       </option>
     </select>

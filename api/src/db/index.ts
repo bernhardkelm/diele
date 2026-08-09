@@ -5,10 +5,11 @@ import { config } from '#config.js'
 import { migrate } from './migrate.js'
 import { init } from './migrations/001_init.js'
 import { sessionIdToken } from './migrations/002_session_id_token.js'
+import { healthBindings } from './migrations/003_health_bindings.js'
 
 export type DB = Database.Database
 
-const MIGRATIONS = [init, sessionIdToken]
+const MIGRATIONS = [init, sessionIdToken, healthBindings]
 
 let db: DB | null = null
 

@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { useHealth, resetHealth } from '@/composables/useHealth'
 import { useLocalhostStatus } from '@/composables/useLocalhostStatus'
-import { useServiceStatus } from '@/composables/useServiceStatus'
 import { withSetup } from '@/testing/withSetup'
-import type { CardTarget, SuggestionTarget } from '@/types/portal'
+import type { SuggestionTarget } from '@/types/portal'
 
 /**
  * Builds a saved site pointing wherever the test needs.
@@ -14,18 +14,11 @@ function site(ref: string, url: string): SuggestionTarget {
   return { ref, kind: 'suggestion', name: ref, url }
 }
 
-const card: CardTarget = {
-  ref: 'card:1',
-  kind: 'card',
-  name: 'Grafana',
-  url: 'https://grafana.example.com',
-  icon: '',
-  color: 'currentColor',
-}
-
 beforeEach(() => {
   vi.restoreAllMocks()
   vi.spyOn(console, 'warn').mockImplementation(() => {})
+  // The readings are shared at module scope, so one test's would otherwise be the next one's
+  resetHealth()
 })
 
 afterEach(() => {
@@ -102,88 +95,75 @@ describe('useLocalhostStatus', () => {
   })
 })
 
-describe('useServiceStatus', () => {
-  const summary = {
-    publicGroupList: [
-      { monitorList: [{ id: 1, name: 'Grafana', url: 'https://grafana.example.com' }] },
-    ],
-  }
-  const heartbeats = { heartbeatList: { '1': [{ status: 1 }] }, uptimeList: { '1_24': 0.99 } }
-
+describe('useHealth', () => {
   /**
-   * Answers both status page endpoints.
-   * @param {object} options - Status to answer with
+   * Answers the health endpoint with the given readings.
+   * @param {object} options - Payload and status to answer with
    * @returns {ReturnType<typeof vi.fn>} - The stubbed fetch
    */
-  function stubKuma(options: { status?: number } = {}) {
-    return vi.fn((input: RequestInfo | URL) =>
+  function stubHealth(options: { readings?: Record<string, unknown>; status?: number } = {}) {
+    return vi.fn(() =>
       Promise.resolve(
-        new Response(JSON.stringify(String(input).includes('heartbeat') ? heartbeats : summary), {
-          status: options.status ?? 200,
-        }),
+        new Response(
+          JSON.stringify({
+            readings: options.readings ?? { 'card:1': { state: 'up' } },
+            pollSeconds: 60,
+          }),
+          { status: options.status ?? 200 },
+        ),
       ),
     )
   }
 
-  it('resolves a card to what its monitor reports', async () => {
-    vi.stubGlobal('fetch', stubKuma())
+  it('reports how a bound entry answered', async () => {
+    vi.stubGlobal('fetch', stubHealth({ readings: { 'card:1': { state: 'up', uptime: 0.99 } } }))
 
-    const { result } = withSetup(() => useServiceStatus(() => [card]))
-    await vi.waitFor(() => expect(result.statusFor(card)).toBeDefined())
+    const { result } = withSetup(() => useHealth())
+    await vi.waitFor(() => expect(result.readingFor('card:1')).toBeDefined())
 
-    expect(result.statusFor(card)).toEqual({ state: 'up', uptime: 0.99 })
+    expect(result.readingFor('card:1')).toEqual({ state: 'up', uptime: 0.99 })
   })
 
-  it('leaves an unmonitored card without a dot', async () => {
-    vi.stubGlobal('fetch', stubKuma())
-    const other: CardTarget = {
-      ...card,
-      ref: 'card:2',
-      name: 'Other',
-      url: 'https://other.example',
-    }
+  it('leaves an unbound entry without a dot', async () => {
+    vi.stubGlobal('fetch', stubHealth())
 
-    const { result } = withSetup(() => useServiceStatus(() => [card, other]))
-    await vi.waitFor(() => expect(result.statusFor(card)).toBeDefined())
+    const { result } = withSetup(() => useHealth())
+    await vi.waitFor(() => expect(result.readingFor('card:1')).toBeDefined())
 
-    expect(result.statusFor(other)).toBeUndefined()
+    expect(result.readingFor('card:2')).toBeUndefined()
   })
 
-  // A portal that cannot reach Kuma shows no dots rather than a wall of red.
-  it('drops every dot when the status page cannot be read', async () => {
-    vi.stubGlobal('fetch', stubKuma({ status: 404 }))
+  // The API drops anything genuinely stale itself, so what is on screen is current or gone.
+  it('keeps the last readings when a poll fails', async () => {
+    const fetchMock = stubHealth()
+    vi.stubGlobal('fetch', fetchMock)
 
-    const { result } = withSetup(() => useServiceStatus(() => [card]))
-    await vi.waitFor(() => expect(fetch).toHaveBeenCalled())
+    const { result } = withSetup(() => useHealth())
+    await vi.waitFor(() => expect(result.readingFor('card:1')).toBeDefined())
 
-    expect(result.statusFor(card)).toBeUndefined()
-  })
+    fetchMock.mockRejectedValueOnce(new Error('offline'))
+    document.dispatchEvent(new Event('visibilitychange'))
+    await vi.waitFor(() => expect(fetchMock.mock.calls.length).toBeGreaterThan(1))
 
-  it('drops every dot when the request fails outright', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline')))
-
-    const { result } = withSetup(() => useServiceStatus(() => [card]))
-    await vi.waitFor(() => expect(fetch).toHaveBeenCalled())
-
-    expect(result.statusFor(card)).toBeUndefined()
+    expect(result.readingFor('card:1')).toEqual({ state: 'up' })
   })
 
   it('polls again when the tab comes back to the front', async () => {
-    const fetchMock = stubKuma()
+    const fetchMock = stubHealth()
     vi.stubGlobal('fetch', fetchMock)
 
-    withSetup(() => useServiceStatus(() => [card]))
-    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
+    withSetup(() => useHealth())
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
 
     document.dispatchEvent(new Event('visibilitychange'))
-    await vi.waitFor(() => expect(fetchMock.mock.calls.length).toBeGreaterThan(2))
+    await vi.waitFor(() => expect(fetchMock.mock.calls.length).toBeGreaterThan(1))
   })
 
   it('stops polling once the view is gone', async () => {
-    const fetchMock = stubKuma()
+    const fetchMock = stubHealth()
     vi.stubGlobal('fetch', fetchMock)
 
-    const { wrapper } = withSetup(() => useServiceStatus(() => [card]))
+    const { wrapper } = withSetup(() => useHealth())
     await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled())
     wrapper.unmount()
 

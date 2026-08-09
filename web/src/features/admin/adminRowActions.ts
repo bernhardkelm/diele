@@ -61,6 +61,9 @@ export function rowActionsFor(station: AdminStation | undefined): ReadonlyArray<
     // Per capability rather than per connector: anything that fetches on a schedule can be
     // asked to fetch now, which is what says whether a token someone just entered works.
     const fetches = station.feature.capabilities?.includes('entries') === true
+    // The same question one row down: a bound entry can be asked again whether it is up, which
+    // is what says whether the path or the query someone just typed reaches anything.
+    const bound = Boolean(station.row.health)
 
     return [
       EDIT,
@@ -70,6 +73,7 @@ export function rowActionsFor(station: AdminStation | undefined): ReadonlyArray<
       // stands and flips it, rather than a badge and an action that read as each other
       toggleAction(station.row.enabled !== false),
       ...(fetches ? [{ id: 'sync' as const, label: 'sync' }] : []),
+      ...(!fetches && bound ? [{ id: 'sync' as const, label: 'probe' }] : []),
       { id: 'remove', label: 'del', tone: 'danger' },
     ]
   }

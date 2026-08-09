@@ -104,7 +104,10 @@ test('the compressed body is materially smaller than the original', async () => 
   const compressed = await raw('/api/config', 'br')
 
   assert.equal(identity.encoding, undefined)
-  assert.ok(identity.bytes > 1024, `payload was ${identity.bytes} bytes, too small to be compressed`)
+  assert.ok(
+    identity.bytes > 1024,
+    `payload was ${identity.bytes} bytes, too small to be compressed`,
+  )
   assert.ok(
     compressed.bytes < identity.bytes / 2,
     `brotli returned ${compressed.bytes} bytes against ${identity.bytes} uncompressed`,

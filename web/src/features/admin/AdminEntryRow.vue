@@ -4,6 +4,7 @@ import AdminEntryForm from '@/features/admin/AdminEntryForm.vue'
 import AdminRowActions from '@/features/admin/AdminRowActions.vue'
 import LoadingDots from '@/components/LoadingDots.vue'
 import ScrollingText from '@/components/ScrollingText.vue'
+import StatusDot from '@/components/StatusDot.vue'
 import { useStationRow } from '@/composables/useStationRow'
 import type { RowAction, RowActionId } from '@/features/admin/adminRowActions'
 import { detailOf, summaryOf } from '@/features/admin/adminRowText'
@@ -107,6 +108,18 @@ function onKeydown(event: KeyboardEvent): void {
     return
   }
 
+  // Only where the row has one to run, so the key is silent rather than wrong on a row that
+  // fetches nothing.
+  if (event.key === 's') {
+    const sync = props.actions.find((action) => action.id === 'sync')
+    if (sync && !sync.disabled) {
+      event.preventDefault()
+      run('sync')
+    }
+
+    return
+  }
+
   if (event.key === 'd') {
     event.preventDefault()
     run('toggle')
@@ -164,7 +177,12 @@ function onFocusout(event: FocusEvent): void {
     @focusout="onFocusout"
     @click="!editing && !row.readonly && run('edit')"
   >
-    <span class="entry__name truncate">{{ name }}</span>
+    <!-- Dot inside the label cell, so a row that has one keeps the shared columns, and after the
+         name rather than before it, so every row's text starts on the same edge. -->
+    <span class="entry__name">
+      <span class="truncate">{{ name }}</span>
+      <StatusDot v-if="row.healthReading" :status="row.healthReading" :name="name" />
+    </span>
 
     <span v-if="working" class="entry__working" role="status">{{ working }}<LoadingDots /></span>
 
@@ -239,6 +257,10 @@ function onFocusout(event: FocusEvent): void {
 }
 
 .entry__name {
+  display: flex;
+  gap: var(--diele-space-2);
+  align-items: baseline;
+  min-width: 0;
   color: var(--diele-fg);
 }
 

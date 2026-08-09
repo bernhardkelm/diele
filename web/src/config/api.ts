@@ -33,6 +33,12 @@ export function authLoginUrl(redirectTo: string, remember = false): string {
 export const ENTRIES_URL = '/api/entries'
 export const ENTRIES_HIDDEN_URL = '/api/entries/hidden'
 
+// How each bound entry last answered, resolved by the API rather than here: a probe run from the
+// browser reads an opaque response whose status is 0, so a 200 and a login redirect look alike.
+// Separate from the entries for the same reason those are separate from the config: a reading
+// changes on every refresh and would bust that payload's etag.
+export const HEALTH_URL = '/api/health'
+
 export const ADMIN_FEATURES_URL = '/api/admin/features'
 export const ADMIN_ICONS_URL = '/api/admin/icons'
 export const ADMIN_EXPORT_URL = '/api/admin/export'

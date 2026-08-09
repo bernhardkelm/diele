@@ -1,5 +1,7 @@
 import { githubModule } from './github/module.js'
 import { gitlabModule } from './gitlab/module.js'
+import { prometheusModule } from './prometheus/module.js'
+import { uptimeKumaModule } from './uptimeKuma/module.js'
 import type { Capability } from '@diele/common'
 import type { ConnectorModule } from './types.js'
 
@@ -8,7 +10,12 @@ import type { ConnectorModule } from './types.js'
  * `connectors.type`: the column carries no CHECK, because renaming one in sqlite means
  * rebuilding the table and adding a connector must never cost that.
  */
-const MODULES: ReadonlyArray<ConnectorModule> = [gitlabModule, githubModule]
+const MODULES: ReadonlyArray<ConnectorModule> = [
+  gitlabModule,
+  githubModule,
+  uptimeKumaModule,
+  prometheusModule,
+]
 
 const BY_TYPE = new Map(MODULES.map((module) => [module.type, module]))
 

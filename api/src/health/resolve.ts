@@ -1,0 +1,194 @@
+import { config } from '#config.js'
+import { messageOf, redactSecrets } from '#connectors/redact.js'
+import { moduleFor } from '#connectors/registry.js'
+import { listEnabledConnectors } from '#connectors/repository.js'
+import type { HealthReading, HealthRequest } from '#connectors/types.js'
+import { readSecrets } from '#secrets/repository.js'
+import { isEnabled } from '#settings/toggles.js'
+import { HTTP_TTL_SECONDS, probeAll } from './httpProbe.js'
+import { HTTP_PROVIDER, providerValue } from './providers.js'
+import { listBindings, readBinding, type HealthBinding } from './repository.js'
+import { listTargets, type HealthTarget } from './targets.js'
+
+/** A source that has not answered in this long is not going to before the client asks again. */
+const RESOLVE_TIMEOUT_MS = 15_000
+
+export interface ProviderTask {
+  /** The provider's option value, which is also its cache key */
+  readonly key: string
+  /** Refs this task answers for, so the cache knows what a run of it replaces */
+  readonly refs: ReadonlyArray<string>
+  readonly ttlSeconds: number
+  readonly run: () => Promise<ReadonlyMap<string, HealthReading>>
+}
+
+/**
+ * Builds the request one binding turns into, or nothing when its target has gone away. A
+ * binding outlives the row it points at only until whoever deleted that row sweeps it, and an
+ * imported document can carry one for an entry a later sync has not produced yet.
+ * @param {string} ref - Entry the binding names
+ * @param {string | null} selector - What the binding matches on
+ * @param {ReadonlyMap<string, HealthTarget>} targets - Everything bindable
+ * @returns {HealthRequest | undefined} - The request, or undefined when nothing is there
+ */
+function requestFor(
+  ref: string,
+  selector: string | null,
+  targets: ReadonlyMap<string, HealthTarget>,
+): HealthRequest | undefined {
+  const target = targets.get(ref)
+  if (!target) {
+    return undefined
+  }
+
+  // The binding wins, then whatever produced the entry suggested. That fallback is what lets a
+  // monitor named after a repo path decorate it without anyone typing the path twice.
+  const matched = selector ?? target.healthRef
+
+  return {
+    ref,
+    url: target.url,
+    label: target.label,
+    ...(matched ? { selector: matched } : {}),
+  }
+}
+
+/**
+ * Runs one connector's `resolveHealth`, handing it the same context a sync gets. A source that
+ * throws yields nothing rather than a map of `down`: a decorator that cannot be reached knows
+ * nothing about the services it watches, and painting them all red on that basis would be a
+ * worse lie than painting nothing.
+ * @param {number} connectorId - Connector to ask
+ * @param {ReadonlyArray<HealthRequest>} requests - Entries bound to it
+ * @returns {Promise<ReadonlyMap<string, HealthReading>>} - Readings, empty when it failed
+ */
+async function askConnector(
+  connectorId: number,
+  requests: ReadonlyArray<HealthRequest>,
+): Promise<ReadonlyMap<string, HealthReading>> {
+  const connector = listEnabledConnectors().find((entry) => entry.id === connectorId)
+  const module = connector ? moduleFor(connector.type) : undefined
+
+  if (!connector || !module?.resolveHealth) {
+    return new Map()
+  }
+
+  if (!config.secrets.available && module.secretKeys.length > 0) {
+    return new Map()
+  }
+
+  const secrets = readSecrets(connectorId)
+
+  try {
+    return await module.resolveHealth(
+      {
+        id: connector.id,
+        label: connector.label,
+        config: connector.config,
+        secrets,
+        signal: AbortSignal.timeout(RESOLVE_TIMEOUT_MS),
+        cursor: null,
+      },
+      requests,
+    )
+  } catch (cause) {
+    // Logged rather than served: the message quotes the source's own response, which on an
+    // internal instance names hosts and ports. `/api/health` is not admin-gated.
+    console.warn(
+      `[health] ${connector.type}/${connector.label} could not be read:`,
+      redactSecrets(messageOf(cause), secrets),
+    )
+
+    return new Map()
+  }
+}
+
+/**
+ * Groups bindings into one task per provider, so a decorator that can answer for thirty entries
+ * in one request is asked once rather than thirty times.
+ * @param {ReadonlyArray<HealthBinding>} bindings - Bindings to resolve
+ * @returns {ReadonlyArray<ProviderTask>} - One task per provider with something bound to it
+ */
+function buildTasks(bindings: ReadonlyArray<HealthBinding>): ReadonlyArray<ProviderTask> {
+  const targets = listTargets()
+  const grouped = new Map<string, { connectorId: number | null; requests: HealthRequest[] }>()
+
+  for (const binding of bindings) {
+    const request = requestFor(binding.ref, binding.selector, targets)
+    if (!request) {
+      continue
+    }
+
+    const key = providerValue(binding.provider, binding.connectorId)
+    const group = grouped.get(key) ?? { connectorId: binding.connectorId, requests: [] }
+    group.requests.push(request)
+    grouped.set(key, group)
+  }
+
+  const tasks: ProviderTask[] = []
+
+  for (const [key, group] of grouped) {
+    const refs = group.requests.map((request) => request.ref)
+
+    if (key === HTTP_PROVIDER) {
+      tasks.push({
+        key,
+        refs,
+        ttlSeconds: HTTP_TTL_SECONDS,
+        run: () => probeAll(group.requests),
+      })
+      continue
+    }
+
+    const connectorId = group.connectorId
+    if (connectorId === null) {
+      continue
+    }
+
+    const connector = listEnabledConnectors().find((entry) => entry.id === connectorId)
+    if (!connector || !isEnabled(connector.type)) {
+      continue
+    }
+
+    tasks.push({
+      key,
+      refs,
+      ttlSeconds: connector.syncIntervalSeconds,
+      run: () => askConnector(connectorId, group.requests),
+    })
+  }
+
+  return tasks
+}
+
+/**
+ * Plans a refresh of everything bound.
+ *
+ * Empty while the feature is switched off, which is what stops the portal reaching anything at
+ * all rather than merely hiding the dots it already fetched.
+ * @returns {ReadonlyArray<ProviderTask>} - One task per provider with something bound to it
+ */
+export function listProviderTasks(): ReadonlyArray<ProviderTask> {
+  if (!isEnabled('health')) {
+    return []
+  }
+
+  return buildTasks(listBindings())
+}
+
+/**
+ * Plans a refresh of one entry alone, for someone who just bound it and is waiting to hear
+ * whether it works. The same path a scheduled refresh takes, so what the panel reports on save
+ * is what the portal will draw a moment later rather than a second opinion.
+ * @param {string} ref - Entry to resolve
+ * @returns {ProviderTask | undefined} - Its task, or undefined when nothing is bound to it
+ */
+export function taskForRef(ref: string): ProviderTask | undefined {
+  if (!isEnabled('health')) {
+    return undefined
+  }
+
+  const binding = readBinding(ref)
+
+  return binding ? buildTasks([binding])[0] : undefined
+}
