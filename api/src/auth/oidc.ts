@@ -119,6 +119,11 @@ export async function completeLogin(
  * session to tie the request to, so it stops on a confirmation page of its own and drops the
  * return address; with one it ends the session and sends the browser back to the portal, which
  * is a login screen by then. `client_id` the library appends itself.
+ *
+ * The two travel together or not at all: RP-initiated logout lets an issuer refuse a return
+ * address that arrives without a hint, and authentik does, so sending one alone turns a logout
+ * that merely stopped early into `invalid_request`. A session opened before the id token was
+ * stored has none, which is the case that reaches this.
  * @param {string} postLogoutRedirect - Absolute url to return to afterwards
  * @param {string | undefined} idToken - Token the session was opened with, when it kept one
  * @returns {Promise<string | undefined>} - Logout url, or undefined when the issuer advertises none
@@ -132,8 +137,8 @@ export async function logoutUrl(
     return undefined
   }
 
-  return client.buildEndSessionUrl(oidc, {
-    post_logout_redirect_uri: postLogoutRedirect,
-    ...(idToken ? { id_token_hint: idToken } : {}),
-  }).href
+  return client.buildEndSessionUrl(
+    oidc,
+    idToken ? { id_token_hint: idToken, post_logout_redirect_uri: postLogoutRedirect } : {},
+  ).href
 }

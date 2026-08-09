@@ -20,6 +20,16 @@ test('the status probe answers without a session, since that is what it is for',
   assert.deepEqual(await response.json(), { status: 'ok', version: 'test-build' })
 })
 
+// The portal is private but reachable from the open internet, and `robots.txt` is only read by a
+// crawler that looks for one. Set before the gate, so it holds for the login screen too.
+test('every response says it is not to be indexed', async () => {
+  for (const path of ['/status', '/api/auth/providers', '/api/config']) {
+    const response = await api.request(path)
+
+    assert.equal(response.headers.get('x-robots-tag'), 'noindex, nofollow', path)
+  }
+})
+
 // Deny by default: the gate runs before every router, so this holds for routes nobody has
 // written yet as much as for the ones that exist.
 test('a route that is not on the public list refuses an anonymous caller', async () => {
