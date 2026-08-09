@@ -1,6 +1,6 @@
 # diele
 
-![diele](docs/images/hero.png)
+![diele](docs/images/hero.webp)
 
 **Do more with your new tab page: search, launch and admin for everything you run.**
 
@@ -67,7 +67,7 @@ their separators, so `example-group/web` matches both halves. A term that is rea
 What diele already knows ranks above the web: the first match is highlighted, so `↵` opens it. To
 search the web anyway, `↑` steps off the list and hands `↵` back to the engine.
 
-![Searching for "web": a local port, a saved site and a repo, ranked above the web](docs/images/search.png)
+![Searching for "web": a local port, a saved site and a repo, ranked above the web](docs/images/search.webp)
 
 ### Keyboard control
 
@@ -84,7 +84,7 @@ Nothing is reachable only by mouse, and the admin and settings views reuse the s
 | `/` | as the first character, opens the commands; from elsewhere, focuses the field |
 | `esc` | backs out one level at a time |
 
-![Holding alt reveals a digit badge on every card](docs/images/keyboard.png)
+![Holding alt reveals a digit badge on every card](docs/images/keyboard.webp)
 
 ### Slash commands
 
@@ -95,7 +95,7 @@ its way into an ordinary result. `/` on its own lists them.
 plus a query url carrying `{query}`, added in the admin panel, so `/yt cats` goes straight to
 YouTube without the term ever touching the default engine.
 
-![Typing a single slash lists every command](docs/images/commands.png)
+![Typing a single slash lists every command](docs/images/commands.webp)
 
 ### Search engines
 
@@ -104,7 +104,7 @@ there; `tab` cycles through the rest without leaving the keyboard.
 
 An engine is a name and a url carrying `{query}`, so anything with a search url can be one.
 
-![Tab has cycled the engine to Wikipedia, and the fallback line says so](docs/images/engines.png)
+![Tab has cycled the engine to Wikipedia, and the fallback line says so](docs/images/engines.webp)
 
 ### Cards
 
@@ -115,14 +115,14 @@ Icons are uploaded rather than bundled. An svg is sanitised on the way in and it
 to `currentColor`, so an uploaded logo sits monochrome at rest and takes its brand colour on hover
 like the built-in ones.
 
-![The card grid on the resting page](docs/images/cards.png)
+![The card grid on the resting page](docs/images/cards.webp)
 
 ### Saved sites
 
 Everything that does not deserve a logo on the front page but should still be one keystroke away.
 They are suggested as results when the term matches them, and stay out of the way until it does.
 
-![A saved site suggested alongside a local port and a repo](docs/images/sites.png)
+![A saved site suggested alongside a local port and a repo](docs/images/sites.webp)
 
 ### Local ports
 
@@ -134,14 +134,14 @@ Each is probed on load and whenever the tab regains focus, and the ones with som
 get a dot. Off by default, because it costs a request per port on every load: an instance that is
 not a development machine turns the whole feature off.
 
-![Three ports answering, one not](docs/images/localhost.png)
+![Three ports answering, one not](docs/images/localhost.webp)
 
 ### Subreddit jump
 
 A term written as `r/vuejs` or `/r/vuejs` leads the results as a jump to that subreddit instead of
 a search. It costs nothing until a term is written that way, and it is a switch rather than a list.
 
-![A term written as a subreddit path leads the results](docs/images/reddit.png)
+![A term written as a subreddit path leads the results](docs/images/reddit.webp)
 
 ### Light and dark
 
@@ -152,8 +152,8 @@ It is applied before the app mounts, so a pinned theme never flashes the device'
 
 <table>
 <tr>
-<td><img src="docs/images/theme-light.png" alt="The portal in light mode"></td>
-<td><img src="docs/images/theme-dark.png" alt="The portal in dark mode"></td>
+<td><img src="docs/images/theme-light.webp" alt="The portal in light mode"></td>
+<td><img src="docs/images/theme-dark.webp" alt="The portal in dark mode"></td>
 </tr>
 </table>
 
@@ -166,7 +166,7 @@ Each feature declares its own fields and the input each one needs, and the form 
 that declaration - which is what lets a new connector be added without touching the web app at
 all.
 
-![Every feature in one list, built-ins and connectors alike](docs/images/admin.png)
+![Every feature in one list, built-ins and connectors alike](docs/images/admin.webp)
 
 ### Export and import
 
@@ -177,7 +177,7 @@ Connector credentials travel in that document still encrypted. An instance holdi
 `DIELE_SECRET_KEYS` restores a working connector; one holding a different key restores it switched
 off, waiting for its token.
 
-![Export and import sit in the list as rows, in the same keyboard ring](docs/images/transfer.png)
+![Export and import sit in the list as rows, in the same keyboard ring](docs/images/transfer.webp)
 
 ### Signing in
 
@@ -193,7 +193,7 @@ works.
 A fresh instance in local mode opens on a **setup screen** rather than a login, because there is no
 account yet. Creating the first one is gated by a token the server prints at startup.
 
-![The local mode sign-in screen](docs/images/login.png)
+![The local mode sign-in screen](docs/images/login.webp)
 
 ### Connectors
 
@@ -208,7 +208,7 @@ going to fail.
 Set `DIELE_SECRET_KEYS` before adding one: without a key there is nowhere safe to put a token, and
 the panel says so instead of taking it.
 
-![Repos from both forges, listed under the cards with their quick jumps](docs/images/connectors.png)
+![Repos from both forges, listed under the cards with their quick jumps](docs/images/connectors.webp)
 
 #### GitLab
 
@@ -226,7 +226,7 @@ applies.
 > GitLab caps token lifetime at one year. An expired token does not empty the list: the last good
 > sync stands and the connector row reports the failure, which is where it becomes visible.
 
-![The GitLab connector, its form rendered from the fields the module declares](docs/images/connector-gitlab.png)
+![The GitLab connector, its form rendered from the fields the module declares](docs/images/connector-gitlab.webp)
 
 #### GitHub
 
@@ -248,7 +248,7 @@ never uses.
 diele only ever lists repositories. The pipeline, pull request and release jumps on each row are
 plain links to GitHub, not API calls, which is why the permission set stays this small.
 
-![The GitHub connector, the same form from a different declaration](docs/images/connector-github.png)
+![The GitHub connector, the same form from a different declaration](docs/images/connector-github.webp)
 
 ### Planned
 
@@ -345,7 +345,7 @@ Edge, Brave, Vivaldi and Opera load the same folder the same way. Safari needs n
 opens new tabs with the home page, so setting that is enough. Firefox has no such setting and
 would need the extension, which has not been tried there.
 
-![The first new tab asks where the instance lives](docs/images/extension.png)
+![The first new tab asks where the instance lives](docs/images/extension.webp)
 
 ### Backing up
 
