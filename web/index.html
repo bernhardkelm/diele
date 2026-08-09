@@ -10,6 +10,9 @@
     <link rel="manifest" href="/favicons/site.webmanifest" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="color-scheme" content="light dark">
+    <!-- Repeated as an X-Robots-Tag header in app.ts, which is what covers the crawler that never
+         parses the document. -->
+    <meta name="robots" content="noindex, nofollow">
     <title>diele</title>
 
     <!-- Replaced by the api with the deployment's brand, read back by helpers/injectedBrand.ts.

@@ -60,6 +60,7 @@ before(async () => {
   writeFileSync(join(root, 'index.html'), `<!doctype html>${INDEX_MARKER}<!--diele:brand-->`)
   writeFileSync(join(root, 'assets', HASHED_ASSET), 'export default 1\n')
   writeFileSync(join(root, 'favicon.svg'), '<svg xmlns="http://www.w3.org/2000/svg" />')
+  writeFileSync(join(root, 'robots.txt'), 'User-agent: *\nDisallow: /\n')
 
   site = await startSite(root)
 })
@@ -104,6 +105,16 @@ test('an unhashed file revalidates rather than being frozen for a year', async (
 
   assert.equal(response.status, 200)
   assert.doesNotMatch(response.headers.get('cache-control') ?? '', /immutable/)
+})
+
+// This router is mounted ahead of the session gate, which is what a crawler needs: gated, the file
+// telling it to stay away would itself answer 401 and never be read.
+test('robots.txt is served as itself rather than falling through to the document', async () => {
+  const response = await fetch(`${site.url}/robots.txt`)
+
+  assert.equal(response.status, 200)
+  assert.match(response.headers.get('content-type') ?? '', /text\/plain/)
+  assert.match(await response.text(), /Disallow: \//)
 })
 
 // The failure this exists for: served the document instead, the browser would be told a javascript

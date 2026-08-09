@@ -1,4 +1,5 @@
 import type { ApiStatus } from '@diele/common'
+import compression from 'compression'
 import cookieParser from 'cookie-parser'
 import express, { type Express, type NextFunction, type Request, type Response } from 'express'
 import { ZodError } from 'zod'
@@ -30,6 +31,20 @@ export function createApp(siteRoot: string = config.webRoot): Express {
   // past both caps. A reverse proxy that sets the header sets TRUST_PROXY=1 to match.
   app.set('trust proxy', config.trustProxy)
   app.set('etag', 'strong')
+
+  // First, so it wraps every response below rather than the handful mounted after it. Brotli where
+  // the browser takes it and gzip where it does not, negotiated per request; brotli runs at
+  // quality 4, the level meant for a body compressed as it is written rather than once at build
+  // time. The woff2 the portal ships is already compressed and is left alone on its content type.
+  app.use(compression())
+
+  // The portal is a private front page reachable from the open internet, so it says on every
+  // response what `robots.txt` says to the crawlers that read one at all. The header rather than
+  // only the meta tag, because it also covers the api and the assets.
+  app.use((_req, res, next) => {
+    res.set('X-Robots-Tag', 'noindex, nofollow')
+    next()
+  })
 
   // An import carries every icon the portal holds, each capped at 64KB on its own, so the
   // document is legitimately far larger than any other request here. Without its own limit an
