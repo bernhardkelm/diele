@@ -2,23 +2,25 @@ import type { HealthReading } from '#connectors/types.js'
 import type { InstantPair, InstantResult, InstantSample } from './client.js'
 
 /**
- * Reads the value out of an instant query's result, whichever shape it came in. A scalar carries
+ * Reads every value out of an instant query's result, whichever shape it came in. A scalar carries
  * its `[unixSeconds, "value"]` pair directly, while a vector wraps one per sample.
  * @param {InstantResult} result - The `data` object of a successful query
- * @returns {string | undefined} - The value as Prometheus wrote it, or undefined when there is none
+ * @returns {ReadonlyArray<string>} - The values as Prometheus wrote them, in the order it sent them
  */
-function valueOf(result: InstantResult): string | undefined {
+function valuesOf(result: InstantResult): ReadonlyArray<string> {
   if (!Array.isArray(result.result)) {
-    return undefined
+    return []
   }
 
   if (result.resultType === 'scalar') {
-    return (result.result as InstantPair)[1]
+    const pair = result.result as InstantPair
+
+    return pair[1] === undefined ? [] : [pair[1]]
   }
 
-  const first = (result.result as ReadonlyArray<InstantSample>)[0]
+  const samples = result.result as ReadonlyArray<InstantSample>
 
-  return first?.value?.[1]
+  return samples.flatMap((sample) => (sample.value?.[1] === undefined ? [] : [sample.value[1]]))
 }
 
 /**
@@ -30,19 +32,27 @@ function valueOf(result: InstantResult): string | undefined {
  *
  * A scalar answers the same way a vector does, so `count(...) > 0` and `up{...}` are both
  * expressible without anyone learning which shape this expects.
+ *
+ * A vector carrying several series is read worst-first: `up{job="x"}` matches an instance apiece,
+ * and one of them being down is the thing the dot exists to show.
  * @param {InstantResult} result - The `data` object of a successful query
  * @returns {HealthReading | undefined} - The reading, or undefined when nothing matched
  */
 export function readingOf(result: InstantResult): HealthReading | undefined {
-  const raw = valueOf(result)
-  if (raw === undefined) {
+  // Prometheus puts a vector's samples in no particular order, so reading only the first reports
+  // whichever series it happened to send first as though it spoke for the rest.
+  const values = valuesOf(result).filter((value) => !Number.isNaN(Number(value)))
+  if (values.length === 0) {
     return undefined
   }
 
-  const value = Number(raw)
-  if (Number.isNaN(value)) {
-    return undefined
+  const down = values.filter((value) => Number(value) === 0)
+
+  if (values.length === 1) {
+    return { state: down.length === 0 ? 'up' : 'down', detail: `query returned ${values[0]}` }
   }
 
-  return { state: value === 0 ? 'down' : 'up', detail: `query returned ${raw}` }
+  return down.length > 0
+    ? { state: 'down', detail: `${down.length} of ${values.length} series returned 0` }
+    : { state: 'up', detail: `${values.length} series returned non-zero` }
 }

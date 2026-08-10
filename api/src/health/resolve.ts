@@ -26,27 +26,30 @@ export interface ProviderTask {
  * Builds the request one binding turns into, or nothing when its target has gone away. A
  * binding outlives the row it points at only until whoever deleted that row sweeps it, and an
  * imported document can carry one for an entry a later sync has not produced yet.
- * @param {string} ref - Entry the binding names
- * @param {string | null} selector - What the binding matches on
+ * @param {HealthBinding} binding - Binding to build from
  * @param {ReadonlyMap<string, HealthTarget>} targets - Everything bindable
  * @returns {HealthRequest | undefined} - The request, or undefined when nothing is there
  */
 function requestFor(
-  ref: string,
-  selector: string | null,
+  binding: HealthBinding,
   targets: ReadonlyMap<string, HealthTarget>,
 ): HealthRequest | undefined {
-  const target = targets.get(ref)
+  const target = targets.get(binding.ref)
   if (!target) {
     return undefined
   }
 
+  // A selector an import wrote blank is no selector, so it falls back the way a typed one does.
+  const bound = binding.selector?.trim() ? binding.selector : null
+
   // The binding wins, then whatever produced the entry suggested. That fallback is what lets a
-  // monitor named after a repo path decorate it without anyone typing the path twice.
-  const matched = selector ?? target.healthRef
+  // monitor named after a repo path decorate it without anyone typing the path twice. Not for the
+  // built-in probe: there a selector is a path resolved against the entry's own url, so a repo
+  // path would resolve into a url nobody asked for rather than probing the entry itself.
+  const matched = binding.provider === HTTP_PROVIDER ? bound : (bound ?? target.healthRef)
 
   return {
-    ref,
+    ref: binding.ref,
     url: target.url,
     label: target.label,
     ...(matched ? { selector: matched } : {}),
@@ -139,7 +142,7 @@ function buildTasks(bindings: ReadonlyArray<HealthBinding>): ReadonlyArray<Provi
   const grouped = new Map<string, { connectorId: number | null; requests: HealthRequest[] }>()
 
   for (const binding of bindings) {
-    const request = requestFor(binding.ref, binding.selector, targets)
+    const request = requestFor(binding, targets)
     if (!request) {
       continue
     }

@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict'
-import { beforeEach, test } from 'node:test'
+import { createServer, type Server } from 'node:http'
+import type { AddressInfo } from 'node:net'
+import { after, before, beforeEach, test } from 'node:test'
 import { replaceEntries } from '#connectors/entries.js'
 import { linkRef } from '#connectors/refs.js'
 import { createConnector } from '#connectors/repository.js'
@@ -60,6 +62,26 @@ function connector(): number {
   }).id
 }
 
+// The built-in probe is the one provider that runs for real rather than through the stub, so what
+// it asked for is only observable from the other end of a socket.
+let server: Server
+let origin: string
+let probed: string[] = []
+
+before(async () => {
+  server = createServer((req, res) => {
+    probed.push(req.url ?? '')
+    res.writeHead(200).end()
+  })
+
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+  origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`
+})
+
+after(async () => {
+  await new Promise<void>((resolve) => server.close(() => resolve()))
+})
+
 beforeEach(async () => {
   const db = getDb()
   db.prepare('DELETE FROM health_bindings').run()
@@ -69,6 +91,7 @@ beforeEach(async () => {
   resetHealth()
   asked = []
   answer = new Map()
+  probed = []
 
   await stubModule()
 })
@@ -131,6 +154,59 @@ test('an entry with no selector of its own falls back to what produced it', asyn
 
   const ref = `gitlab:${id}:repo:1`
   writeBinding({ ref, provider: 'gitlab', connectorId: id, selector: null })
+
+  await listProviderTasks()[0]?.run()
+
+  assert.equal(asked[0]?.selector, 'group/web')
+})
+
+// The fallback is a name a monitor knows the entry by, and the probe reads a selector as a path
+// under the entry's url. Handing it one resolves `group/web` against `/group/web` and probes
+// `/group/group/web`, which is neither the entry nor anything anyone bound.
+test('the built-in probe does not inherit the ref its connector suggested', async () => {
+  const id = connector()
+  replaceEntries(id, 'gitlab', [
+    {
+      localRef: 'repo:1',
+      kind: 'row',
+      label: 'web',
+      url: `${origin}/group/web`,
+      healthRef: 'group/web',
+    },
+  ])
+
+  writeBinding({
+    ref: `gitlab:${id}:repo:1`,
+    provider: 'http',
+    connectorId: null,
+    selector: null,
+  })
+
+  await listProviderTasks()[0]?.run()
+
+  assert.deepEqual(probed, ['/group/web'])
+})
+
+// An import is held to the rules a typed binding is: the panel writes a blank selector as null,
+// and one that arrived as an empty string has to fall back rather than match on nothing.
+test('a selector that arrived blank falls back the way a missing one does', async () => {
+  const id = connector()
+  replaceEntries(id, 'gitlab', [
+    {
+      localRef: 'repo:1',
+      kind: 'row',
+      label: 'web',
+      url: 'https://gitlab.com/group/web',
+      healthRef: 'group/web',
+    },
+  ])
+
+  writeBinding({
+    ref: `gitlab:${id}:repo:1`,
+    provider: 'gitlab',
+    connectorId: id,
+    selector: '  ',
+  })
 
   await listProviderTasks()[0]?.run()
 
