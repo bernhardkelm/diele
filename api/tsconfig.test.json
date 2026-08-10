@@ -1,7 +1,7 @@
 {
   // The tests, checked with the same strictness as the code and emitted nowhere. `tsconfig.json`
   // excludes them so they stay out of `dist/`, which would otherwise leave them unchecked.
-  "extends": "./tsconfig.json",
+  "extends": "./tsconfig.build.json",
   "compilerOptions": {
     "noEmit": true,
     // The package root, `rootDir` is checked even under `noEmit` and `./src` rejects `tests/`

@@ -1,33 +1,7 @@
+// Solution file, the same shape `web` uses. It compiles nothing itself: it exists so an editor
+// opening a file under `tests/` finds the project that covers it, since tsserver only discovers
+// configs named `tsconfig.json` and whatever they reference.
 {
-  "compilerOptions": {
-    "rootDir": "./src",
-    "outDir": "./dist",
-
-    "module": "nodenext",
-    "moduleResolution": "nodenext",
-    "target": "esnext",
-    "lib": ["esnext"],
-    "types": ["node"],
-
-    "sourceMap": true,
-    "declaration": false,
-
-    "strict": true,
-    "noUncheckedIndexedAccess": true,
-    "noImplicitOverride": true,
-    "noFallthroughCasesInSwitch": true,
-
-    "esModuleInterop": true,
-    "forceConsistentCasingInFileNames": true,
-    "verbatimModuleSyntax": true,
-    "isolatedModules": true,
-    "noUncheckedSideEffectImports": true,
-    "moduleDetection": "force",
-    "skipLibCheck": true
-  },
-  "include": ["src/**/*"],
-  // What `npm start` runs. Guard, a test left in `src/` would be emitted into `dist/` and
-  // ship in the image.
-  "exclude": ["src/**/*.test.ts"],
-  "references": [{ "path": "../common" }]
+  "files": [],
+  "references": [{ "path": "./tsconfig.build.json" }, { "path": "./tsconfig.test.json" }]
 }
