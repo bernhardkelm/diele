@@ -1,6 +1,7 @@
 import { Router, type Request } from 'express'
 import { linkRef } from '#connectors/refs.js'
-import { badRequest } from '#errors.js'
+import { getDb } from '#db/index.js'
+import { badRequest, notFound } from '#errors.js'
 import { reorderSchema } from '#fieldSchemas.js'
 import {
   createLink,
@@ -44,11 +45,15 @@ linksRouter.get('/:kind', (req, res) => {
 linksRouter.post('/:kind', async (req, res) => {
   const kind = kindParam(req)
   const body = createLinkSchema.parse({ ...(req.body as object), kind })
-  const link = createLink(body)
 
-  // After the link, because a binding is keyed by the ref its id is part of. A refused binding
-  // then leaves a link nobody asked to be unbound, which is the harmless half of the two.
-  applyBinding(link.ref, req.body)
+  // One transaction, because the binding is keyed by the ref the new id is part of and so cannot
+  // be checked first. A refused binding then takes the half-made link back with it.
+  const link = getDb().transaction(() => {
+    const created = createLink(body)
+    applyBinding(created.ref, req.body)
+
+    return created
+  })()
 
   res.status(201).json({ link: decorateRow(link, await probeNow(link.ref)) })
 })
@@ -56,9 +61,15 @@ linksRouter.post('/:kind', async (req, res) => {
 linksRouter.patch('/:kind/:id', async (req, res) => {
   kindParam(req)
   const body = updateLinkSchema.parse(req.body)
-  const link = updateLink(idParam(req), body)
+  const id = idParam(req)
 
-  applyBinding(link.ref, req.body)
+  // Together, so a refused binding does not leave the fields beside it saved under a 400.
+  const link = getDb().transaction(() => {
+    const updated = updateLink(id, body)
+    applyBinding(updated.ref, req.body)
+
+    return updated
+  })()
 
   // Resolved before answering, the way a connector's settings are checked before they are
   // stored, so the panel says whether the binding works while the person who made it is still
@@ -76,7 +87,7 @@ linksRouter.post('/:kind/:id/sync', async (req, res) => {
 
   const row = listAllLinks(kind).find((entry) => entry.id === id)
   if (!row) {
-    throw badRequest('link not found')
+    throw notFound('link not found')
   }
 
   res.json({ link: decorateRow(row, await probeNow(ref)) })

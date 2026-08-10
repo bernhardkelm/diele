@@ -320,6 +320,39 @@ test('a binding whose target the file did not carry is dropped rather than resto
   assert.deepEqual(after.healthBindings, [])
 })
 
+// The import inserts bindings itself rather than through `writeBinding`, so the invariant that
+// writer upholds is checked here too. Routed by the instance, such a row would be resolved by
+// whatever connector holds that id rather than by the probe its provider names.
+test('a binding naming the built-in probe and an instance at once is refused', async () => {
+  const exported = await api.get<ExportPayload>('/api/admin/export')
+
+  const response = await api.request('/api/admin/import', {
+    method: 'POST',
+    body: JSON.stringify({
+      ...exported,
+      healthBindings: [
+        { ref: 'card:1', provider: 'http', connectorId: 1, selector: '/healthz' },
+      ],
+    }),
+  })
+
+  assert.equal(response.status, 400)
+})
+
+test('a binding naming a decorator but no instance is refused', async () => {
+  const exported = await api.get<ExportPayload>('/api/admin/export')
+
+  const response = await api.request('/api/admin/import', {
+    method: 'POST',
+    body: JSON.stringify({
+      ...exported,
+      healthBindings: [{ ref: 'card:1', provider: 'uptime-kuma', connectorId: null, selector: null }],
+    }),
+  })
+
+  assert.equal(response.status, 400)
+})
+
 // Version 1 files predate connectors and simply carry none.
 test('a version 1 file still applies', async () => {
   const response = await api.post<{ ok: boolean }>('/api/admin/import', {

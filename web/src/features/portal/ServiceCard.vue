@@ -10,7 +10,7 @@ interface ServiceCardProps {
   service: CardTarget
   /** Digit key that launches this card, 1-9 then 0; omitted past the tenth card */
   shortcut?: string
-  /** How it last answered; omitted for an unbound card and whenever its source is unreachable */
+  /** How it last answered; omitted for an unbound card, or one whose source is switched off or gone */
   status?: ApiHealthReading
   /** Whether the launcher highlight currently sits on this card */
   active?: boolean

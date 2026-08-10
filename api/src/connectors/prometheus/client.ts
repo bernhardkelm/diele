@@ -1,3 +1,14 @@
+/**
+ * A query the instance ran and refused. It answered, so this says nothing about its health, and
+ * only a fault that is not one of these means the connector itself stopped working.
+ */
+export class QueryRejectedError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'QueryRejectedError'
+  }
+}
+
 /** `[unixSeconds, "value"]`. The value is a string, including for `NaN` and `+Inf`. */
 export type InstantPair = [number, string]
 
@@ -72,7 +83,13 @@ export async function instantQuery(
   // Its own explanation carries the status too: a rejected query and an instance that is unwell
   // both arrive here, and only the status says which.
   if (payload?.error) {
-    throw new Error(`${payload.error} (${response.status})`)
+    const message = `${payload.error} (${response.status})`
+
+    if (response.status === 400 || response.status === 422) {
+      throw new QueryRejectedError(message)
+    }
+
+    throw new Error(message)
   }
 
   throw new Error(`Prometheus answered ${response.status}`)

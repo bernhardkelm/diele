@@ -107,11 +107,52 @@ test('the row can be asked again on its own', async () => {
   assert.equal((link.healthReading as { state: string } | null)?.state, 'up')
 })
 
+// The binding cannot be checked before the link, because it is keyed by the ref the new id is
+// part of. The transaction is what keeps a refused one from leaving the link behind.
+test('a card refused over its binding is not left half made', async () => {
+  await api.signIn()
+
+  const before = await api.get<{ rows: ApiRow[] }>('/api/admin/links/card')
+
+  const response = await api.request('/api/admin/links/card', {
+    method: 'POST',
+    body: JSON.stringify({
+      label: 'Doomed',
+      url: api.url,
+      keywords: [],
+      health: 'prometheus:4242',
+    }),
+  })
+
+  assert.equal(response.status, 400)
+
+  const after = await api.get<{ rows: ApiRow[] }>('/api/admin/links/card')
+  assert.equal(after.rows.length, before.rows.length)
+  assert.ok(!after.rows.some((row) => row.label === 'Doomed'))
+})
+
+// A 400 that saved half the form is worse than one that saved none of it.
+test('a rename refused over its binding does not keep the rename', async () => {
+  await api.signIn()
+
+  const row = await boundCard('Before', '/status')
+
+  const response = await api.request(`/api/admin/links/card/${row.id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ label: 'After', health: 'prometheus:4242' }),
+  })
+
+  assert.equal(response.status, 400)
+
+  const { rows } = await api.get<{ rows: ApiRow[] }>('/api/admin/links/card')
+  assert.equal(rows.find((entry) => entry.id === row.id)?.label, 'Before')
+})
+
 test('asking a row that is not there is refused rather than answered with nothing', async () => {
   await api.signIn()
 
   assert.equal(
     (await api.request('/api/admin/links/card/4242/sync', { method: 'POST' })).status,
-    400,
+    404,
   )
 })

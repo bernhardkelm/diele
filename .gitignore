@@ -82,6 +82,9 @@ desktop.ini
 *.orig
 *.rej
 
+# Throwaway tsconfig probes
+.probe-*.json
+
 # Release notes
 release-notes.md
 

@@ -113,6 +113,13 @@ const targets = computed<ReadonlyArray<PortalTarget>>(() => [
   ...visibleRows.value,
 ])
 
+// The condition the template renders the portal branch under. The launcher's keys are live
+// exactly while the list they move is on screen, and the dots are polled for exactly as long as
+// there is something drawing them.
+const portalShowing = computed(
+  () => !isStyleguide.value && !needsLogin.value && !isAdmin.value && !isSettings.value,
+)
+
 const {
   query,
   matches,
@@ -132,16 +139,14 @@ const {
   offersAdmin: computed(() => !adminDenied.value),
   userName: computed(() => user.value?.name ?? user.value?.email ?? null),
   tileColumns,
-  // the same condition the template renders the launcher under, so its keys are live exactly
-  // while the list they move is on screen
-  enabled: () => !isStyleguide.value && !needsLogin.value && !isAdmin.value && !isSettings.value,
+  enabled: () => portalShowing.value,
   urlFor,
   openAdmin: () => go(ROUTES.admin),
   openSettings: () => go(ROUTES.settings),
   signOut: () => void signOut(),
 })
 
-const { readingFor } = useHealth()
+const { readingFor } = useHealth(() => portalShowing.value)
 const { isLive } = useLocalhostStatus(() => sites.value)
 const altHeld = useAltHeld()
 </script>

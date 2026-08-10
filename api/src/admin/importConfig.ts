@@ -3,9 +3,11 @@ import { isBuiltInKeyword } from '#commands/repository.js'
 import { isLinkRef, linkRef } from '#connectors/refs.js'
 import { getDb } from '#db/index.js'
 import { hexColor, httpUrl, queryTemplate } from '#fieldSchemas.js'
+import { HTTP_PROVIDER } from '#health/providers.js'
 import { sanitizeSvg } from '#icons/sanitize.js'
 import { MAX_SVG_BYTES } from '#icons/schemas.js'
 import { importSecrets } from '#secrets/repository.js'
+import { MAX_SELECTOR_LENGTH } from './healthSelector.js'
 import { VERSION } from './transferVersion.js'
 
 // An imported file is checked exactly as hard as a typed one. It may have been edited by hand or
@@ -80,12 +82,23 @@ const secretSchema = z.object({
   ciphertext: base64,
 })
 
-const healthBindingSchema = z.object({
-  ref: z.string().trim().min(1).max(200),
-  provider: z.string().trim().min(1).max(60),
-  connectorId: z.number().int().positive().nullish(),
-  selector: z.string().max(500).nullish(),
-})
+// The invariant migration 003 documents and `writeBinding` upholds, enforced here too because an
+// insert of its own goes around that writer. A file disagreeing has a binding whose provider and
+// instance say different things, and the resolver would route it by the instance rather than the
+// provider it names.
+const healthBindingSchema = z
+  .object({
+    ref: z.string().trim().min(1).max(200),
+    provider: z.string().trim().min(1).max(60),
+    connectorId: z.number().int().positive().nullish(),
+    selector: z.string().max(MAX_SELECTOR_LENGTH).nullish(),
+  })
+  .refine(
+    (binding) =>
+      (binding.provider === HTTP_PROVIDER) ===
+      (binding.connectorId === null || binding.connectorId === undefined),
+    { message: 'connector_id is set exactly when the provider is not the built-in probe' },
+  )
 
 const connectorSchema = z.object({
   id: z.number().int().positive().optional(),

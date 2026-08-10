@@ -30,7 +30,7 @@ export interface ApiHealthReading {
 }
 
 export interface ApiHealth {
-  /** Keyed by entry ref; an entry that is unbound or whose source could not be reached is absent */
+  /** Keyed by entry ref; absent for an entry that is unbound, or bound to a source switched off or gone */
   readonly readings: Record<string, ApiHealthReading>
   /** Seconds until the client should ask again */
   readonly pollSeconds: number

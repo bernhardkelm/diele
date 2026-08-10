@@ -148,11 +148,11 @@ describe('hintsFor', () => {
   // Only where there is somewhere to move to: a list of one, or an end of it, has neither.
   it('names the reorder keys only where a move is possible', () => {
     const stuck: ReadonlyArray<RowAction> = [
-      { id: 'up', label: '▾', disabled: true },
+      { id: 'up', label: '▴', disabled: true },
       { id: 'down', label: '▾', disabled: true },
     ]
     const movable: ReadonlyArray<RowAction> = [
-      { id: 'up', label: '▾', disabled: true },
+      { id: 'up', label: '▴', disabled: true },
       { id: 'down', label: '▾' },
     ]
 

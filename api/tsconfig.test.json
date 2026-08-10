@@ -1,5 +1,5 @@
 {
-  // The tests, checked with the same strictness as the code and emitted nowhere. `tsconfig.json`
+  // The tests, checked with the same strictness as the code and emitted nowhere. `tsconfig.build.json`
   // excludes them so they stay out of `dist/`, which would otherwise leave them unchecked.
   "extends": "./tsconfig.build.json",
   "compilerOptions": {

@@ -1,9 +1,9 @@
 import { z } from 'zod'
 import { isHttpUrl } from '#fieldSchemas.js'
-import { messageOf } from '#connectors/redact.js'
+import { messageOf, redactSecrets } from '#connectors/redact.js'
 import { mapLimit } from '#health/pool.js'
 import type { ApiFieldSpec } from '@diele/common'
-import { instantQuery } from './client.js'
+import { instantQuery, QueryRejectedError } from './client.js'
 import { readingOf } from './map.js'
 import type {
   ConnectorContext,
@@ -60,7 +60,8 @@ async function verify(context: VerifyContext): Promise<void> {
  * arbitrary and unrelated, so this is one request per entry, capped and running in parallel.
  *
  * A query that fails costs its own dot rather than the batch: one typo should not take down
- * every other card's reading.
+ * every other card's reading. Throws only where nothing answered and the instance is why, so a
+ * decorator that has stopped working is recorded as such instead of reading as healthy.
  * @param {ConnectorContext} context - Validated config, decrypted credentials and the signal
  * @param {ReadonlyArray<HealthRequest>} requests - Entries bound to this instance
  * @returns {Promise<ReadonlyMap<string, HealthReading>>} - Reading per entry ref
@@ -74,13 +75,23 @@ async function resolveHealth(
 
   const bound = requests.filter((request) => Boolean(request.selector))
 
+  let answered = 0
+  const faults: string[] = []
+
   const results = await mapLimit(bound, CONCURRENCY, async (request) => {
     try {
-      return readingOf(
-        await instantQuery(baseUrl, request.selector as string, token, context.signal),
-      )
+      const data = await instantQuery(baseUrl, request.selector as string, token, context.signal)
+      answered += 1
+
+      return readingOf(data)
     } catch (cause) {
-      const detail = messageOf(cause)
+      const detail = redactSecrets(messageOf(cause), context.secrets)
+
+      // A rejected expression is the query's fault and the instance is fine, so only the rest
+      // counts towards the connector itself having stopped working.
+      if (!(cause instanceof QueryRejectedError)) {
+        faults.push(`${request.ref}: ${detail}`)
+      }
 
       // `unknown` rather than nothing: a query that could not be run says nothing about the
       // service, but a dot that is silently never there says nothing at all. Both an
@@ -91,6 +102,12 @@ async function resolveHealth(
       return { state: 'unknown' as const, detail }
     }
   })
+
+  // Nothing answered and the instance is why: raised so the panel can say the connector stopped
+  // working, which a per-entry `unknown` never does. `askConnector` still draws every dot.
+  if (answered === 0 && faults.length > 0) {
+    throw new Error(`no query could be run (${faults.join('; ')})`)
+  }
 
   const readings = new Map<string, HealthReading>()
 

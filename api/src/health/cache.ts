@@ -110,6 +110,17 @@ export function readHealth(detailed: boolean): ApiHealth {
     refreshIfDue(task)
   }
 
+  // A provider nothing is bound to any more keeps no place in the backoff. Left standing, a
+  // connector removed and replaced would hold its key for the life of the process. One that is
+  // mid-run is spared, since its own `finally` is about to stamp it again anyway.
+  const keys = new Set(tasks.map((task) => task.key))
+
+  for (const key of lastRunAt.keys()) {
+    if (!keys.has(key) && !running.has(key)) {
+      lastRunAt.delete(key)
+    }
+  }
+
   const now = Date.now()
   const readings: Record<string, ApiHealthReading> = {}
 

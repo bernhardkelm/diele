@@ -85,8 +85,16 @@ async function listHealthTargets(
 ): Promise<ReadonlyArray<ApiFieldOption>> {
   const { baseUrl } = configSchema.parse(context.config)
 
+  // Swept first, because an entry past its ttl is never served anyway and an instance that was
+  // deleted would otherwise keep its monitor names for the life of the process.
+  for (const [id, entry] of targetCache) {
+    if (Date.now() - entry.at >= TARGETS_TTL_MS) {
+      targetCache.delete(id)
+    }
+  }
+
   const cached = targetCache.get(context.id)
-  if (cached && cached.baseUrl === baseUrl && Date.now() - cached.at < TARGETS_TTL_MS) {
+  if (cached && cached.baseUrl === baseUrl) {
     return cached.options
   }
 

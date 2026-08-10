@@ -13,6 +13,7 @@ import { ROUTES } from '@/composables/routes'
 import { useHashRoute } from '@/composables/useHashRoute'
 import { apiMessage, readPayload } from '@/helpers/apiError'
 import { refreshConnectorEntries, resetConnectorEntries } from '@/composables/useConnectorEntries'
+import { resetHealth } from '@/composables/useHealth'
 import { refreshPortalConfig, resetPortalConfig } from '@/composables/usePortalConfig'
 import { applyBrandAccent } from '@/helpers/brandAccent'
 import { clearConfigCache } from '@/helpers/configCache'
@@ -198,6 +199,7 @@ export function useSession(): SessionSource {
       clearEntriesCache()
       resetPortalConfig()
       resetConnectorEntries()
+      resetHealth()
       return
     }
 
@@ -272,8 +274,8 @@ export function useSession(): SessionSource {
   }
 
   /**
-   * Ends a session and drops everything cached under it - the configuration and the connector
-   * entries both - so the next visitor to this browser does not paint the last one's portal.
+   * Ends a session and drops everything cached under it, the configuration, the connector entries
+   * and the readings, so the next visitor to this browser does not paint the last one's portal.
    * @param {string} url - Endpoint that destroys the session, or every session
    * @returns {Promise<void>}
    */
@@ -297,6 +299,7 @@ export function useSession(): SessionSource {
       clearEntriesCache()
       resetPortalConfig()
       resetConnectorEntries()
+      resetHealth()
       user.value = undefined
 
       window.location.assign(payload.logoutUrl ?? '/')

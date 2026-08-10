@@ -7,7 +7,7 @@ import { listAllLocalhost } from '#localhost/repository.js'
 import { isEnabled } from '#settings/toggles.js'
 import { listUsers } from '#users/repository.js'
 import { connectorFeatures } from './connectorFeatures.js'
-import { healthFields } from './healthBinding.js'
+import { healthFields } from './healthFields.js'
 import {
   CARD_FIELDS,
   COMMAND_FIELDS,

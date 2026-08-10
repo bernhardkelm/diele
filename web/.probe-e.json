@@ -1,1 +1,0 @@
-{"extends":"./tsconfig.app.json","include":["tests/**/*","env.d.ts"],"compilerOptions":{"types":["node"],"paths":{"@/*":["./src/*"],"@tests/*":["./tests/*"]},"tsBuildInfoFile":"./node_modules/.tmp/probe-e.tsbuildinfo"}}
