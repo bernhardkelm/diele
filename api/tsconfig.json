@@ -26,8 +26,9 @@
     "skipLibCheck": true
   },
   "include": ["src/**/*"],
-  // What `npm start` runs. Tests and their harness are type-checked by tsconfig.test.json
-  // instead, so they are not emitted into the image alongside the code they exercise.
-  "exclude": ["src/**/*.test.ts", "src/testing/**"],
+  // What `npm start` runs. Tests live in `tests/` and are type-checked by tsconfig.test.json;
+  // this stays as a guard, because a test file left in `src/` would be emitted into `dist/`
+  // and ship in the image.
+  "exclude": ["src/**/*.test.ts"],
   "references": [{ "path": "../common" }]
 }

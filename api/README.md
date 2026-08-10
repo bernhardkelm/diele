@@ -503,7 +503,7 @@ A fresh database already carries the stock configuration, so this is about the r
 sites pointing at `example.com`, for something to develop against. It also carries the stock
 engines, commands and ports, because an import **replaces** every table rather than adding to
 them: without them the imported portal would have no engine left and `↵` would search nothing.
-`src/db/stockConfig.test.ts` fails if the two ever drift apart. It turns local port probing on.
+`tests/db/stockConfig.test.ts` fails if the two ever drift apart. It turns local port probing on.
 
 ## Develop
 

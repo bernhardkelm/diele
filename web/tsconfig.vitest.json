@@ -1,12 +1,22 @@
-// TSConfig for the unit tests. Extends the app config (DOM lib, noUncheckedIndexedAccess,
-// `@/*` paths) and picks up the co-located `*.test.ts` files the app config excludes, plus the
-// helpers they share. Node types are here rather than there because a test may read a file off
+// TSConfig for the unit tests. Extends the app config (DOM lib, noUncheckedIndexedAccess) and
+// covers `tests/` whole. Node types are here rather than there because a test may read a file off
 // disk, which nothing in the app itself ever does.
 {
   "extends": "./tsconfig.app.json",
-  "include": ["src/**/*.test.ts", "src/testing/**/*", "env.d.ts"],
+  // `env.d.ts` is not decoration: the image build leaves `tests/` out, and an empty input set is
+  // TS18003.
+  "include": ["tests/**/*", "env.d.ts"],
+  // Explicit, because `extends` inherits `exclude` whenever the child omits it, and an inherited
+  // one wins over the `include` above without a word.
+  "exclude": [],
   "compilerOptions": {
     "types": ["node"],
+    // Replaces the inherited map rather than adding to it: `paths` is a single option, so `@/*`
+    // has to be restated alongside `@tests/*`.
+    "paths": {
+      "@/*": ["./src/*"],
+      "@tests/*": ["./tests/*"]
+    },
     "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.vitest.tsbuildinfo"
   }
 }
