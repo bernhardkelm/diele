@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import type { ApiFieldOption } from '@diele/common'
 
 interface AdminSelectFieldProps {
   /** Stored value, or null while the field has never been set */
   modelValue: unknown
-  options: ReadonlyArray<{ value: string; label: string }>
+  options: ReadonlyArray<ApiFieldOption>
   disabled?: boolean
 }
 
@@ -18,12 +19,30 @@ const value = computed({
     props.modelValue == null ? (props.options[0]?.value ?? '') : String(props.modelValue),
   set: (next: string) => emit('update:modelValue', next.length > 0 ? next : null),
 })
+
+// A stored value the list does not carry is kept as a choice of its own rather than dropped.
+// The options can be read from a source, and a monitor renamed or an instance briefly
+// unreachable would otherwise paint the field blank over a binding that is still set.
+const choices = computed(() => {
+  const current = value.value
+  if (current.length === 0 || props.options.some((option) => option.value === current)) {
+    return props.options
+  }
+
+  return [{ value: current, label: `${current} (not listed)` }, ...props.options]
+})
 </script>
 
 <template>
   <span class="select">
     <select v-model="value" class="select__input" :disabled="disabled">
-      <option v-for="option in options" :key="option.value" :value="option.value">
+      <!-- a disabled option is a choice that exists but is not set up, which is worth saying -->
+      <option
+        v-for="option in choices"
+        :key="option.value"
+        :value="option.value"
+        :disabled="option.disabled"
+      >
         {{ option.label }}
       </option>
     </select>

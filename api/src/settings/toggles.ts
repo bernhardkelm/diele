@@ -13,6 +13,7 @@ const KEYS: Readonly<Record<string, string>> = {
   engines: 'engines.enabled',
   localhost: 'localhost.enabled',
   reddit: 'reddit.enabled',
+  health: 'health.enabled',
 }
 
 /**

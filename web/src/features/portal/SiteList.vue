@@ -2,6 +2,7 @@
 import SiteRow from '@/features/portal/SiteRow.vue'
 import type { SuggestionTarget } from '@/types/portal'
 import type { Indexed } from '@/features/portal/launchTargets'
+import type { ApiHealthReading } from '@diele/common'
 
 interface SiteListProps {
   sites: ReadonlyArray<Indexed<SuggestionTarget>>
@@ -9,6 +10,8 @@ interface SiteListProps {
   activeIndex?: number
   /** Reports whether a saved localhost entry currently has a server listening */
   isLive?: (site: SuggestionTarget) => boolean
+  /** Reports how a bound site last answered */
+  readingFor?: (ref: string) => ApiHealthReading | undefined
   /** Current search term, marked up in the rows */
   query?: string
 }
@@ -25,6 +28,7 @@ const emit = defineEmits<{ launch: [site: SuggestionTarget] }>()
       :site="entry.item"
       :active="entry.index === activeIndex"
       :live="isLive?.(entry.item)"
+      :status="readingFor?.(entry.item.ref)"
       :query="query"
       @launch="emit('launch', entry.item)"
     />

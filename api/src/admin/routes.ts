@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { wakeScheduler } from '#connectors/scheduler.js'
 import { badRequest } from '#errors.js'
+import { resetHealth } from '#health/cache.js'
 import { isToggleable, setEnabled } from '#settings/toggles.js'
 import { commandsRouter } from './commandsRoutes.js'
 import { connectorRouter } from './connectorRoutes.js'
@@ -24,8 +25,8 @@ adminRouter.use('/localhost', localhostRouter)
 adminRouter.use('/engines', enginesRouter)
 adminRouter.use('/icons', iconsRouter)
 
-adminRouter.get('/features', (_req, res) => {
-  res.json({ features: listFeatures() })
+adminRouter.get('/features', async (_req, res) => {
+  res.json({ features: await listFeatures() })
 })
 
 // Turns a whole feature off, which is not the same as it having no rows.
@@ -51,6 +52,9 @@ adminRouter.post('/import', (req, res) => {
   // Every connector the file brought is due as of this moment, so this only saves it the wait
   // until the next tick.
   wakeScheduler()
+  // The readings in memory were resolved against the configuration this just replaced, and a
+  // ref surviving the swap would keep its old dot until the next refresh aged it out.
+  resetHealth()
 
   res.json({ ok: true, written })
 })

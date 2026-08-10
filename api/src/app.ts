@@ -15,6 +15,7 @@ import { configRouter } from './bootstrap/routes.js'
 import { config } from './config.js'
 import { entriesRouter } from './connectors/routes.js'
 import { ApiError } from './errors.js'
+import { healthRouter } from './health/routes.js'
 import { createSiteRouter } from './site/routes.js'
 
 /**
@@ -79,6 +80,7 @@ export function createApp(siteRoot: string = config.webRoot): Express {
   app.use('/api/auth', authRouter)
   app.use('/api/config', configRouter)
   app.use('/api/entries', entriesRouter)
+  app.use('/api/health', healthRouter)
   // requireAdmin on top of the global session gate: the client's mode switch is a
   // convenience, and a request that gets here has to stand on its own.
   app.use('/api/admin', requireAdmin(), adminRouter)

@@ -8,6 +8,8 @@ interface FeatureStation {
   readonly key: string
   readonly label: string
   readonly feature: ApiFeature
+  /** Whether it sits inside another feature's rows rather than in the top-level list */
+  readonly nested?: boolean
 }
 
 interface EntryStation {
@@ -131,8 +133,16 @@ export function buildStations(
   visibility?: HiddenEntries,
 ): ReadonlyArray<AdminStation> {
   const stations: AdminStation[] = []
+  const present = new Set(features.map((feature) => feature.id))
 
   for (const feature of features) {
+    // A feature configured inside another one is listed with that one's rows instead. Only while
+    // its parent is on screen: a term that matched the child alone would otherwise leave it
+    // nowhere at all.
+    if (feature.parent && present.has(feature.parent)) {
+      continue
+    }
+
     stations.push({
       kind: 'feature',
       key: featureKey(feature.id),
@@ -142,6 +152,22 @@ export function buildStations(
 
     if (feature.id !== expanded || feature.unavailable || feature.switchOnly) {
       continue
+    }
+
+    // Ahead of the add row and the entries alike: these are settings for the whole section, and
+    // a switch found below the rows it governs reads as belonging to the last of them.
+    for (const child of features) {
+      if (child.parent !== feature.id) {
+        continue
+      }
+
+      stations.push({
+        kind: 'feature',
+        key: featureKey(child.id),
+        label: child.label,
+        feature: child,
+        nested: true,
+      })
     }
 
     // Ahead of the rows rather than after them: adding is what a feature is opened for as often

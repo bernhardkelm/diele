@@ -35,6 +35,11 @@ export interface AdminSource {
   busyLabel: Ref<string | undefined>
   /** True while rows are being reloaded behind ones that are already on screen */
   refreshing: Ref<boolean>
+  /**
+   * Loads the registry, holding a failure rather than raising it. This is the first call the
+   * view makes, so a lapsed session raised out of here would leave the panel empty with nothing
+   * said; held, it offers signing in.
+   */
   loadFeatures: () => Promise<void>
   /** Reloads the registry and the open feature's rows, after something replaced them wholesale */
   reload: () => Promise<boolean>
@@ -69,6 +74,25 @@ const refreshing = ref(false)
 // behind it, because emptying the list first collapses the panel and drops everything below
 // it up the page before the answer arrives.
 const cached = new Map<string, ReadonlyArray<ApiRow>>()
+
+/**
+ * Drops everything the panel read, so the next reader asks again. The sibling of
+ * `resetSession` and `resetPortalConfig`: all of this is held at module scope, which outlives
+ * any component that reads it.
+ * @returns {void}
+ */
+export function resetAdmin(): void {
+  features.value = []
+  rows.value = []
+  expanded.value = undefined
+  error.value = undefined
+  needsAuth.value = false
+  forbidden.value = false
+  busy.value = false
+  busyLabel.value = undefined
+  refreshing.value = false
+  cached.clear()
+}
 
 /**
  * Returns the collection url for a feature, or undefined when it owns no rows. The registry
@@ -208,14 +232,33 @@ async function run(action: () => Promise<unknown>, label?: string): Promise<bool
 }
 
 /**
- * Returns what to say while a save runs, which is only worth saying for a feature whose save
- * reaches an outside source: everything else answers before a word could be read.
+ * Returns what to say while a save runs, which is only worth saying for a save that reaches an
+ * outside source: everything else answers before a word could be read.
+ *
+ * A liveness binding makes an ordinary row one of those, so the values decide as well as the
+ * feature does - a card bound to a probe is checked on save the way a connector's token is.
+ * @param {Record<string, unknown> | undefined} values - What the form is submitting
  * @returns {string | undefined} - The word, or undefined for a write that stays local
  */
-function probeLabel(): string | undefined {
+function probeLabel(values?: Record<string, unknown>): string | undefined {
   const feature = features.value.find((entry) => entry.id === expanded.value)
 
-  return feature?.capabilities?.length ? 'checking' : undefined
+  if (feature?.capabilities?.length) {
+    return 'checking'
+  }
+
+  return values?.health ? 'checking' : undefined
+}
+
+/**
+ * Returns what to say while a row action fetches. The same action word on both, since a
+ * connector re-reads its source and a bound entry re-asks whether it is up.
+ * @returns {string} - The word
+ */
+function syncLabel(): string {
+  const feature = features.value.find((entry) => entry.id === expanded.value)
+
+  return feature?.capabilities?.includes('entries') ? 'syncing' : 'probing'
 }
 
 /**
@@ -251,6 +294,24 @@ function hold(cause: unknown): void {
  * @returns {AdminSource} - Reactive admin state and its controls
  */
 export function useAdmin(): AdminSource {
+  /**
+   * Loads the registry the way the rest of this surface calls it, holding what it raises.
+   * @returns {Promise<void>}
+   */
+  async function load(): Promise<void> {
+    try {
+      await loadFeatures()
+
+      // A load that was answered says whatever lapsed has since been fixed, the way `run` does.
+      // These outlive the view that read them, so signing in and coming back would otherwise
+      // land on a panel still holding the refusal it was sent away for.
+      needsAuth.value = false
+      forbidden.value = false
+    } catch (cause) {
+      hold(cause)
+    }
+  }
+
   /**
    * Expands one feature, or collapses whatever is open when given nothing.
    * @param {string | undefined} featureId - Feature to expand
@@ -299,13 +360,13 @@ export function useAdmin(): AdminSource {
     busy,
     busyLabel,
     refreshing,
-    loadFeatures,
+    loadFeatures: load,
     reload: () => run(() => Promise.resolve()),
     expand,
     create: (values) =>
       run(
         () => call(collectionOf(expanded.value), { method: 'POST', body: JSON.stringify(values) }),
-        probeLabel(),
+        probeLabel(values),
       ),
     update: (id, values) =>
       run(
@@ -314,7 +375,7 @@ export function useAdmin(): AdminSource {
             method: 'PATCH',
             body: JSON.stringify(values),
           }),
-        probeLabel(),
+        probeLabel(values),
       ),
     setFeatureEnabled: (featureId, enabled) =>
       run(() =>
@@ -332,7 +393,10 @@ export function useAdmin(): AdminSource {
       ),
     remove: (id) => run(() => call(`${collectionOf(expanded.value)}/${id}`, { method: 'DELETE' })),
     sync: (id) =>
-      run(() => call(`${collectionOf(expanded.value)}/${id}/sync`, { method: 'POST' }), 'syncing'),
+      run(
+        () => call(`${collectionOf(expanded.value)}/${id}/sync`, { method: 'POST' }),
+        syncLabel(),
+      ),
     move: (id, delta) =>
       run(() => {
         const current = rows.value.map((row) => row.id)

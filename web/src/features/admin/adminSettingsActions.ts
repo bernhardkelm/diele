@@ -9,8 +9,6 @@ export interface AdminSettingsControls {
   leave: () => void
   /** True while an export or import is in flight, which disables both */
   busy: boolean
-  /** What the last transfer said, shown in the export row's trail; omitted when it failed */
-  message?: string
 }
 
 /**
@@ -19,6 +17,10 @@ export interface AdminSettingsControls {
  * A fixed order after the features, because what the list ends with is what someone scrolling
  * to the bottom is looking for. Built here rather than inline in the view, the same way the
  * settings view composes its own closing rows.
+ *
+ * Neither row carries what the last transfer said. A trail is a word wide - the other lists put
+ * `device` and `2/3` there - and an import answers with a count per kind, which belongs on a
+ * line of its own rather than squeezed into the row above the one that ran it.
  * @param {AdminSettingsControls} controls - What each row does and whether it can right now
  * @returns {ReadonlyArray<ListAction>} - The closing rows, in list order
  */
@@ -29,7 +31,6 @@ export function adminSettingsActions(controls: AdminSettingsControls): ReadonlyA
       id: 'export',
       label: 'Export settings',
       description: 'download everything as a file; credentials ride along encrypted',
-      trail: controls.message,
       disabled: controls.busy,
       run: controls.exportSettings,
     },

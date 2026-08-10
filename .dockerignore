@@ -41,12 +41,13 @@ data
 # Tests and their harnesses. `web/tsconfig.vitest.json` stays: `web/tsconfig.json` references it,
 # and vite resolves every reference in the solution file before it transforms a line, so the build
 # fails without it. Its `include` then matches nothing but `env.d.ts`, which is enough.
+# `api/tsconfig.test.json` can go because `npm run build -w @diele/api` names `tsconfig.build.json`
+# rather than the solution file that references it.
 **/*.test.ts
-api/src/testing
+api/tests
 api/tsconfig.test.json
-web/src/testing
+web/tests
 web/vitest.config.ts
-web/vitest.setup.ts
 
 # Coverage output
 coverage

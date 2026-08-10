@@ -4,6 +4,7 @@ import AdminRowActions from '@/features/admin/AdminRowActions.vue'
 import HighlightedText from '@/components/HighlightedText.vue'
 import ScrollingText from '@/components/ScrollingText.vue'
 import LoadingDots from '@/components/LoadingDots.vue'
+import StatusDot from '@/components/StatusDot.vue'
 import { useStationRow } from '@/composables/useStationRow'
 import type { RowAction, RowActionId } from '@/features/admin/adminRowActions'
 import type { ApiFeature } from '@diele/common'
@@ -22,6 +23,8 @@ interface AdminFeatureRowProps {
   busy?: boolean
   /** Whether this feature's rows are being reloaded behind the ones already on screen */
   refreshing?: boolean
+  /** Whether it sits inside another feature's rows rather than in the top-level list */
+  nested?: boolean
   actions: ReadonlyArray<RowAction>
   /** Index the left and right keys selected, 0 being the row itself */
   activeAction?: number
@@ -31,10 +34,15 @@ const props = defineProps<AdminFeatureRowProps>()
 
 const emit = defineEmits<{ run: [id: RowActionId] }>()
 
+// Said on the heading as well as on the row that failed, because a feature's rows are only
+// loaded once it is opened and a source that stopped working should not need opening to find.
+const failing = computed(() => props.feature.failingCount ?? 0)
+
+// Read once: a station's depth is fixed by its key, and the list keys each row by that.
 const { attrs: stationAttrs, ownsEvent } = useStationRow({
   stationKey: () => props.stationKey,
   active: () => props.active,
-  level: 1,
+  level: props.nested ? 2 : 1,
 })
 
 const off = computed(() => Boolean(props.feature.toggleable) && !props.feature.enabled)
@@ -96,7 +104,7 @@ function onKeydown(event: KeyboardEvent): void {
   <li
     class="feature row-shell row-marker-focus row-grammar"
     v-bind="stationAttrs"
-    :class="{ 'feature--off': off }"
+    :class="{ 'feature--off': off, 'feature--nested': nested }"
     :aria-expanded="feature.unavailable || feature.switchOnly ? undefined : expanded"
     :aria-disabled="feature.unavailable ? true : undefined"
     @keydown="onKeydown"
@@ -104,6 +112,11 @@ function onKeydown(event: KeyboardEvent): void {
   >
     <span class="feature__name truncate">
       <HighlightedText :text="feature.label" :query="query" />
+      <StatusDot
+        v-if="failing > 0"
+        :status="{ state: 'down' }"
+        :name="`${feature.label}, ${failing} of ${feature.count} not answering`"
+      />
       <span class="feature__kind">{{ feature.kind }}</span>
     </span>
 
@@ -143,6 +156,13 @@ function onKeydown(event: KeyboardEvent): void {
    only the state below */
 .feature[aria-disabled='true'] {
   cursor: default;
+}
+
+/* see AdminEntryRow .entry: a feature configured inside another one sits at the depth of that
+   one's rows, so the two read as one list rather than as a heading among entries */
+.feature--nested {
+  --row-gutter: calc(var(--diele-space-6) * 2);
+  --row-marker-left: var(--diele-space-8);
 }
 
 /* see ScrollingText: it owns the clipping, because it has to lift it while looping */

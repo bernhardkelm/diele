@@ -17,12 +17,12 @@ import { useEntrySort } from '@/composables/useEntrySort'
 import { useGridColumns } from '@/composables/useGridColumns'
 import { ROUTES } from '@/composables/routes'
 import { useHashRoute } from '@/composables/useHashRoute'
+import { useHealth } from '@/composables/useHealth'
 import { useHiddenEntries } from '@/composables/useHiddenEntries'
 import { useLocalhostStatus } from '@/composables/useLocalhostStatus'
 import { usePortalConfig } from '@/composables/usePortalConfig'
 import { usePortalLauncher } from '@/features/portal/usePortalLauncher'
 import { useSearchEngine } from '@/features/portal/useSearchEngine'
-import { useServiceStatus } from '@/composables/useServiceStatus'
 import { useSession } from '@/composables/useSession'
 import { shortcutFor } from '@/features/portal/useLauncher'
 import type { PortalTarget } from '@/types/portal'
@@ -46,7 +46,7 @@ const {
 } = usePortalConfig()
 const { engine, cycle, urlFor } = useSearchEngine(() => engines.value)
 const { isHidden } = useHiddenEntries()
-const { user, signOut, setupRequired, loadProviders } = useSession()
+const { user, signOut, setupRequired, reauth, loadProviders } = useSession()
 const { isAdmin, isSettings, isStyleguide, go, replace } = useHashRoute()
 
 // Only an account that is signed in and told it may not configure is turned away. Someone not
@@ -96,8 +96,12 @@ const visibleRows = computed(() => sorted.value.filter((row) => !isHidden(row.re
 // A portal waiting to be claimed is the exception, and it has to be, because that is exactly
 // the case where a cache from a previous run would otherwise paint over the setup screen and
 // leave no way to reach it.
+//
+// `reauth` is the other way in, for a view that has to be signed in to show anything at all:
+// the config it is painted over is exactly what keeps the test above from recognising it.
 const needsLogin = computed(
-  () => setupRequired.value || (configState.value === 'needs-auth' && !hasConfig.value),
+  () =>
+    setupRequired.value || reauth.value || (configState.value === 'needs-auth' && !hasConfig.value),
 )
 
 // saved sites lead, so a match on one lands at index 0 where it can be auto-highlighted;
@@ -108,6 +112,13 @@ const targets = computed<ReadonlyArray<PortalTarget>>(() => [
   ...cards.value,
   ...visibleRows.value,
 ])
+
+// The condition the template renders the portal branch under. The launcher's keys are live
+// exactly while the list they move is on screen, and the dots are polled for exactly as long as
+// there is something drawing them.
+const portalShowing = computed(
+  () => !isStyleguide.value && !needsLogin.value && !isAdmin.value && !isSettings.value,
+)
 
 const {
   query,
@@ -128,16 +139,14 @@ const {
   offersAdmin: computed(() => !adminDenied.value),
   userName: computed(() => user.value?.name ?? user.value?.email ?? null),
   tileColumns,
-  // the same condition the template renders the launcher under, so its keys are live exactly
-  // while the list they move is on screen
-  enabled: () => !isStyleguide.value && !needsLogin.value && !isAdmin.value && !isSettings.value,
+  enabled: () => portalShowing.value,
   urlFor,
   openAdmin: () => go(ROUTES.admin),
   openSettings: () => go(ROUTES.settings),
   signOut: () => void signOut(),
 })
 
-const { statusFor } = useServiceStatus(() => cards.value)
+const { readingFor } = useHealth(() => portalShowing.value)
 const { isLive } = useLocalhostStatus(() => sites.value)
 const altHeld = useAltHeld()
 </script>
@@ -182,6 +191,7 @@ const altHeld = useAltHeld()
         :sites="sections.suggestions"
         :active-index="highlight"
         :is-live="isLive"
+        :reading-for="readingFor"
         :query="query"
         @launch="recordLaunch($event)"
       />
@@ -192,7 +202,7 @@ const altHeld = useAltHeld()
           :key="entry.item.ref"
           :service="entry.item"
           :shortcut="altHeld ? shortcutFor(position) : undefined"
-          :status="statusFor(entry.item)"
+          :status="readingFor(entry.item.ref)"
           :active="entry.index === highlight"
           :query="query"
           @launch="recordLaunch(entry.item)"

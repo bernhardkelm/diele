@@ -13,6 +13,8 @@ export interface ExportPayload {
   readonly commands: ReadonlyArray<Record<string, unknown>>
   /** Config, and each connector's credentials still sealed under this deployment's key */
   readonly connectors: ReadonlyArray<Record<string, unknown>>
+  /** Which source reports liveness for which entry, keyed by the refs above */
+  readonly healthBindings: ReadonlyArray<Record<string, unknown>>
   readonly settings: Record<string, unknown>
 }
 
@@ -33,9 +35,12 @@ export function buildExport(): ExportPayload {
   const rows = (sql: string, ...params: unknown[]): Array<Record<string, unknown>> =>
     db.prepare(sql).all(...params) as Array<Record<string, unknown>>
 
+  // The id travels, unlike every other renumbered-on-arrival row: a ref is built from it, and
+  // the liveness bindings below are keyed by ref. Renumbering here would restore a portal whose
+  // dots point at whichever card happened to land on that number.
   const links = (kind: string): Array<Record<string, unknown>> =>
     rows(
-      `SELECT label, url, display, keywords, icon_id AS iconId, color, position, enabled
+      `SELECT id, label, url, display, keywords, icon_id AS iconId, color, position, enabled
        FROM links WHERE kind = ? ORDER BY position, id`,
       kind,
     ).map((row) => ({
@@ -75,12 +80,18 @@ export function buildExport(): ExportPayload {
     connectors: rows(
       `SELECT id, type, label, config, sync_interval_s AS syncIntervalSeconds, position, enabled
        FROM connectors ORDER BY position, id`,
-    ).map(({ id, ...row }) => ({
+    ).map((row) => ({
       ...row,
       enabled: row.enabled === 1,
       config: JSON.parse(String(row.config ?? '{}')) as Record<string, unknown>,
-      secrets: exportSecrets(Number(id)),
+      secrets: exportSecrets(Number(row.id)),
     })),
+    // Keyed by ref, which is why the ids above travel. A binding whose target the file does not
+    // carry is dropped on the way back in rather than restored pointing at nothing.
+    healthBindings: rows(
+      `SELECT ref, provider, connector_id AS connectorId, selector
+       FROM health_bindings ORDER BY ref`,
+    ),
     settings: Object.fromEntries(
       rows('SELECT key, value FROM settings').map((row) => [
         String(row.key),

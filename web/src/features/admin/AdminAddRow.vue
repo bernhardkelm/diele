@@ -13,6 +13,8 @@ interface AdminAddRowProps {
   busy?: boolean
   /** What the pending save is doing, for one that waits on a connector's own source */
   busyLabel?: string
+  /** Why the last save from this form was refused */
+  error?: string
 }
 
 const props = defineProps<AdminAddRowProps>()
@@ -66,6 +68,7 @@ function onKeydown(event: KeyboardEvent): void {
       :feature="feature"
       :busy="busy"
       :busy-label="busyLabel"
+      :error="error"
       @submit="emit('submit', $event)"
       @cancel="emit('cancel')"
     />

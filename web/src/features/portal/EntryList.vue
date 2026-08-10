@@ -71,7 +71,9 @@ function sortLabel(key: EntrySortKey, label: string): string {
         v-for="entry in entries"
         :key="entry.item.ref"
         :entry="entry.item"
-        :mark="entry.item.connectorId !== undefined ? marks?.get(entry.item.connectorId) : undefined"
+        :mark="
+          entry.item.connectorId !== undefined ? marks?.get(entry.item.connectorId) : undefined
+        "
         :active="entry.index === activeIndex"
         :active-action="entry.index === activeIndex ? activeAction : undefined"
         :query="query"

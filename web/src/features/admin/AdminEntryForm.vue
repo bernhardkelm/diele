@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref, useTemplateRef } from 'vue'
+import { computed, onMounted, ref, useTemplateRef } from 'vue'
 import AdminField from '@/features/admin/AdminField.vue'
 import LoadingDots from '@/components/LoadingDots.vue'
 import type { ApiFeature, ApiRow } from '@diele/common'
@@ -11,6 +11,8 @@ interface AdminEntryFormProps {
   busy?: boolean
   /** What the pending save is doing, for one that waits on a connector's own source */
   busyLabel?: string
+  /** Why the last save was refused, shown here rather than at the top of a list it scrolled off */
+  error?: string
 }
 
 const props = defineProps<AdminEntryFormProps>()
@@ -51,6 +53,15 @@ function seed(): Record<string, unknown> {
   )
 }
 
+// A field that depends on another is drawn only while that one holds a value it applies to. What
+// a decorator's selector means depends on which decorator was picked, so the variants are
+// separate fields rather than one box standing for all of them.
+const visible = computed(() =>
+  props.feature.fields.filter(
+    (field) => !field.showWhen || field.showWhen.value.includes(values.value[field.showWhen.key]),
+  ),
+)
+
 /**
  * Returns whether a field already holds a stored credential, which is all the API reports.
  * @param {string} key - Field being rendered
@@ -86,7 +97,7 @@ onMounted(() => {
     @keydown.esc.stop.prevent="emit('cancel')"
   >
     <AdminField
-      v-for="field in feature.fields"
+      v-for="field in visible"
       :key="field.key"
       :field="field"
       :model-value="values[field.key]"
@@ -94,6 +105,10 @@ onMounted(() => {
       :stored="isStored(field.key)"
       @update:model-value="values[field.key] = $event"
     />
+
+    <!-- A refused save names the source and what it answered, which belongs to the form that
+         asked rather than above a list the form may have scrolled off the top of. -->
+    <p v-if="error" class="entry-form__error" role="alert">{{ error }}</p>
 
     <div class="entry-form__actions">
       <button type="submit" :disabled="busy">
@@ -127,6 +142,17 @@ onMounted(() => {
   margin-top: var(--diele-space-3);
   padding-left: calc(var(--diele-space-6) * 3);
   border-top: 1px solid var(--diele-rule);
+}
+
+.entry-form__error {
+  grid-column: 1 / -1;
+  margin: var(--diele-space-3) 0 0;
+  padding: var(--diele-space-2) var(--diele-space-3);
+  font-family: var(--diele-font-mono);
+  font-size: var(--diele-text-sm);
+  color: var(--diele-status-down);
+  border: 1px solid var(--diele-status-down);
+  border-radius: var(--diele-radius-sm);
 }
 
 .entry-form__actions {

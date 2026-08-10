@@ -20,6 +20,17 @@ export function linkRef(kind: 'card' | 'site', id: number): string {
 }
 
 /**
+ * Returns whether a ref names a card or a saved site, for a caller that has to tell the portal's
+ * own rows apart from a connector's. The one place a ref is read rather than only compared, and
+ * it reads only the prefix.
+ * @param {string} ref - Ref to test
+ * @returns {boolean} - True when the ref belongs to the links table
+ */
+export function isLinkRef(ref: string): boolean {
+  return ref.startsWith('card:') || ref.startsWith('site:')
+}
+
+/**
  * Returns the ref of a local port.
  * @param {number} id - Row id in `localhost_ports`
  * @returns {string} - Ref for the port

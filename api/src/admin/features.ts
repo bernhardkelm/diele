@@ -7,6 +7,7 @@ import { listAllLocalhost } from '#localhost/repository.js'
 import { isEnabled } from '#settings/toggles.js'
 import { listUsers } from '#users/repository.js'
 import { connectorFeatures } from './connectorFeatures.js'
+import { healthFields } from './healthFields.js'
 import {
   CARD_FIELDS,
   COMMAND_FIELDS,
@@ -20,15 +21,19 @@ import {
  * Describes everything the admin view can configure, with the counts as they stand. Built-ins
  * and connectors deliberately share one shape: a connector is only a feature whose rows come
  * from somewhere else, so the UI renders both from this one list.
- * @returns {ReadonlyArray<ApiFeature>} - Features in display order
+ * @returns {Promise<ReadonlyArray<ApiFeature>>} - Features in display order
  */
-export function listFeatures(): ReadonlyArray<ApiFeature> {
+export async function listFeatures(): Promise<ReadonlyArray<ApiFeature>> {
   const cards = listAllLinks('card')
   const sites = listAllLinks('site')
   const engines = listAllEngines()
   const ports = listAllLocalhost()
   const commands = listAllCommands()
   const users = config.authMode === 'local' ? listUsers() : []
+
+  // Built once and shared: the choices are whichever decorators are configured, which is one
+  // pair of queries, and cards and sites offer exactly the same ones.
+  const liveness = await healthFields()
 
   return [
     {
@@ -64,7 +69,7 @@ export function listFeatures(): ReadonlyArray<ApiFeature> {
       description: 'The logo cards on the resting page.',
       kind: 'builtin',
       produces: ['card'],
-      fields: CARD_FIELDS,
+      fields: [...CARD_FIELDS, ...liveness],
       collection: '/api/admin/links/card',
       count: cards.length,
       enabledCount: cards.filter((card) => card.enabled).length,
@@ -72,13 +77,30 @@ export function listFeatures(): ReadonlyArray<ApiFeature> {
       enabled: isEnabled('cards'),
       toggleHint: 'the front page keeps its rows and loses its logo grid',
     },
+    // Inside the cards rather than beside them, because that is where it is configured: the
+    // switch owns no rows, and which source reports what is set on each card and saved site.
+    {
+      id: 'health',
+      label: 'Liveness',
+      description: 'The dot on a card or saved site, from a probe or a connected monitor.',
+      kind: 'builtin',
+      produces: [],
+      fields: [],
+      count: 0,
+      enabledCount: 0,
+      toggleable: true,
+      switchOnly: true,
+      parent: 'cards',
+      enabled: isEnabled('health'),
+      toggleHint: 'every dot goes and the portal stops reaching anything to draw one',
+    },
     {
       id: 'sites',
       label: 'Saved sites',
       description: 'Suggested as results when the term matches them.',
       kind: 'builtin',
       produces: ['suggestion'],
-      fields: SITE_FIELDS,
+      fields: [...SITE_FIELDS, ...liveness],
       collection: '/api/admin/links/site',
       count: sites.length,
       enabledCount: sites.filter((site) => site.enabled).length,

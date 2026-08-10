@@ -6,7 +6,7 @@
 //      which also carries the status so a lapsed session and a refusal read differently.
 //   2. A background refresh failed. Keep whatever is already on screen, console.warn once, and
 //      never surface it: last visit's data beats an error where the user asked for neither.
-//      See usePortalConfig, useConnectorEntries, useServiceStatus.
+//      See usePortalConfig, useConnectorEntries, useHealth.
 //   3. Best-effort storage failed. Swallow it, no log. True by construction now that helpers/
 //      storage.ts is the only thing that touches localStorage.
 //   4. A reachability probe failed. Swallow it, no log: the failure is the answer being asked

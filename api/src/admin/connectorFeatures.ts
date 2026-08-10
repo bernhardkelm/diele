@@ -18,32 +18,6 @@ const DEFAULT_INTERVAL_S = 900
  */
 const PLANNED: ReadonlyArray<ApiFeature> = [
   {
-    id: 'uptime-kuma',
-    label: 'Uptime Kuma',
-    description: 'Monitor states, shown as a dot on the cards they belong to.',
-    kind: 'connector',
-    produces: [],
-    capabilities: ['health'],
-    fields: [],
-    count: 0,
-    enabledCount: 0,
-    unavailable: 'not built yet',
-    unavailableReason: 'planned',
-  },
-  {
-    id: 'prometheus',
-    label: 'Prometheus',
-    description: 'Firing alerts at the top of the page, and card states from a query.',
-    kind: 'connector',
-    produces: [],
-    capabilities: ['health', 'signals'],
-    fields: [],
-    count: 0,
-    enabledCount: 0,
-    unavailable: 'not built yet',
-    unavailableReason: 'planned',
-  },
-  {
     id: 'grafana',
     label: 'Grafana',
     description: 'Dashboards, suggested as results when the term matches them.',
@@ -107,9 +81,13 @@ export function connectorFeatures(): ReadonlyArray<ApiFeature> {
       collection: `/api/admin/connectors/${module.type}`,
       count: rows.length,
       enabledCount: rows.filter((row) => row.enabled).length,
+      failingCount: rows.filter((row) => row.enabled && row.sync.lastError).length,
       toggleable: true,
       enabled: isEnabled(module.type),
-      toggleHint: 'its rows leave the portal and its instances stop syncing until it is back on',
+      // A decorator owns no rows to take away, so saying they would leave describes nothing
+      toggleHint: module.collect
+        ? 'its rows leave the portal and its instances stop syncing until it is back on'
+        : 'the dots it reports go and its instances stop being asked until it is back on',
       ...(unavailable ? { unavailable, unavailableReason: 'blocked' as const } : {}),
     }
   })

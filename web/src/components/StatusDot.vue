@@ -1,28 +1,32 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { ServiceState, ServiceStatus } from '@/helpers/uptime'
+import type { ApiHealthReading, HealthState } from '@diele/common'
 
 interface StatusDotProps {
-  status: ServiceStatus
+  status: ApiHealthReading
   /** Service name, used to build the screen reader label */
   name: string
 }
 
 const props = defineProps<StatusDotProps>()
 
-const WORDING: Record<ServiceState, string> = {
+const WORDING: Record<HealthState, string> = {
   up: 'up',
   down: 'down',
   pending: 'pending',
   maintenance: 'in maintenance',
+  unknown: 'unknown, its source could not be reached',
 }
 
 const label = computed(() => {
   const state = `${props.name}: ${WORDING[props.status.state]}`
+  const detail = props.status.detail ? ` (${props.status.detail})` : ''
+
   if (props.status.uptime === undefined) {
-    return state
+    return `${state}${detail}`
   }
-  return `${state}, ${(props.status.uptime * 100).toFixed(2)}% uptime over 24h`
+
+  return `${state}, ${(props.status.uptime * 100).toFixed(2)}% uptime over 24h${detail}`
 })
 </script>
 
@@ -61,6 +65,15 @@ const label = computed(() => {
 
 .status--maintenance {
   background: var(--diele-status-maintenance);
+}
+
+/* The halo `down` draws and nothing inside it: the glow says something is wrong, the empty
+   centre says there is no reading behind it, and a filled red dot stays reserved for a service
+   that is actually down. Transparent rather than a background colour, because the dot sits on
+   the card, the row and the page, which are three different ones. */
+.status--unknown {
+  background: transparent;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--diele-status-down) 30%, transparent);
 }
 
 .status__label {

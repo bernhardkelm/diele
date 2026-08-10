@@ -5,7 +5,6 @@ import AdminAddRow from '@/features/admin/AdminAddRow.vue'
 import AdminEntryRow from '@/features/admin/AdminEntryRow.vue'
 import AdminFeatureRow from '@/features/admin/AdminFeatureRow.vue'
 import AdminHiddenRow from '@/features/admin/AdminHiddenRow.vue'
-import CredentialForm from '@/components/CredentialForm.vue'
 import LauncherBar from '@/components/LauncherBar.vue'
 import PageFooter from '@/components/PageFooter.vue'
 import PortalHeader from '@/components/PortalHeader.vue'
@@ -38,7 +37,7 @@ import { searchFeatures } from '@/features/admin/featureSearch'
 
 const { brand } = usePortalConfig()
 const { section: routeFeature, go, replace } = useHashRoute()
-const { signIn, mode } = useSession()
+const { reauth } = useSession()
 const {
   features,
   rows,
@@ -81,7 +80,6 @@ const actions = computed<ReadonlyArray<ListAction>>(() =>
     pickImportFile: () => file.value?.click(),
     leave: () => go(ROUTES.portal),
     busy: transferBusy.value,
-    message: failed.value ? undefined : message.value,
   }),
 )
 
@@ -476,6 +474,14 @@ function onFocusin(event: FocusEvent): void {
   release()
 }
 
+// A lapsed session hands the whole screen back to the gate rather than offering a form inside a
+// panel that has nothing left to show. Which sign-in that is stays the gate's own business, so
+// nothing here reads the mode or clears a cache. The hash is left alone, so signing in lands
+// back on this view.
+watch(needsAuth, (lapsed) => {
+  reauth.value = lapsed
+})
+
 onMounted(() => void loadFeatures())
 </script>
 
@@ -494,21 +500,9 @@ onMounted(() => void loadFeatures())
       @submit="submit"
     />
 
-    <div v-if="needsAuth" class="admin__notice">
-      <p class="admin__notice-text">
-        This session has ended. Configuration is only readable while signed in.
-      </p>
-
-      <!-- The password form belongs here rather than a link back to the gate: the gate only
-           shows on a portal with no config to paint, and this one by definition has some. -->
-      <CredentialForm v-if="mode === 'local'" autofocus @done="reload" />
-
-      <button v-else type="button" @click="signIn()">Sign in again</button>
-    </div>
-
-    <!-- Not a lapse, so this offers the way out rather than the sign-in form above: the same
-         account signing in again lands straight back here. -->
-    <div v-else-if="forbidden" class="admin__notice">
+    <!-- Not a lapse, so this offers the way out rather than the gate: the same account signing
+         in again lands straight back here. -->
+    <div v-if="forbidden" class="admin__notice">
       <p class="admin__notice-text">
         This account may not configure the portal. Ask an administrator for access.
       </p>
@@ -516,7 +510,20 @@ onMounted(() => void loadFeatures())
       <button type="button" @click="go(ROUTES.portal)">Back to the portal</button>
     </div>
 
-    <p v-else-if="error" class="admin__error" role="alert">{{ error }}</p>
+    <!-- Only while no form is open. A refused save is shown by the form that asked for it, and
+         repeating it up here would say the same thing twice, once out of reach. -->
+    <p v-else-if="error && !editing" class="admin__error" role="alert">{{ error }}</p>
+
+    <!-- Above the list rather than under it: an import answers with a count per kind, and an
+         import is also the thing most likely to have just made the list longer than the screen. -->
+    <p
+      v-if="message"
+      class="admin__transfer"
+      :class="{ 'admin__transfer--failed': failed }"
+      role="status"
+    >
+      {{ message }}
+    </p>
 
     <main v-if="!needsAuth && !forbidden" class="admin__body">
       <ul
@@ -536,6 +543,7 @@ onMounted(() => void loadFeatures())
             :focused="index === activeIndex"
             :query="query"
             :busy="busy"
+            :nested="station.nested"
             :refreshing="refreshing && expanded === station.feature.id"
             :actions="rowActionsFor(station)"
             :active-action="index === activeIndex ? activeAction : 0"
@@ -553,6 +561,7 @@ onMounted(() => void loadFeatures())
             :busy="busy"
             :working="busy && acting === station.key ? busyLabel : undefined"
             :busy-label="busyLabel"
+            :error="editing === station.key ? error : undefined"
             :actions="rowActionsFor(station)"
             :active-action="index === activeIndex ? activeAction : 0"
             @run="runAction(station, index, $event)"
@@ -568,6 +577,7 @@ onMounted(() => void loadFeatures())
             :editing="editing === station.key"
             :busy="busy"
             :busy-label="busyLabel"
+            :error="editing === station.key ? error : undefined"
             @open="editing = station.key"
             @cancel="cancelEdit(station.key)"
             @submit="addEntry(station.key, $event)"
@@ -598,10 +608,6 @@ onMounted(() => void loadFeatures())
       </ul>
 
       <p v-else class="admin__empty">Nothing here matches “{{ query }}”.</p>
-
-      <p v-if="message" class="admin__transfer" :class="{ 'admin__transfer--failed': failed }">
-        {{ message }}
-      </p>
 
       <input
         ref="file"
@@ -690,16 +696,22 @@ onMounted(() => void loadFeatures())
   color: var(--diele-fg-muted);
 }
 
+/* the shape .admin__error has, so the two read as the same kind of thing in the same place */
 .admin__transfer {
-  margin-top: var(--diele-space-4);
+  width: 100%;
+  max-width: var(--diele-content-width);
+  margin: 0;
+  padding: var(--diele-space-3);
   font-family: var(--diele-font-mono);
-  font-size: var(--diele-text-sm);
-  text-align: center;
+  font-size: var(--diele-text-md);
   color: var(--diele-fg-muted);
+  border: 1px solid var(--diele-rule);
+  border-radius: var(--diele-radius-sm);
 }
 
 .admin__transfer--failed {
   color: var(--diele-status-down);
+  border-color: var(--diele-status-down);
 }
 
 .admin__file {

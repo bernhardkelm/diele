@@ -1,10 +1,13 @@
 import { z } from 'zod'
 import { isBuiltInKeyword } from '#commands/repository.js'
+import { isLinkRef, linkRef } from '#connectors/refs.js'
 import { getDb } from '#db/index.js'
 import { hexColor, httpUrl, queryTemplate } from '#fieldSchemas.js'
+import { HTTP_PROVIDER } from '#health/providers.js'
 import { sanitizeSvg } from '#icons/sanitize.js'
 import { MAX_SVG_BYTES } from '#icons/schemas.js'
 import { importSecrets } from '#secrets/repository.js'
+import { MAX_SELECTOR_LENGTH } from './healthSelector.js'
 import { VERSION } from './transferVersion.js'
 
 // An imported file is checked exactly as hard as a typed one. It may have been edited by hand or
@@ -17,6 +20,9 @@ const iconSchema = z.object({
 })
 
 const linkSchema = z.object({
+  // Absent on a v3 file and earlier, which numbered its rows on arrival. Carried from v4 on,
+  // because a ref is built from it and the liveness bindings are keyed by ref.
+  id: z.number().int().positive().optional(),
   label: z.string().trim().min(1).max(120),
   url: httpUrl,
   display: z.string().nullish(),
@@ -76,7 +82,26 @@ const secretSchema = z.object({
   ciphertext: base64,
 })
 
+// The invariant migration 003 documents and `writeBinding` upholds, enforced here too because an
+// insert of its own goes around that writer. A file disagreeing has a binding whose provider and
+// instance say different things, and the resolver would route it by the instance rather than the
+// provider it names.
+const healthBindingSchema = z
+  .object({
+    ref: z.string().trim().min(1).max(200),
+    provider: z.string().trim().min(1).max(60),
+    connectorId: z.number().int().positive().nullish(),
+    selector: z.string().max(MAX_SELECTOR_LENGTH).nullish(),
+  })
+  .refine(
+    (binding) =>
+      (binding.provider === HTTP_PROVIDER) ===
+      (binding.connectorId === null || binding.connectorId === undefined),
+    { message: 'connector_id is set exactly when the provider is not the built-in probe' },
+  )
+
 const connectorSchema = z.object({
+  id: z.number().int().positive().optional(),
   type: z.string().trim().min(1).max(40),
   label: z.string().trim().min(1).max(80),
   config: z.record(z.string(), z.unknown()).default({}),
@@ -88,11 +113,13 @@ const connectorSchema = z.object({
 })
 
 export const importSchema = z.object({
-  // Every version this far applies: a v1 file simply carries no connectors, and a v2 one carries
-  // them without their credentials.
-  version: z.union([z.literal(1), z.literal(2), z.literal(VERSION)]),
+  // Every version this far applies, each older one simply carrying less: no connectors at v1, no
+  // credentials at v2, no row ids or bindings at v3. One newer than this build knows is refused,
+  // because whatever it added is exactly what this code would drop without noticing.
+  version: z.number().int().min(1).max(VERSION),
   icons: z.array(iconSchema).default([]),
   connectors: z.array(connectorSchema).default([]),
+  healthBindings: z.array(healthBindingSchema).default([]),
   cards: z.array(linkSchema).default([]),
   sites: z.array(linkSchema).default([]),
   engines: z.array(engineSchema).default([]),
@@ -120,9 +147,11 @@ export function applyImport(payload: ImportPayload): Record<string, number> {
   const db = getDb()
 
   const insertIcon = db.prepare('INSERT INTO icons (id, name, svg) VALUES (?, ?, ?)')
+  // A null id is what sqlite assigns the next number for, so one statement covers a file that
+  // carries its ids and an older one that does not.
   const insertLink = db.prepare(
-    `INSERT INTO links (kind, label, url, display, keywords, icon_id, color, position, enabled)
-     VALUES (@kind, @label, @url, @display, @keywords, @iconId, @color, @position, @enabled)`,
+    `INSERT INTO links (id, kind, label, url, display, keywords, icon_id, color, position, enabled)
+     VALUES (@id, @kind, @label, @url, @display, @keywords, @iconId, @color, @position, @enabled)`,
   )
   const insertEngine = db.prepare(
     `INSERT INTO search_engines (name, url_template, position, enabled)
@@ -140,8 +169,12 @@ export function applyImport(payload: ImportPayload): Record<string, number> {
   // Inserted off whatever the file said, and switched on below only once its credentials are in.
   // A connector restored on without them would spend every interval failing.
   const insertConnector = db.prepare(
-    `INSERT INTO connectors (type, label, config, sync_interval_s, position, enabled)
-     VALUES (@type, @label, @config, @interval, @position, 0)`,
+    `INSERT INTO connectors (id, type, label, config, sync_interval_s, position, enabled)
+     VALUES (@id, @type, @label, @config, @interval, @position, 0)`,
+  )
+  const insertBinding = db.prepare(
+    `INSERT INTO health_bindings (ref, provider, connector_id, selector)
+     VALUES (@ref, @provider, @connectorId, @selector)`,
   )
   const enableConnector = db.prepare('UPDATE connectors SET enabled = 1 WHERE id = ?')
   // The scheduler reads its queue from this table, so a connector without a row is one it never
@@ -155,6 +188,9 @@ export function applyImport(payload: ImportPayload): Record<string, number> {
     db.prepare('DELETE FROM localhost_ports').run()
     db.prepare('DELETE FROM slash_commands').run()
     db.prepare('DELETE FROM settings').run()
+    // Not covered by either delete around it: a binding on the built-in probe names no connector
+    // to cascade from, and a ref is not a foreign key to the links table.
+    db.prepare('DELETE FROM health_bindings').run()
     // Cascades to the credentials, the cached entries and the sync state, so nothing is left
     // holding a token for a connector the import replaced.
     db.prepare('DELETE FROM connectors').run()
@@ -165,12 +201,17 @@ export function applyImport(payload: ImportPayload): Record<string, number> {
 
     const known = new Set(payload.icons.map((icon) => icon.id))
 
+    // Refs the file actually brought, so a binding naming a card it did not carry is dropped
+    // rather than restored pointing at nothing.
+    const linkRefs = new Set<string>()
+
     for (const [kind, list] of [
       ['card', payload.cards],
       ['site', payload.sites],
     ] as const) {
       for (const link of list) {
-        insertLink.run({
+        const { lastInsertRowid } = insertLink.run({
+          id: link.id ?? null,
           kind,
           label: link.label,
           url: link.url,
@@ -183,6 +224,8 @@ export function applyImport(payload: ImportPayload): Record<string, number> {
           position: link.position,
           enabled: link.enabled ? 1 : 0,
         })
+
+        linkRefs.add(linkRef(kind, Number(lastInsertRowid)))
       }
     }
 
@@ -215,8 +258,11 @@ export function applyImport(payload: ImportPayload): Record<string, number> {
       })
     }
 
+    const connectorIds = new Set<number>()
+
     for (const connector of payload.connectors) {
       const { lastInsertRowid } = insertConnector.run({
+        id: connector.id ?? null,
         type: connector.type,
         label: connector.label,
         config: JSON.stringify(connector.config),
@@ -226,6 +272,7 @@ export function applyImport(payload: ImportPayload): Record<string, number> {
 
       const id = Number(lastInsertRowid)
       insertSync.run(id)
+      connectorIds.add(id)
 
       const stored = importSecrets(id, connector.secrets)
 
@@ -235,6 +282,28 @@ export function applyImport(payload: ImportPayload): Record<string, number> {
       if (connector.enabled && stored === connector.secrets.length) {
         enableConnector.run(id)
       }
+    }
+
+    // After both, because a binding names a link by ref and a connector by id. A ref that is not
+    // a link's is a connector-produced entry, which the file never carries: those are a sync
+    // cache rather than configuration, so the binding waits for the first run to fill them in.
+    for (const binding of payload.healthBindings) {
+      const connectorId = binding.connectorId ?? null
+
+      if (connectorId !== null && !connectorIds.has(connectorId)) {
+        continue
+      }
+
+      if (isLinkRef(binding.ref) && !linkRefs.has(binding.ref)) {
+        continue
+      }
+
+      insertBinding.run({
+        ref: binding.ref,
+        provider: binding.provider,
+        connectorId,
+        selector: binding.selector ?? null,
+      })
     }
 
     for (const [key, value] of Object.entries(payload.settings)) {
@@ -250,5 +319,6 @@ export function applyImport(payload: ImportPayload): Record<string, number> {
     localhost: payload.localhost.length,
     commands: payload.commands.length,
     connectors: payload.connectors.length,
+    healthBindings: payload.healthBindings.length,
   }
 }
