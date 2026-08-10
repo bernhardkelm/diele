@@ -4,17 +4,12 @@
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "noEmit": true,
-    // The package root, because the program spans both trees. `rootDir` is checked even under
-    // `noEmit`, so `./src` fails every file in `tests/` with TS6059.
+    // The package root, `rootDir` is checked even under `noEmit` and `./src` rejects `tests/`
     "rootDir": ".",
-    // Pinned: with `rootDir` at the package root the default lands inside `dist/`, the artifact
-    // directory, where the root `clean` script would not find it.
+    // Pinned, the default lands in `dist/` once `rootDir` is the package root
     "tsBuildInfoFile": "./tsconfig.test.tsbuildinfo"
   },
-  // `src/**/*` as well as the tests: `src/express-augment.d.ts` is a global augmentation, and a
-  // `.d.ts` only applies when it is a root file of the program.
+  // `src` too, `express-augment.d.ts` augments Request only while it is a root file
   "include": ["src/**/*", "tests/**/*"],
-  // Explicit, so the parent's is never inherited: an inherited `exclude` wins over the `include`
-  // above without a word.
   "exclude": []
 }

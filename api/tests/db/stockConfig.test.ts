@@ -24,7 +24,6 @@ interface SeedFile {
   }>
 }
 
-// The package root, two levels up from `tests/db/`.
 const seedPath = resolve(import.meta.dirname, '../..', 'example-seed.json')
 const seed = JSON.parse(readFileSync(seedPath, 'utf8')) as SeedFile
 

@@ -7,8 +7,7 @@ import { join } from 'node:path'
 import { after, before, test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 
-// A filesystem path handed to a child process, not a module specifier, so `#server.js` cannot
-// stand in for it.
+// A filesystem path for a child process, not a module specifier `#server.js` could stand in for
 const SERVER = fileURLToPath(new URL('../src/server.ts', import.meta.url))
 const dbPath = join(tmpdir(), `diele-server-test-${process.pid}.db`)
 

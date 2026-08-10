@@ -3,16 +3,12 @@
 // disk, which nothing in the app itself ever does.
 {
   "extends": "./tsconfig.app.json",
-  // `env.d.ts` is not decoration: the image build leaves `tests/` out, and an empty input set is
-  // TS18003.
   "include": ["tests/**/*", "env.d.ts"],
-  // Explicit, because `extends` inherits `exclude` whenever the child omits it, and an inherited
-  // one wins over the `include` above without a word.
+  // Explicit, an inherited `exclude` would silently win over the `include` above
   "exclude": [],
   "compilerOptions": {
     "types": ["node"],
-    // Replaces the inherited map rather than adding to it: `paths` is a single option, so `@/*`
-    // has to be restated alongside `@tests/*`.
+    // `paths` replaces rather than merges, so `@/*` has to be restated
     "paths": {
       "@/*": ["./src/*"],
       "@tests/*": ["./tests/*"]

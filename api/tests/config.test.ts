@@ -3,8 +3,7 @@ import { spawnSync } from 'node:child_process'
 import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 
-// A filesystem path handed to a child process, not a module specifier, so `#config.js` cannot
-// stand in for it.
+// A filesystem path for a child process, not a module specifier `#config.js` could stand in for
 const CONFIG = fileURLToPath(new URL('../src/config.ts', import.meta.url))
 
 interface BootResult {
