@@ -166,18 +166,38 @@ test('the source’s own description is an admin’s to read', async () => {
   assert.equal(reading?.detail, undefined)
 })
 
-// A decorator that cannot be reached knows nothing about the services it watches, and painting
-// them all red on that basis would be a worse lie than painting nothing.
-test('a source that throws leaves no dots rather than a wall of red', async () => {
+// Not `down`, which is a claim about the service, and not nothing either: a dot that vanishes is
+// how a decorator stops working without anyone noticing.
+test('a source that throws marks what it watches unknown rather than down', async () => {
   const id = connector()
   const ref = card('One', 'https://one.example')
   writeBinding({ ref, provider: 'gitlab', connectorId: id, selector: 'a' })
-  answer = new Error('unreachable')
+  answer = new Error('fetch failed (ECONNREFUSED)')
 
   readHealth(true)
   await new Promise((resolve) => setTimeout(resolve, 20))
 
-  assert.deepEqual(readHealth(true).readings, {})
+  assert.deepEqual(readHealth(true).readings[ref], {
+    state: 'unknown',
+    detail: 'fetch failed (ECONNREFUSED)',
+  })
+})
+
+// The message quotes the source's own response, which on an internal instance names hosts and
+// ports, the same reason a monitor name is narrowed.
+test('why the source could not be reached is an admin’s to read', async () => {
+  const id = connector()
+  const ref = card('One', 'https://one.example')
+  writeBinding({ ref, provider: 'gitlab', connectorId: id, selector: 'a' })
+  answer = new Error('connect ECONNREFUSED 10.1.0.4:9500')
+
+  readHealth(false)
+  await new Promise((resolve) => setTimeout(resolve, 20))
+
+  const reading = readHealth(false).readings[ref]
+
+  assert.equal(reading?.state, 'unknown')
+  assert.equal(reading?.detail, undefined)
 })
 
 test('an entry the source did not answer for loses its dot rather than keeping the last one', async () => {
@@ -242,4 +262,60 @@ test('switching the feature off and back on does not cost a minute of blank dots
 
   setEnabled('health', true)
   assert.equal(readHealth(true).readings[ref]?.state, 'up')
+})
+
+/**
+ * Reads what the panel shows about a connector's last run.
+ * @param {number} id - Connector to read
+ * @returns {{ last_ok_at: string | null; last_error: string | null }} - Its recorded state
+ */
+function recorded(id: number): { last_ok_at: string | null; last_error: string | null } {
+  return getDb()
+    .prepare('SELECT last_ok_at, last_error FROM connector_sync WHERE connector_id = ?')
+    .get(id) as { last_ok_at: string | null; last_error: string | null }
+}
+
+// A decorator runs no sync, so this is the only thing that ever says one is working, and the
+// panel would otherwise call it `never synced` for as long as it existed.
+test('a decorator that answered is recorded as read', async () => {
+  const id = connector()
+  const ref = card('One', 'https://one.example')
+  writeBinding({ ref, provider: 'gitlab', connectorId: id, selector: 'a' })
+
+  assert.equal(recorded(id).last_ok_at, null)
+
+  await listProviderTasks()[0]?.run()
+
+  assert.notEqual(recorded(id).last_ok_at, null)
+  assert.equal(recorded(id).last_error, null)
+})
+
+// A dot that quietly stopped appearing says nothing on its own, so the reason is kept where the
+// panel can show it.
+test('a decorator that could not be reached records why', async () => {
+  const id = connector()
+  const ref = card('One', 'https://one.example')
+  writeBinding({ ref, provider: 'gitlab', connectorId: id, selector: 'a' })
+  answer = new Error('fetch failed (ECONNREFUSED)')
+
+  await listProviderTasks()[0]?.run()
+
+  assert.equal(recorded(id).last_error, 'fetch failed (ECONNREFUSED)')
+})
+
+// The entries of the last good run keep being served through a failure, and the same is true of
+// when it last worked: overwriting it would lose how long something has been broken.
+test('a failure leaves the last good read standing', async () => {
+  const id = connector()
+  const ref = card('One', 'https://one.example')
+  writeBinding({ ref, provider: 'gitlab', connectorId: id, selector: 'a' })
+
+  await listProviderTasks()[0]?.run()
+  const wasOkAt = recorded(id).last_ok_at
+
+  answer = new Error('gone')
+  await listProviderTasks()[0]?.run()
+
+  assert.equal(recorded(id).last_ok_at, wasOkAt)
+  assert.equal(recorded(id).last_error, 'gone')
 })

@@ -5,10 +5,14 @@ import App from '@/App.vue'
 import CommandRow from '@/features/portal/CommandRow.vue'
 import EntryRow from '@/features/portal/EntryRow.vue'
 import LauncherBar from '@/components/LauncherBar.vue'
+import LoginGate from '@/views/LoginGate.vue'
 import ServiceCard from '@/features/portal/ServiceCard.vue'
 import SiteRow from '@/features/portal/SiteRow.vue'
+import { CONFIG_CACHE_KEY } from '@/config/api'
+import { resetAdmin } from '@/features/admin/useAdmin'
 import { resetPortalConfig } from '@/composables/usePortalConfig'
 import { resetConnectorEntries } from '@/composables/useConnectorEntries'
+import { resetSession } from '@/composables/useSession'
 
 const CONFIG = {
   brand: { title: 'diele', subtitle: 'start page', accentLight: '#16a34a', accentDark: '#22c55e' },
@@ -134,12 +138,16 @@ beforeEach(() => {
   window.location.hash = ''
   resetPortalConfig()
   resetConnectorEntries()
+  resetSession()
+  resetAdmin()
   vi.stubGlobal('fetch', stubApi())
 })
 
 afterEach(() => {
   resetPortalConfig()
   resetConnectorEntries()
+  resetSession()
+  resetAdmin()
   localStorage.clear()
   window.location.hash = ''
   vi.unstubAllGlobals()
@@ -281,5 +289,31 @@ describe('the routes', () => {
     await vi.waitFor(() => expect(window.location.hash).toBe('#/'))
 
     expect(wrapper.findComponent(LauncherBar).exists()).toBe(true)
+  })
+
+  // The panel has nothing to paint without a session, so it hands the screen over rather than
+  // carrying a sign-in of its own. What the portal cached is untouched, so backing out of the
+  // gate still finds a front page.
+  it('hands the screen to the gate when the admin session has lapsed', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL) => {
+        if (String(input).includes('/api/admin/')) {
+          return Promise.resolve(
+            new Response(JSON.stringify({ error: 'authentication required' }), { status: 401 }),
+          )
+        }
+
+        return stubApi()(input)
+      }),
+    )
+
+    const wrapper = await open()
+    window.location.hash = '/admin'
+    window.dispatchEvent(new HashChangeEvent('hashchange'))
+
+    await vi.waitFor(() => expect(wrapper.findComponent(LoginGate).exists()).toBe(true))
+
+    expect(localStorage.getItem(CONFIG_CACHE_KEY)).not.toBeNull()
   })
 })

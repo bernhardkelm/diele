@@ -263,9 +263,10 @@ plain links to GitHub, not API calls, which is why the permission set stays this
 | field | |
 | --- | --- |
 | **Instance** | origin only, where Uptime Kuma itself is served |
-| **API key** | stored encrypted, never returned |
+| **API key** | optional, only where the instance asks for one; stored encrypted, never returned |
 
-Create one under *Settings → API Keys*. It reads Kuma's Prometheus `/metrics` endpoint, which
+Create one under *Settings → API Keys*. An instance running with authentication disabled serves
+its metrics to anyone and needs no key here. It reads Kuma's Prometheus `/metrics` endpoint, which
 carries **every** monitor whether or not a status page publishes it, so nothing has to be made
 public to be used here.
 
@@ -294,6 +295,12 @@ The dot on a card or a saved site. Every entry picks **one** source, from a drop
 editor that offers whatever is configured: the built-in HTTP probe, or any Uptime Kuma or
 Prometheus connector you have added. The field below it changes with the choice, because a path,
 a monitor name and a PromQL expression are not the same thing.
+
+A source that **cannot be reached itself** turns the dots it answers for hollow with a red ring,
+rather than red or missing. It knows nothing about the services it watches while it is down, so
+calling them down would blame the wrong thing, and leaving the dot off is how a decorator stops
+working without anyone noticing. Hovering says what failed. The HTTP probe never reports it:
+reaching the service is the whole of what it measures, so unreachable there *is* down.
 
 The **HTTP probe** needs nothing configured. It requests the entry's url and calls a `2xx` up.
 Everything else is down, redirects included: a `302` to a login page is the most common way for a

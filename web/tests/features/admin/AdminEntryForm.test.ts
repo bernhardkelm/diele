@@ -110,3 +110,28 @@ describe('AdminEntryForm', () => {
     })
   })
 })
+
+describe('a save the source refused', () => {
+  // The panel scrolls, and a connector's form can sit well below the fold: a message at the top
+  // of the page is one the person who caused it may never see.
+  it('says why inside the form that asked', () => {
+    const wrapper = mount(AdminEntryForm, {
+      props: {
+        feature: FEATURE,
+        error: 'Uptime Kuma could not be reached: fetch failed (ECONNREFUSED)',
+      },
+    })
+
+    const alert = wrapper.find('[role="alert"]')
+
+    expect(alert.exists()).toBe(true)
+    expect(alert.text()).toContain('ECONNREFUSED')
+    expect(wrapper.find('form').element.contains(alert.element)).toBe(true)
+  })
+
+  it('shows nothing while the last save went through', () => {
+    const wrapper = mount(AdminEntryForm, { props: { feature: FEATURE } })
+
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false)
+  })
+})

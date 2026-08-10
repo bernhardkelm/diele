@@ -7,8 +7,16 @@
  * it.
  */
 
-/** The states a dot can be drawn in. Kuma's four; a source reporting fewer uses fewer. */
-export type HealthState = 'up' | 'down' | 'pending' | 'maintenance'
+/**
+ * The states a dot can be drawn in. Kuma's four, and one of our own.
+ *
+ * `unknown` is the source itself failing rather than the service it watches: a decorator that
+ * cannot be reached knows nothing about what it monitors, so calling those services `down` would
+ * blame the wrong thing. It is drawn rather than left off, because a dot that quietly vanishes
+ * is how a decorator stops working without anyone noticing. A source whose whole job is to reach
+ * the service, like the HTTP probe, never reports it: there, unreachable is what down means.
+ */
+export type HealthState = 'up' | 'down' | 'pending' | 'maintenance' | 'unknown'
 
 export interface ApiHealthReading {
   readonly state: HealthState

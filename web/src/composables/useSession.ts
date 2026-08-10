@@ -43,6 +43,12 @@ export interface SessionSource {
   mode: Ref<ApiProviders['mode'] | undefined>
   /** True while the portal holds no account yet and the gate should offer to create one */
   setupRequired: Ref<boolean>
+  /**
+   * Set by a view that wants the gate on screen rather than a sign-in of its own. The gate is
+   * not a route, so App decides when to paint it, and a lapsed session behind a cached config
+   * is not a case it would otherwise recognise.
+   */
+  reauth: Ref<boolean>
   /** Sends the browser to the issuer, or surfaces the password form, depending on the mode */
   signIn: (remember?: boolean) => void
   signInWithPassword: (credentials: Credentials) => Promise<void>
@@ -63,6 +69,7 @@ const providers = ref<ReadonlyArray<ApiProvider>>([])
 const brand = ref<ApiBrand>(injectedBrand ?? DEFAULT_BRAND)
 const mode = ref<ApiProviders['mode'] | undefined>()
 const setupRequired = ref(false)
+const reauth = ref(false)
 
 if (injectedBrand) {
   applyBrandAccent(injectedBrand)
@@ -80,6 +87,7 @@ export function resetSession(): void {
   brand.value = injectedBrand ?? DEFAULT_BRAND
   mode.value = undefined
   setupRequired.value = false
+  reauth.value = false
   loadProviders.reset()
 }
 
@@ -161,6 +169,7 @@ async function adoptSession(): Promise<void> {
   }
 
   setupRequired.value = false
+  reauth.value = false
   // Both, and in parallel: the session changed without the page reloading, so every request
   // that answered 401 a moment ago has to be retried, not only the config's.
   await Promise.all([refreshPortalConfig(), refreshConnectorEntries()])
@@ -302,6 +311,7 @@ export function useSession(): SessionSource {
     providers,
     mode,
     setupRequired,
+    reauth,
     signIn,
     signInWithPassword,
     completeSetup,

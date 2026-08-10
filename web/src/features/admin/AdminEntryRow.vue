@@ -8,7 +8,7 @@ import StatusDot from '@/components/StatusDot.vue'
 import { useStationRow } from '@/composables/useStationRow'
 import type { RowAction, RowActionId } from '@/features/admin/adminRowActions'
 import { detailOf, summaryOf } from '@/features/admin/adminRowText'
-import type { ApiFeature, ApiRow } from '@diele/common'
+import type { ApiFeature, ApiHealthReading, ApiRow } from '@diele/common'
 
 interface AdminEntryRowProps {
   feature: ApiFeature
@@ -25,6 +25,8 @@ interface AdminEntryRowProps {
   working?: string
   /** What a save from this row's form is doing, shown inside the form */
   busyLabel?: string
+  /** Why the last save from this row's form was refused */
+  error?: string
   actions: ReadonlyArray<RowAction>
   /** Index the left and right keys selected, 0 being the row itself */
   activeAction?: number
@@ -50,6 +52,19 @@ const { attrs: stationAttrs, ownsEvent } = useStationRow({
 const confirming = ref(false)
 
 const name = computed(() => summaryOf(props.row))
+
+// A connector that could not be reached carries a dot of its own, the way a bound entry carries
+// one about its service. `down` rather than `unknown`: this is not a source failing to report on
+// something else, it is the thing itself that did not answer.
+const reading = computed<ApiHealthReading | undefined>(() => {
+  if (props.row.healthReading) {
+    return props.row.healthReading as ApiHealthReading
+  }
+
+  const failure = (props.row.sync as { lastError?: string | null } | undefined)?.lastError
+
+  return failure ? { state: 'down', detail: failure } : undefined
+})
 const label = computed(() => (props.row.enabled === false ? `${name.value}, off` : name.value))
 
 /**
@@ -181,12 +196,12 @@ function onFocusout(event: FocusEvent): void {
          name rather than before it, so every row's text starts on the same edge. -->
     <span class="entry__name">
       <span class="truncate">{{ name }}</span>
-      <StatusDot v-if="row.healthReading" :status="row.healthReading" :name="name" />
+      <StatusDot v-if="reading" :status="reading" :name="name" />
     </span>
 
     <span v-if="working" class="entry__working" role="status">{{ working }}<LoadingDots /></span>
 
-    <ScrollingText v-else class="entry__detail" :text="detailOf(row)" :focused="focused" />
+    <ScrollingText v-else class="entry__detail" :text="detailOf(row, feature)" :focused="focused" />
 
     <span class="entry__trail row-trail">
       <span v-if="row.readonly" class="entry__builtin">built in</span>
@@ -212,6 +227,7 @@ function onFocusout(event: FocusEvent): void {
       :row="row"
       :busy="busy"
       :busy-label="busyLabel"
+      :error="error"
       @submit="emit('submit', $event)"
       @cancel="emit('cancel')"
     />

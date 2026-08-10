@@ -81,6 +81,7 @@ export function connectorFeatures(): ReadonlyArray<ApiFeature> {
       collection: `/api/admin/connectors/${module.type}`,
       count: rows.length,
       enabledCount: rows.filter((row) => row.enabled).length,
+      failingCount: rows.filter((row) => row.enabled && row.sync.lastError).length,
       toggleable: true,
       enabled: isEnabled(module.type),
       // A decorator owns no rows to take away, so saying they would leave describes nothing

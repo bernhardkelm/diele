@@ -191,6 +191,29 @@ export function setConnectorEnabled(id: number, enabled: boolean): void {
 }
 
 /**
+ * Records that a decorator was read, so the panel can say whether one is working.
+ *
+ * A decorator runs no sync, so nothing else ever writes these columns for it and a row would
+ * otherwise read `never synced` for as long as it existed. Only the three columns that mean
+ * "was this reached, and when": entry counts belong to a connector that produces entries, and
+ * the backoff to one the scheduler drives.
+ * @param {number} connectorId - Connector that was asked
+ * @param {string | null} error - What went wrong, already redacted, or null when it answered
+ * @returns {void}
+ */
+export function recordHealthRead(connectorId: number, error: string | null): void {
+  getDb()
+    .prepare(
+      `UPDATE connector_sync
+       SET last_run_at = datetime('now'),
+           last_ok_at = CASE WHEN @error IS NULL THEN datetime('now') ELSE last_ok_at END,
+           last_error = @error
+       WHERE connector_id = @connectorId`,
+    )
+    .run({ connectorId, error })
+}
+
+/**
  * Removes a connector. Its credentials, entries and sync state go with it through the foreign
  * keys, so nothing is left holding a token for something that no longer exists.
  * @param {number} id - Connector to delete

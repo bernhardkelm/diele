@@ -46,7 +46,7 @@ const {
 } = usePortalConfig()
 const { engine, cycle, urlFor } = useSearchEngine(() => engines.value)
 const { isHidden } = useHiddenEntries()
-const { user, signOut, setupRequired, loadProviders } = useSession()
+const { user, signOut, setupRequired, reauth, loadProviders } = useSession()
 const { isAdmin, isSettings, isStyleguide, go, replace } = useHashRoute()
 
 // Only an account that is signed in and told it may not configure is turned away. Someone not
@@ -96,8 +96,12 @@ const visibleRows = computed(() => sorted.value.filter((row) => !isHidden(row.re
 // A portal waiting to be claimed is the exception, and it has to be, because that is exactly
 // the case where a cache from a previous run would otherwise paint over the setup screen and
 // leave no way to reach it.
+//
+// `reauth` is the other way in, for a view that has to be signed in to show anything at all:
+// the config it is painted over is exactly what keeps the test above from recognising it.
 const needsLogin = computed(
-  () => setupRequired.value || (configState.value === 'needs-auth' && !hasConfig.value),
+  () =>
+    setupRequired.value || reauth.value || (configState.value === 'needs-auth' && !hasConfig.value),
 )
 
 // saved sites lead, so a match on one lands at index 0 where it can be auto-highlighted;

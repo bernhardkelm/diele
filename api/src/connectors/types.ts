@@ -1,4 +1,10 @@
-import type { ApiFieldSpec, DisplayMode, EntryAction, HealthState } from '@diele/common'
+import type {
+  ApiFieldOption,
+  ApiFieldSpec,
+  DisplayMode,
+  EntryAction,
+  HealthState,
+} from '@diele/common'
 
 /**
  * What a connectivity check is given. Narrower than a run's context on purpose: it happens
@@ -112,6 +118,13 @@ export interface ConnectorModule {
    * `resolveHealth`; its `showWhen` is filled in by the feature list.
    */
   readonly healthSelectorField?: ApiFieldSpec
+  /**
+   * Lists what this instance can be bound to, for a source whose targets are enumerable. Turns
+   * the selector above into a dropdown of what is actually there, rather than a box someone has
+   * to type a name into exactly. A source whose selector is an arbitrary expression declares
+   * nothing here, and one that fails to answer falls back to the typed box.
+   */
+  readonly listHealthTargets?: (context: ConnectorContext) => Promise<ReadonlyArray<ApiFieldOption>>
   /** Keys of `fields` that are write-only, so the API can refuse to read them back */
   readonly secretKeys: ReadonlyArray<string>
   /** Validates and normalises config before anything is stored or run against it */

@@ -21,9 +21,9 @@ import {
  * Describes everything the admin view can configure, with the counts as they stand. Built-ins
  * and connectors deliberately share one shape: a connector is only a feature whose rows come
  * from somewhere else, so the UI renders both from this one list.
- * @returns {ReadonlyArray<ApiFeature>} - Features in display order
+ * @returns {Promise<ReadonlyArray<ApiFeature>>} - Features in display order
  */
-export function listFeatures(): ReadonlyArray<ApiFeature> {
+export async function listFeatures(): Promise<ReadonlyArray<ApiFeature>> {
   const cards = listAllLinks('card')
   const sites = listAllLinks('site')
   const engines = listAllEngines()
@@ -33,7 +33,7 @@ export function listFeatures(): ReadonlyArray<ApiFeature> {
 
   // Built once and shared: the choices are whichever decorators are configured, which is one
   // pair of queries, and cards and sites offer exactly the same ones.
-  const liveness = healthFields()
+  const liveness = await healthFields()
 
   return [
     {

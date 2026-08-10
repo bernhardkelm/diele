@@ -100,6 +100,12 @@ export interface ApiFeature {
   /** How many rows exist, and how many of those are on */
   readonly count: number
   readonly enabledCount: number
+  /**
+   * How many of its instances last failed to be reached. Carried on the feature as well as the
+   * rows, because the rows of a feature are only loaded once it is opened, and a source that
+   * stopped working is the thing you most need to see without opening anything.
+   */
+  readonly failingCount?: number
   /** Present on a feature that cannot be opened, saying why in one line */
   readonly unavailable?: string
   /**

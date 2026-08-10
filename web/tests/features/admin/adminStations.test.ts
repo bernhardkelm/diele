@@ -417,6 +417,33 @@ describe('the row texts', () => {
     ).toBe('12 entries, synced 2026-01-01 00:00')
   })
 
+  // A decorator produces no entries and the scheduler never runs it, so counting them and
+  // calling it a sync would report a number that is always zero and a run that never happens.
+  it('describes a decorator by what it reads rather than by what it synced', () => {
+    const decorator = { id: 'uptime-kuma', capabilities: ['health'] } as unknown as ApiFeature
+
+    expect(detailOf(row(1, { sync: { lastOkAt: null } } as Partial<ApiRow>), decorator)).toBe(
+      'not read yet',
+    )
+    expect(
+      detailOf(row(1, { sync: { lastOkAt: '2026-01-01 00:00' } } as Partial<ApiRow>), decorator),
+    ).toBe('reporting, last read 2026-01-01 00:00')
+    expect(
+      detailOf(
+        row(1, { sync: { lastError: 'fetch failed (ECONNREFUSED)' } } as Partial<ApiRow>),
+        decorator,
+      ),
+    ).toBe('failing: fetch failed (ECONNREFUSED)')
+  })
+
+  it('still counts entries for a connector that produces them', () => {
+    const collector = { id: 'gitlab', capabilities: ['entries'] } as unknown as ApiFeature
+
+    expect(detailOf(row(1, { sync: { lastOkAt: null } } as Partial<ApiRow>), collector)).toBe(
+      'never synced',
+    )
+  })
+
   it('reports a run that found nothing rather than leaving the count blank', () => {
     expect(detailOf(row(1, { sync: { lastOkAt: '2026-01-01 00:00' } } as Partial<ApiRow>))).toBe(
       '0 entries, synced 2026-01-01 00:00',

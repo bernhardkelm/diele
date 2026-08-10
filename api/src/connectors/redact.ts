@@ -55,9 +55,21 @@ export function redactSecrets(text: string, secrets: Readonly<Record<string, str
 
 /**
  * Turns whatever was thrown into a message worth storing.
+ *
+ * `fetch` reports every transport failure as the same `fetch failed`, with what actually went
+ * wrong in `cause.code`: a refused port, a wrong scheme and an unresolvable host are one
+ * message otherwise, and those are the three most likely things to be wrong with an address
+ * someone has just typed.
  * @param {unknown} cause - Error raised by a run
  * @returns {string} - One line describing it
  */
 export function messageOf(cause: unknown): string {
-  return cause instanceof Error ? cause.message : String(cause)
+  if (!(cause instanceof Error)) {
+    return String(cause)
+  }
+
+  // The code alone, not the reason's message: OpenSSL's runs to several lines of its own.
+  const code = (cause.cause as NodeJS.ErrnoException | undefined)?.code
+
+  return code ? `${cause.message} (${code})` : cause.message
 }

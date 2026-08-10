@@ -4,13 +4,18 @@ import { Buffer } from 'node:buffer'
  * Builds the header Kuma's metrics endpoint authenticates with. It is HTTP Basic with an empty
  * username and the API key as the password, which is what Kuma's own docs tell a Prometheus
  * scraper to send.
- * @param {string} apiKey - API key created under Settings, API Keys
+ *
+ * The key is optional: an instance running with authentication disabled serves `/metrics` to
+ * anyone, and demanding one there would mean inventing a credential to satisfy a form.
+ * @param {string | undefined} apiKey - API key created under Settings, API Keys
  * @returns {Record<string, string>} - Headers for fetch
  */
-function headersFor(apiKey: string): Record<string, string> {
+function headersFor(apiKey: string | undefined): Record<string, string> {
   return {
     accept: 'text/plain',
-    authorization: `Basic ${Buffer.from(`:${apiKey}`, 'utf8').toString('base64')}`,
+    ...(apiKey
+      ? { authorization: `Basic ${Buffer.from(`:${apiKey}`, 'utf8').toString('base64')}` }
+      : {}),
   }
 }
 
@@ -19,19 +24,25 @@ function headersFor(apiKey: string): Record<string, string> {
  * it. Naming the two answers worth telling apart without opening Kuma: a key that is not valid,
  * and an origin that is not a Kuma.
  * @param {string} baseUrl - Kuma origin with trailing slashes already stripped
- * @param {string} apiKey - API key created under Settings, API Keys
+ * @param {string | undefined} apiKey - API key, absent on an instance with auth disabled
  * @param {AbortSignal} signal - Aborts the request when the caller runs out of time
  * @returns {Promise<string>} - Response body in the Prometheus text exposition format
  */
 export async function fetchMetrics(
   baseUrl: string,
-  apiKey: string,
+  apiKey: string | undefined,
   signal: AbortSignal,
 ): Promise<string> {
   const response = await fetch(`${baseUrl}/metrics`, { headers: headersFor(apiKey), signal })
 
+  // Told apart, because the key being optional makes a refusal ambiguous: one of these is a
+  // wrong key and the other is an instance that wants one at all.
   if (response.status === 401 || response.status === 403) {
-    throw new Error('the API key was rejected')
+    throw new Error(
+      apiKey
+        ? `the API key was rejected (${response.status})`
+        : `this instance wants an API key (${response.status})`,
+    )
   }
 
   if (!response.ok) {

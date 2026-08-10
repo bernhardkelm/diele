@@ -35,6 +35,11 @@ export interface AdminSource {
   busyLabel: Ref<string | undefined>
   /** True while rows are being reloaded behind ones that are already on screen */
   refreshing: Ref<boolean>
+  /**
+   * Loads the registry, holding a failure rather than raising it. This is the first call the
+   * view makes, so a lapsed session raised out of here would leave the panel empty with nothing
+   * said; held, it offers signing in.
+   */
   loadFeatures: () => Promise<void>
   /** Reloads the registry and the open feature's rows, after something replaced them wholesale */
   reload: () => Promise<boolean>
@@ -69,6 +74,25 @@ const refreshing = ref(false)
 // behind it, because emptying the list first collapses the panel and drops everything below
 // it up the page before the answer arrives.
 const cached = new Map<string, ReadonlyArray<ApiRow>>()
+
+/**
+ * Drops everything the panel read, so the next reader asks again. The sibling of
+ * `resetSession` and `resetPortalConfig`: all of this is held at module scope, which outlives
+ * any component that reads it.
+ * @returns {void}
+ */
+export function resetAdmin(): void {
+  features.value = []
+  rows.value = []
+  expanded.value = undefined
+  error.value = undefined
+  needsAuth.value = false
+  forbidden.value = false
+  busy.value = false
+  busyLabel.value = undefined
+  refreshing.value = false
+  cached.clear()
+}
 
 /**
  * Returns the collection url for a feature, or undefined when it owns no rows. The registry
@@ -271,6 +295,24 @@ function hold(cause: unknown): void {
  */
 export function useAdmin(): AdminSource {
   /**
+   * Loads the registry the way the rest of this surface calls it, holding what it raises.
+   * @returns {Promise<void>}
+   */
+  async function load(): Promise<void> {
+    try {
+      await loadFeatures()
+
+      // A load that was answered says whatever lapsed has since been fixed, the way `run` does.
+      // These outlive the view that read them, so signing in and coming back would otherwise
+      // land on a panel still holding the refusal it was sent away for.
+      needsAuth.value = false
+      forbidden.value = false
+    } catch (cause) {
+      hold(cause)
+    }
+  }
+
+  /**
    * Expands one feature, or collapses whatever is open when given nothing.
    * @param {string | undefined} featureId - Feature to expand
    * @returns {Promise<void>}
@@ -318,7 +360,7 @@ export function useAdmin(): AdminSource {
     busy,
     busyLabel,
     refreshing,
-    loadFeatures,
+    loadFeatures: load,
     reload: () => run(() => Promise.resolve()),
     expand,
     create: (values) =>

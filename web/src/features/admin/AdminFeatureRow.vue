@@ -4,6 +4,7 @@ import AdminRowActions from '@/features/admin/AdminRowActions.vue'
 import HighlightedText from '@/components/HighlightedText.vue'
 import ScrollingText from '@/components/ScrollingText.vue'
 import LoadingDots from '@/components/LoadingDots.vue'
+import StatusDot from '@/components/StatusDot.vue'
 import { useStationRow } from '@/composables/useStationRow'
 import type { RowAction, RowActionId } from '@/features/admin/adminRowActions'
 import type { ApiFeature } from '@diele/common'
@@ -32,6 +33,10 @@ interface AdminFeatureRowProps {
 const props = defineProps<AdminFeatureRowProps>()
 
 const emit = defineEmits<{ run: [id: RowActionId] }>()
+
+// Said on the heading as well as on the row that failed, because a feature's rows are only
+// loaded once it is opened and a source that stopped working should not need opening to find.
+const failing = computed(() => props.feature.failingCount ?? 0)
 
 // Read once: a station's depth is fixed by its key, and the list keys each row by that.
 const { attrs: stationAttrs, ownsEvent } = useStationRow({
@@ -107,6 +112,11 @@ function onKeydown(event: KeyboardEvent): void {
   >
     <span class="feature__name truncate">
       <HighlightedText :text="feature.label" :query="query" />
+      <StatusDot
+        v-if="failing > 0"
+        :status="{ state: 'down' }"
+        :name="`${feature.label}, ${failing} of ${feature.count} not answering`"
+      />
       <span class="feature__kind">{{ feature.kind }}</span>
     </span>
 

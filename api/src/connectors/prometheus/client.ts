@@ -49,8 +49,14 @@ export async function instantQuery(
 
   const response = await fetch(url, { headers: headersFor(token), signal })
 
+  // Told apart, because the token being optional makes a refusal ambiguous: one of these is a
+  // wrong token and the other is an instance that wants one at all.
   if (response.status === 401 || response.status === 403) {
-    throw new Error('the token was rejected')
+    throw new Error(
+      token
+        ? `the token was rejected (${response.status})`
+        : `this instance wants a bearer token (${response.status})`,
+    )
   }
 
   // 400 and 422 carry Prometheus' own explanation of what is wrong with the query, which is
@@ -63,8 +69,10 @@ export async function instantQuery(
     return payload.data
   }
 
+  // Its own explanation carries the status too: a rejected query and an instance that is unwell
+  // both arrive here, and only the status says which.
   if (payload?.error) {
-    throw new Error(payload.error)
+    throw new Error(`${payload.error} (${response.status})`)
   }
 
   throw new Error(`Prometheus answered ${response.status}`)

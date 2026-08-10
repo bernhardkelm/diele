@@ -25,8 +25,8 @@ adminRouter.use('/localhost', localhostRouter)
 adminRouter.use('/engines', enginesRouter)
 adminRouter.use('/icons', iconsRouter)
 
-adminRouter.get('/features', (_req, res) => {
-  res.json({ features: listFeatures() })
+adminRouter.get('/features', async (_req, res) => {
+  res.json({ features: await listFeatures() })
 })
 
 // Turns a whole feature off, which is not the same as it having no rows.

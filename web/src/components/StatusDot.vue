@@ -15,6 +15,7 @@ const WORDING: Record<HealthState, string> = {
   down: 'down',
   pending: 'pending',
   maintenance: 'in maintenance',
+  unknown: 'unknown, its source could not be reached',
 }
 
 const label = computed(() => {
@@ -64,6 +65,15 @@ const label = computed(() => {
 
 .status--maintenance {
   background: var(--diele-status-maintenance);
+}
+
+/* The halo `down` draws and nothing inside it: the glow says something is wrong, the empty
+   centre says there is no reading behind it, and a filled red dot stays reserved for a service
+   that is actually down. Transparent rather than a background colour, because the dot sits on
+   the card, the row and the page, which are three different ones. */
+.status--unknown {
+  background: transparent;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--diele-status-down) 30%, transparent);
 }
 
 .status__label {

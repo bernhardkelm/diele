@@ -80,10 +80,15 @@ async function resolveHealth(
         await instantQuery(baseUrl, request.selector as string, token, context.signal),
       )
     } catch (cause) {
-      // Named rather than swallowed: a query nobody can see failing is a dot that is silently
-      // never there, and the expression is the operator's own to fix.
-      console.warn(`[prometheus] ${request.ref} could not be queried:`, messageOf(cause))
-      return undefined
+      const detail = messageOf(cause)
+
+      // `unknown` rather than nothing: a query that could not be run says nothing about the
+      // service, but a dot that is silently never there says nothing at all. Both an
+      // unreachable instance and an expression Prometheus rejected land here, and neither is
+      // an outage to report as one.
+      console.warn(`[prometheus] ${request.ref} could not be queried:`, detail)
+
+      return { state: 'unknown' as const, detail }
     }
   })
 
