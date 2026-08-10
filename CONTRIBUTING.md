@@ -204,10 +204,12 @@ never builds.
 
 ### Tests
 
-`node:test` through `tsx`, beside the code as `*.test.ts`. The bar is not coverage - it is **would
-this be silent if it broke**. The three that exist are there because each fails quietly: a sealed
-secret that does not open back, a partial sync that sweeps rows it should have left, a malformed
-upstream entry that throws instead of being dropped.
+`node:test` through `tsx`, in `tests/` as `*.test.ts`, mirroring `src/` file for file:
+`src/health/resolve.ts` is tested by `tests/health/resolve.test.ts`. What the tests share lives in
+`tests/support/`. The bar is not coverage - it is **would this be silent if it broke**. The three
+that exist are there because each fails quietly: a sealed secret that does not open back, a partial
+sync that sweeps rows it should have left, a malformed upstream entry that throws instead of being
+dropped.
 
 The suite runs against a throwaway `./.test.db` and sets its own environment in the `test` script,
 so it must pass on a clean checkout with no `.env` present.
@@ -235,7 +237,11 @@ every file, and an image ships no `.env` at all.
   the discussion happened in.
 - **Never reach through `../` out of a package.** `web` uses the `@/` alias, `api` uses relative
   sibling paths with the `.js` extension `nodenext` requires, and anything shared comes from
-  `@diele/common`.
+  `@diele/common`. A test sits in a different tree from the code it exercises, so it has no
+  siblings to reach for: `api` tests import through `#` (`#health/resolve.js`,
+  `#tests/support/harness.js`) and `web` tests through `@/` and `@tests/`. The two `new URL('../src/…')`
+  in `api/tests/{config,server}.test.ts` are the deliberate exceptions - they hand a filesystem path
+  to a child process rather than importing a module, and no alias can stand in for that.
 - **Braces on every block**, including a single-statement guard. `curly: ["error", "all"]` is on in
   both packages.
 - **Nothing private in a commit.** No internal hostnames, group names, tokens or customer names,

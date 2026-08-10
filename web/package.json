@@ -26,7 +26,7 @@
     "lint:oxlint": "oxlint . --fix",
     "lint:eslint": "eslint . --fix --cache",
     "lint:ci": "oxlint . && eslint .",
-    "format": "oxfmt src/"
+    "format": "oxfmt src/ tests/"
   },
   "dependencies": {
     "@diele/common": "*",

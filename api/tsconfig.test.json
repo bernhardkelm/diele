@@ -1,11 +1,15 @@
 {
   // The tests, checked with the same strictness as the code and emitted nowhere. `tsconfig.json`
   // excludes them so they stay out of `dist/`, which would otherwise leave them unchecked.
-  "extends": "./tsconfig.json",
+  "extends": "./tsconfig.build.json",
   "compilerOptions": {
     "noEmit": true,
-    "rootDir": "./src"
+    // The package root, `rootDir` is checked even under `noEmit` and `./src` rejects `tests/`
+    "rootDir": ".",
+    // Pinned, the default lands in `dist/` once `rootDir` is the package root
+    "tsBuildInfoFile": "./tsconfig.test.tsbuildinfo"
   },
-  "include": ["src/**/*"],
+  // `src` too, `express-augment.d.ts` augments Request only while it is a root file
+  "include": ["src/**/*", "tests/**/*"],
   "exclude": []
 }
