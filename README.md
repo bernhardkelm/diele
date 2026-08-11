@@ -416,6 +416,9 @@ Chrome has no setting for this - overriding the new tab page takes an extension,
 and enter the address of your instance. It asks for the `storage` permission and nothing else: no
 host access, no build step, no third party.
 
+Its toolbar button holds the list, so a private portal and a work one can both live there and new
+tabs follow whichever is marked - switched in a click, with nothing to retype.
+
 Edge, Brave, Vivaldi and Opera load the same folder the same way. Safari needs no extension: it
 opens new tabs with the home page, so setting that is enough. Firefox has no such setting and
 would need the extension, which has not been tried there.
@@ -483,8 +486,8 @@ diele/
   entries reach the page, and how to develop against the app alone.
 - [**api/README.md**](api/README.md) - auth and sessions, the full configuration reference, the
   database, every endpoint, and what a connector module has to implement.
-- [**extension/README.md**](extension/README.md) - loading the new tab override, and what counts as
-  an address.
+- [**extension/README.md**](extension/README.md) - loading the new tab override, keeping several
+  instances and switching between them, and what counts as an address.
 - [**CONTRIBUTING.md**](CONTRIBUTING.md) - what diele is and is not, where code goes, and the
   conventions worth writing down.
 - [**SECURITY.md**](SECURITY.md) - what diele is exposed to, and how to report a vulnerability.

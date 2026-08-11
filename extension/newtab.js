@@ -23,7 +23,8 @@ async function open() {
 }
 
 /**
- * Saves what was typed and opens it, so the first new tab is also the last setup step.
+ * Saves what was typed and opens it, so the first new tab is also the last setup step. It is
+ * stored unnamed: the row shows its hostname, and naming matters only once there are several.
  * @param {SubmitEvent} event - Submit event from the setup form
  * @returns {Promise<void>}
  */
@@ -39,7 +40,7 @@ async function save(event) {
     return
   }
 
-  await writeUrl(url)
+  await addInstance('', url)
   location.replace(url)
 }
 

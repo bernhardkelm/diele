@@ -1,14 +1,30 @@
 {
   "manifest_version": 3,
   "name": "diele new tab",
-  "description": "Opens your diele instance instead of the browser's new tab page.",
-  "version": "1.0.0",
+  "description": "Opens your diele instance instead of the browser's new tab page, and switches between several.",
+  "version": "1.1.0",
   "permissions": ["storage"],
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
   "chrome_url_overrides": {
     "newtab": "newtab.html"
   },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "diele instances",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    }
+  },
   "options_ui": {
-    "page": "options.html",
+    "page": "popup.html",
     "open_in_tab": false
   }
 }

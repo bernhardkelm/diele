@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>diele new tab</title>
+    <link rel="stylesheet" href="shared.css" />
+  </head>
+  <body class="panel">
+    <header class="brand">
+      <h1 class="brand__title">
+        diele<svg class="brand__tilde" viewBox="0 0 40 24" aria-hidden="true" focusable="false">
+          <path
+            d="M4,13 Q11,3 19,13 Q27,23 35,13"
+            stroke="var(--diele-accent)"
+            stroke-width="6"
+            fill="none"
+            stroke-linecap="round"
+          />
+        </svg>
+      </h1>
+      <p class="brand__subtitle">new tab</p>
+    </header>
+
+    <p id="empty" class="lede" hidden>This browser is not pointed at an instance yet.</p>
+
+    <!-- The rows share one radio name, so the group is the switch: exactly one instance is active
+         and the arrow keys move between them. -->
+    <fieldset id="switcher" class="instances" hidden>
+      <legend class="label">Instances</legend>
+      <ul id="list" class="rows"></ul>
+    </fieldset>
+
+    <form id="add">
+      <div class="field">
+        <label class="label" for="name">Name (optional)</label>
+        <!-- maxlength is the friendly limit, NAME_MAX in storage.js the enforced one: a name can
+             also arrive through sync. The two move together. -->
+        <input id="name" type="text" maxlength="32" placeholder="private" autocomplete="off" />
+      </div>
+      <div class="field">
+        <label class="label" for="url">Address</label>
+        <!-- Deliberately not type="url": the browser's own validation refuses a bare host,
+             which is exactly the input normaliseUrl exists to accept. -->
+        <input
+          id="url"
+          type="text"
+          inputmode="url"
+          placeholder="diele.example.com"
+          autocomplete="off"
+          autocapitalize="off"
+          spellcheck="false"
+          required
+        />
+      </div>
+      <button type="submit">Add</button>
+      <p id="error" class="error" role="alert" hidden></p>
+    </form>
+
+    <!-- Switching is silent, so the live region is what tells a screen reader it happened. The
+         popup cannot show whether the address works either, so it offers to open it. -->
+    <p id="footer" class="note note--action" hidden>
+      <span id="target" aria-live="polite"></span>
+      <button id="open" type="button">Open it</button>
+    </p>
+
+    <template id="row">
+      <li class="row">
+        <label class="row__choice">
+          <input class="row__radio" type="radio" name="active" />
+          <span class="row__name truncate"></span>
+          <span class="row__detail truncate"></span>
+        </label>
+        <button class="row__remove" type="button">&times;</button>
+      </li>
+    </template>
+
+    <!-- External files, not inline: the manifest v3 CSP blocks inline scripts on extension
+         pages. storage.js first, it defines what popup.js calls. -->
+    <script src="storage.js"></script>
+    <script src="popup.js"></script>
+  </body>
+</html>
