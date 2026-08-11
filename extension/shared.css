@@ -36,6 +36,10 @@
   --diele-border: light-dark(#e3e6ea, #262a31);
   --diele-accent: light-dark(#16a34a, #22c55e);
   --diele-wordmark: light-dark(#1c2024, #f2f4f7);
+  /* the app's selection marker: a text tilde rather than the svg mark, so it shares a baseline
+     with the type beside it, lifted onto the x-height the way the lockup seats the mark */
+  --diele-marker: '~';
+  --diele-marker-lift: translateY(-0.12em);
   --diele-subtitle: light-dark(#6b737f, #9097a1);
   --diele-status-down: light-dark(#dc2626, #f87171);
 
@@ -94,6 +98,25 @@ body {
   font-size: var(--diele-text-base);
 }
 
+/* The popup and the options dialog are the same page, and both size to their content: the
+   viewport-height floor the new tab page needs would leave an empty column under the form, and
+   a popup has no width of its own until one is given. */
+body.panel {
+  /* every block runs the full width here, so the lockup is centred by its own text-align rather
+     than by the column */
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: var(--diele-space-6);
+  width: 22rem;
+  min-height: auto;
+  padding: var(--diele-space-6);
+}
+
+/* the lede's pull is tuned against the gap it sits in, so a smaller gap needs a smaller one */
+body.panel .lede {
+  margin-top: calc(var(--diele-space-3) * -1);
+}
+
 /* The lockup: wordmark and mark on one line, subtitle tracked out beneath it. */
 .brand {
   text-align: center;
@@ -145,6 +168,117 @@ body {
   color: var(--diele-fg-muted);
 }
 
+/* The group the radios belong to, named for a screen reader by its legend. A fieldset's UA
+   min-inline-size is min-content, which would push the popup past its own width. */
+.instances {
+  width: 100%;
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+.instances legend {
+  margin-bottom: var(--diele-space-2);
+  padding: 0;
+}
+
+/* Chrome caps a popup at 600px tall, so a long list scrolls rather than pushing the add form
+   out of reach. */
+.rows {
+  max-height: 15rem;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.row {
+  position: relative;
+  display: flex;
+  align-items: baseline;
+  gap: var(--diele-space-2);
+  padding: var(--diele-space-1) 0 var(--diele-space-1) var(--diele-space-6);
+  font-family: var(--diele-font-mono);
+  font-size: var(--diele-text-md);
+}
+
+/* Hidden rather than removed: display: none would take the radio out of the tab order and the
+   accessibility tree, and the group is the only way to switch. */
+.row__radio {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.row__choice {
+  display: flex;
+  flex: 1;
+  align-items: baseline;
+  gap: var(--diele-space-2);
+  min-width: 0;
+  cursor: pointer;
+}
+
+/* min-width, because a flex item's auto minimum would stop a long name ever ellipsizing and
+   push the address out of the row instead */
+.row__name {
+  min-width: 0;
+  color: var(--diele-fg-muted);
+  transition: color var(--diele-transition);
+}
+
+/* Where the instance actually lives, when the name does not already say it */
+.row__detail {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--diele-text-sm);
+  text-align: right;
+  color: var(--diele-fg-muted);
+}
+
+.row:has(.row__radio:checked)::before {
+  content: var(--diele-marker);
+  position: absolute;
+  left: var(--diele-space-2);
+  color: var(--diele-accent);
+  transform: var(--diele-marker-lift);
+}
+
+.row:has(.row__radio:checked) .row__name,
+.row:hover .row__name {
+  color: var(--diele-fg);
+}
+
+/* The row carries the focus state, because the control that holds the focus has no box to draw
+   one on. */
+.row:has(.row__radio:focus-visible) .row__name {
+  color: var(--diele-accent);
+  text-decoration: underline;
+}
+
+.row__remove {
+  align-self: baseline;
+  padding: 0 var(--diele-space-1);
+  font-size: var(--diele-text-md);
+  line-height: 1;
+}
+
+/* A cross is not a word, so the underline every other button takes would read as a strikethrough
+   over the glyph. */
+.row__remove:hover,
+.row__remove:focus-visible {
+  color: var(--diele-status-down);
+  text-decoration: none;
+}
+
+.truncate {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
 form {
   display: flex;
   flex-direction: column;
@@ -167,8 +301,9 @@ form {
   color: var(--diele-fg-muted);
 }
 
-/* A line rather than a box, because the rest of diele is built from hairline rules. */
-input {
+/* A line rather than a box, because the rest of diele is built from hairline rules. Scoped to
+   the text fields: the same declarations on a radio strip it of its native painting. */
+input[type='text'] {
   padding: 0.3rem 0;
   font-family: var(--diele-font-mono);
   font-size: var(--diele-text-md);
@@ -182,7 +317,7 @@ input {
 
 /* the underline is the focus state; a ring around a control with no box of its own would be
    drawing the box back in */
-input:focus-visible {
+input[type='text']:focus-visible {
   border-bottom-color: var(--diele-accent);
   outline: none;
 }

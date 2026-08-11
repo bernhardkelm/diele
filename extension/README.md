@@ -1,6 +1,7 @@
 # diele new tab
 
-An unpacked Chrome extension that makes your diele instance the new tab page.
+An unpacked Chrome extension that makes your diele instance the new tab page, and switches between
+several of them.
 
 Chrome has no setting for this: *On startup* only applies at launch, and the home button
 navigates the current tab. Overriding the new tab page requires an extension, and
@@ -24,13 +25,26 @@ redirecting, so there is no file to edit before loading.
 Chrome keeps unpacked extensions across restarts. It re-flags them on each launch with a
 "disable developer mode extensions" prompt - dismissing it keeps the extension enabled.
 
-## Changing the target
+## Instances
 
-`chrome://extensions` → **Details** → **Extension options**. Saving offers to open the address
-straight away, so a typo shows up there rather than on the next new tab.
+The toolbar button holds the list. Add an address there, name it or leave it unnamed, and mark
+which one new tabs open - a private portal and a work one, switched without retyping either.
 
-The address is kept in `chrome.storage.sync`, so it follows you to your other signed-in browsers
-and survives an update of the extension.
+Switching is silent: the marker moves, nothing navigates, and the next new tab goes to the newly
+marked instance. **Open it** opens the marked one straight away, so a typo shows up there rather
+than on the next new tab. A row with no name shows its hostname, and `×` removes it; removing the
+marked one hands that role to the first one left.
+
+Twenty instances is the cap, because `chrome.storage.sync` allows about 8 KB per item and a longer
+switcher is a list nobody reads.
+
+The same panel is the options page, at `chrome://extensions` → **Details** →
+**Extension options**, for anyone who has unpinned the button.
+
+The list is kept in `chrome.storage.sync`, so it follows you to your other signed-in browsers and
+survives an update of the extension. An address stored by version 1.0.0, which held one, becomes
+the first instance on upgrade; the marked one is still written to the key that version reads, so a
+browser still running it keeps opening the same portal.
 
 ## What counts as an address
 
@@ -68,14 +82,16 @@ does not.
 | --- | --- |
 | `manifest.json` | manifest v3, `storage` permission only |
 | `newtab.html` / `newtab.js` | the override: redirects, or asks where to go |
-| `options.html` / `options.js` | changing the target later |
-| `storage.js` | reading, writing and validating the url, shared by both pages |
+| `popup.html` / `popup.js` | the toolbar panel, and the options page: the list, and what changes it |
+| `storage.js` | the list, which instance is marked, and the validation both pages share |
 | `shared.css` | diele's tokens, lockup and controls, copied rather than imported |
 | `fonts/` | the three faces those styles ask for |
+| `icons/` | the app's own mark, at the four sizes Chrome asks for |
 
-`shared.css` and `fonts/` are a copy of what the web app loads, because an unpacked extension
-has no build step and cannot reach the `web` package. Keep them in step with
-`web/src/styles/tokens.css` when the tokens move.
+`shared.css`, `fonts/` and `icons/` are copies of what the web app loads, because an unpacked
+extension has no build step and cannot reach the `web` package. Keep them in step with
+`web/src/styles/tokens.css` when the tokens move; the icons are downscaled by hand from
+`web/public/favicon/web-app-manifest-512x512.png`.
 
 ## Fonts
 
