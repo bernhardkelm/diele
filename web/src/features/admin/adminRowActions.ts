@@ -67,7 +67,7 @@ export function rowActionsFor(station: AdminStation | undefined): ReadonlyArray<
 
     return [
       EDIT,
-      { id: 'up', label: '▴', disabled: station.first },
+      { id: 'up', label: '▾', disabled: station.first },
       { id: 'down', label: '▾', disabled: station.last },
       // the state it is in, not the state it would go to: one word that says where the row
       // stands and flips it, rather than a badge and an action that read as each other
