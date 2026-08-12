@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, useTemplateRef, watch } from 'vue'
 import AdminView from '@/views/AdminView.vue'
+import AlertList from '@/features/portal/AlertList.vue'
 import CommandList from '@/features/portal/CommandList.vue'
 import LauncherBar from '@/components/LauncherBar.vue'
 import LoginGate from '@/views/LoginGate.vue'
@@ -24,6 +25,7 @@ import { usePortalConfig } from '@/composables/usePortalConfig'
 import { usePortalLauncher } from '@/features/portal/usePortalLauncher'
 import { useSearchEngine } from '@/features/portal/useSearchEngine'
 import { useSession } from '@/composables/useSession'
+import { useSignals } from '@/composables/useSignals'
 import { shortcutFor } from '@/features/portal/useLauncher'
 import type { PortalTarget } from '@/types/portal'
 
@@ -86,6 +88,7 @@ const tileColumns = useGridColumns(tileGrid)
 // Off is a deliberate setting rather than an absent one, so anything but false is on: a portal
 // that has never been told either way keeps the behaviour it shipped with.
 const redditEnabled = computed(() => portalSettings.value['reddit.enabled'] !== false)
+const alertsEnabled = computed(() => portalSettings.value['alerts.enabled'] !== false)
 
 const visibleRows = computed(() => sorted.value.filter((row) => !isHidden(row.ref)))
 
@@ -147,6 +150,10 @@ const {
 })
 
 const { readingFor } = useHealth(() => portalShowing.value)
+
+// Asked for only where the portal has said it wants them, so an instance with the switch off
+// never makes the request at all rather than polling for an answer it would not draw.
+const { signals, silence } = useSignals(() => portalShowing.value && alertsEnabled.value)
 const { isLive } = useLocalhostStatus(() => sites.value)
 const altHeld = useAltHeld()
 </script>
@@ -162,6 +169,14 @@ const altHeld = useAltHeld()
 
   <div v-else class="page view-shell">
     <PortalHeader :title="brand.title" :subtitle="brand.subtitle" />
+
+    <!-- Above the field and outside the results: something firing is not an answer to the term,
+         so it stays put whether or not one is typed. -->
+    <AlertList
+      :signals="signals"
+      :for-everyone="user?.canAdmin"
+      @silence="(id) => void silence(id)"
+    />
 
     <LauncherBar
       v-model="query"

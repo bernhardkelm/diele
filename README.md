@@ -16,6 +16,7 @@ next tab has it.
 - **A keyboard the whole way down** - nothing is reachable only by mouse
 - **Connectors** - GitLab and GitHub repos sync in on a timer, each with their own quick jumps
 - **Liveness** - a dot per card, from an HTTP probe, Uptime Kuma or a Prometheus query
+- **Alerts** - what Prometheus is firing right now, on one line above the search field
 - **An admin panel, not a config file** - every row edited in the page, the whole configuration exportable as one document
 - **Three ways to sign in** - OpenID Connect, local accounts, or a dev mode while you build
 - **One container** - one port, one volume, and a database that is a file
@@ -46,6 +47,7 @@ next tab has it.
       - [Uptime Kuma](#uptime-kuma)
       - [Prometheus](#prometheus)
     - [Liveness](#liveness)
+    - [Alerts](#alerts)
     - [Planned](#planned)
   - [Installation](#installation)
     - [Docker](#docker)
@@ -280,6 +282,9 @@ percentage, so the dot has a state and no figure beside it.
 | --- | --- |
 | **Instance** | origin only; the query api is found under it |
 | **Bearer token** | optional, only where the instance asks for one; stored encrypted |
+| **Alertmanager** | optional; where [Alerts](#alerts) are read from when set. The token is reused, for the common case of both sitting behind one ingress |
+| **Alerts from** | the least severe level that reaches the portal |
+| **Hide Watchdog** | on by default; turn it off to keep the heartbeat alert on the page as proof the pipeline is up |
 
 Each bound entry carries a **PromQL expression** of its own, run as an instant query: non-zero is
 up, zero is down, and a result with no samples leaves the dot off rather than turning it red - a
@@ -288,6 +293,9 @@ query matching nothing is a mistake in the query, not an outage.
 That means one request per bound entry on every refresh, so this is the connector to be sparing
 with. An unauthenticated instance needs no `DIELE_SECRET_KEYS` at all, because there is no
 credential to store.
+
+The same instance also feeds [Alerts](#alerts), which costs one request whatever is bound and
+needs nothing configured beyond the connector itself.
 
 ### Liveness
 
@@ -326,6 +334,64 @@ a quarter-hour-old *"up"* is not old, it is wrong. So a restart shows no dots un
 refresh answers, an unreachable source drops its dots rather than reddening them, and the whole
 feature has a switch of its own, inside **Cards** in the panel.
 
+### Alerts
+
+What a connected source reports as firing, on one line between the title and the search field. A
+single alert is that line; several collapse into a count that opens onto the list. Worst first,
+and longest-firing first within a severity, because a condition that has held for hours is the one
+that is not fixing itself.
+
+One request per configured source, whatever else is bound.
+
+Which source that is depends on the **Alertmanager** field on the Prometheus connector:
+
+| field | read from | |
+| --- | --- | --- |
+| blank | Prometheus `/api/v1/alerts` | the rules that instance evaluates, and only those. A silenced alert still shows, an HA pair reports twice, and an alert pushed straight into an Alertmanager never appears |
+| set | Alertmanager `/api/v2/alerts` | active alerts only, so a **silence** takes the line down. Duplicates from an HA pair are merged, and alerts that came from anywhere else are included |
+
+Set it. A silence is somebody saying they already know, and a portal that goes on reporting one
+teaches everyone to read past the line, which is the whole of what the feature is worth. It is
+optional only because a Prometheus without an Alertmanager in front of it is a real deployment.
+
+How far down the list to read is the **Alerts from** setting on the connector:
+
+| | |
+| --- | --- |
+| **Critical only** | for a portal that should stay blank unless something is genuinely on fire |
+| **Warning and critical** | the default |
+| **Info and up** | everything the source reports a severity for |
+
+Worth knowing before picking the last one: on a stock kube-prometheus-stack, `info` is where
+`CPUThrottlingHigh` and `NodeCPUHighUsage` live, and those are close to permanent residents on a
+busy cluster. A line that is always lit is a line everyone learns to read past.
+
+`Watchdog` is hidden by its own checkbox, on by default. It exists to prove the alerting path
+works end to end, so on a healthy cluster it fires forever and is the one thing the portal would
+permanently report. Turn the checkbox off and it stays on the page as a heartbeat: shown whatever
+its label and wherever the floor sits, since the stock one carries `severity: none` and reading
+that literally would mean the box never showed anything. It draws as the quietest thing on the
+page, because a pipeline being alive is not an incident.
+
+Only `pending` is never shown, at any setting: that is a rule whose condition has held for less
+than its `for` clause, which is exactly the window its author asked not to be told about yet. An
+alert labelled with a severity the portal has no word for is left off rather than guessed at.
+
+**Silencing** is per line, and lives in diele rather than in the source. Hovering a line offers
+it, and the arrows walk the lines from the search field for a keyboard. Who you are decides how
+far it reaches: an admin takes the line off the portal for everyone, anyone else takes it off
+their own. Either way it lasts only as long as the alert does - once the condition stops firing
+the silence is forgotten, so the same alert next week is news again. Nothing about it reaches
+Alertmanager, and it silences no notification.
+
+The alert's own annotations are an **admin's**, the same as a reading's `detail`: they quote the
+instance that fired and how it is addressed. Everyone signed in sees what is firing, how badly and
+for how long, and the link through to where the source shows it in full.
+
+Held in memory and never written down, like the readings: a restart reports nothing until the
+first read answers, and an answer a few intervals old is dropped rather than shown. The whole
+feature has a switch of its own in the panel, and with it off the portal asks its sources nothing.
+
 ### Planned
 
 Listed in the admin panel already, each declaring the capabilities it will answer to, which is
@@ -333,7 +399,6 @@ where the shape it is expected to take is written down.
 
 | | |
 | --- | --- |
-| **Alert banners** | Prometheus and Alertmanager alerts at the top of the page; the connector reports liveness today and the `signals` seam is where the banner lands |
 | **Grafana** | dashboards, suggested as results when the term matches them |
 | **Notion** | pages from a private workspace, suggested as you type |
 | **Users and roles** | only the first account exists today; the `groups` claim is already carried onto the session, so the seam is there |

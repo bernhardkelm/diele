@@ -15,6 +15,7 @@ import { apiMessage, readPayload } from '@/helpers/apiError'
 import { refreshConnectorEntries, resetConnectorEntries } from '@/composables/useConnectorEntries'
 import { resetHealth } from '@/composables/useHealth'
 import { refreshPortalConfig, resetPortalConfig } from '@/composables/usePortalConfig'
+import { resetSignals } from '@/composables/useSignals'
 import { applyBrandAccent } from '@/helpers/brandAccent'
 import { clearConfigCache } from '@/helpers/configCache'
 import { clearEntriesCache } from '@/helpers/entriesCache'
@@ -200,6 +201,7 @@ export function useSession(): SessionSource {
       resetPortalConfig()
       resetConnectorEntries()
       resetHealth()
+      resetSignals()
       return
     }
 
@@ -300,6 +302,7 @@ export function useSession(): SessionSource {
       resetPortalConfig()
       resetConnectorEntries()
       resetHealth()
+      resetSignals()
       user.value = undefined
 
       window.location.assign(payload.logoutUrl ?? '/')

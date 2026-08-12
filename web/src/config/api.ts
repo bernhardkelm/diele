@@ -39,6 +39,14 @@ export const ENTRIES_HIDDEN_URL = '/api/entries/hidden'
 // changes on every refresh and would bust that payload's etag.
 export const HEALTH_URL = '/api/health'
 
+// What the connected sources report as firing. Its own document rather than part of the readings
+// above: the two carry their own switches, and a signal belongs to no entry to be keyed by.
+export const SIGNALS_URL = '/api/signals'
+
+// Quietens one alert for this portal rather than in the source: who is asking decides whether
+// that means the whole portal or only their own account.
+export const SIGNALS_SILENCE_URL = '/api/signals/silence'
+
 export const ADMIN_FEATURES_URL = '/api/admin/features'
 export const ADMIN_ICONS_URL = '/api/admin/icons'
 export const ADMIN_EXPORT_URL = '/api/admin/export'

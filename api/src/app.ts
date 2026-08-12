@@ -17,6 +17,7 @@ import { entriesRouter } from './connectors/routes.js'
 import { ApiError } from './errors.js'
 import { createFaviconRouter } from './favicon/routes.js'
 import { healthRouter } from './health/routes.js'
+import { signalsRouter } from './signals/routes.js'
 import { createSiteRouter } from './site/routes.js'
 
 /**
@@ -87,6 +88,7 @@ export function createApp(siteRoot: string = config.webRoot): Express {
   app.use('/api/config', configRouter)
   app.use('/api/entries', entriesRouter)
   app.use('/api/health', healthRouter)
+  app.use('/api/signals', signalsRouter)
   // requireAdmin on top of the global session gate: the client's mode switch is a
   // convenience, and a request that gets here has to stand on its own.
   app.use('/api/admin', requireAdmin(), adminRouter)

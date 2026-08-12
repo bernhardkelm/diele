@@ -4,6 +4,7 @@ import type {
   DisplayMode,
   EntryAction,
   HealthState,
+  SignalSeverity,
 } from '@diele/common'
 
 /**
@@ -81,9 +82,13 @@ export interface HealthRequest {
 }
 
 export interface Signal {
-  /** Stable while the condition holds, so a banner does not re-animate on every poll */
+  /**
+   * Stable while the condition holds, so a banner does not re-animate on every poll. Namespaced
+   * by the module against its own connector id, the way a produced entry's ref is: two instances
+   * of one source can be firing the same named condition and they are not the same signal.
+   */
   readonly id: string
-  readonly severity: 'info' | 'warning' | 'critical'
+  readonly severity: SignalSeverity
   readonly label: string
   readonly detail?: string
   readonly href?: string

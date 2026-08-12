@@ -94,6 +94,23 @@ export async function listFeatures(): Promise<ReadonlyArray<ApiFeature>> {
       enabled: isEnabled('health'),
       toggleHint: 'every dot goes and the portal stops reaching anything to draw one',
     },
+    // Its own line rather than inside a connector's, because it is not one connector's: every
+    // source that reports signals feeds the same line, and a switch living under whichever one
+    // happened to be added first would read as belonging to that instance alone.
+    {
+      id: 'alerts',
+      label: 'Alerts',
+      description: 'What a connected source reports as firing, shown above the search field.',
+      kind: 'builtin',
+      produces: [],
+      fields: [],
+      count: 0,
+      enabledCount: 0,
+      toggleable: true,
+      switchOnly: true,
+      enabled: isEnabled('alerts'),
+      toggleHint: 'the line goes and the portal stops asking its sources what is firing',
+    },
     {
       id: 'sites',
       label: 'Saved sites',

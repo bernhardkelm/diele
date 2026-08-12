@@ -39,4 +39,5 @@ export type {
   InputMode,
 } from './features.js'
 export type { ApiHealth, ApiHealthReading, HealthState } from './health.js'
+export type { ApiSignal, ApiSignals, SignalSeverity } from './signals.js'
 export type { ApiStatus } from './status.js'
