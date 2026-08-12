@@ -1,5 +1,6 @@
 import { fuzzyMatch } from '@/helpers/fuzzyMatch'
 import type { SearchField } from '@/helpers/searchFields'
+import type { SearchToken } from '@/helpers/searchTokens'
 
 /**
  * Scores one item's fields against every token of a query.
@@ -8,12 +9,12 @@ import type { SearchField } from '@/helpers/searchFields'
  * and a token scores on its best field alone so a name match is never diluted by the fields it
  * missed. A match never scores zero, so a zero best means nothing matched at all.
  * @param {ReadonlyArray<SearchField>} fields - Weighted texts the item is searched over
- * @param {ReadonlyArray<string>} tokens - Lowercased tokens the query split into
+ * @param {ReadonlyArray<SearchToken>} tokens - Tokens the query split into
  * @returns {number | undefined} - Mean token score, or undefined when a token matched nothing
  */
 export function scoreFields(
   fields: ReadonlyArray<SearchField>,
-  tokens: ReadonlyArray<string>,
+  tokens: ReadonlyArray<SearchToken>,
 ): number | undefined {
   if (tokens.length === 0) {
     return undefined

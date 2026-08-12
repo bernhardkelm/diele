@@ -1,3 +1,5 @@
+import type { SearchToken } from '@/helpers/searchTokens'
+
 /** Half-open span of matched characters in a haystack, `[start, end)`. */
 export interface MatchRange {
   readonly start: number
@@ -122,22 +124,26 @@ function toRanges(positions: ReadonlyArray<number>): MatchRange[] {
  * Matches one token against one text, softly. A literal hit scores highest and is ranked by
  * where it sits, a token whose characters merely appear in order still matches but lands far
  * below, so `prometeus` finds `prometheus` without `abc` finding half the portal.
+ *
+ * A quoted token is the exception and is only ever read literally, since asking for one is
+ * asking for the guessing to stop.
  * @param {string} text - Text to search, in its original casing
- * @param {string} token - Lowercased token to look for
+ * @param {SearchToken} token - Token to look for, and whether it was quoted
  * @returns {FuzzyMatch | undefined} - Score and matched spans, or undefined when it does not match
  */
-export function fuzzyMatch(text: string, token: string): FuzzyMatch | undefined {
-  if (!text || !token) {
+export function fuzzyMatch(text: string, token: SearchToken): FuzzyMatch | undefined {
+  const needle = token.text
+  if (!text || !needle) {
     return undefined
   }
 
   const haystack = text.toLowerCase()
-  const at = haystack.indexOf(token)
+  const at = haystack.indexOf(needle)
 
   if (at !== -1) {
     const contiguous =
       at === 0
-        ? token.length === haystack.length
+        ? needle.length === haystack.length
           ? EXACT
           : PREFIX
         : isWordStart(text, at)
@@ -145,29 +151,31 @@ export function fuzzyMatch(text: string, token: string): FuzzyMatch | undefined 
           : SUBSTRING
 
     return {
-      score: contiguous + quality(token.length, token.length, haystack.length),
-      ranges: [{ start: at, end: at + token.length }],
+      score: contiguous + quality(needle.length, needle.length, haystack.length),
+      ranges: [{ start: at, end: at + needle.length }],
     }
   }
 
-  if (token.length < MIN_ACRONYM_LENGTH) {
+  // Everything below this line is a guess at what was meant. A quoted token has said it means
+  // itself, so a text it does not literally appear in is a miss.
+  if (token.exact || needle.length < MIN_ACRONYM_LENGTH) {
     return undefined
   }
 
-  const positions = subsequencePositions(haystack, token)
+  const positions = subsequencePositions(haystack, needle)
   if (!positions) {
     return undefined
   }
 
   const acronym = positions.every((position) => isWordStart(text, position))
-  if (!acronym && token.length < MIN_SUBSEQUENCE_LENGTH) {
+  if (!acronym && needle.length < MIN_SUBSEQUENCE_LENGTH) {
     return undefined
   }
 
   const span = positions[positions.length - 1]! - positions[0]! + 1
 
   return {
-    score: (acronym ? ACRONYM : SUBSEQUENCE) + quality(token.length, span, haystack.length),
+    score: (acronym ? ACRONYM : SUBSEQUENCE) + quality(needle.length, span, haystack.length),
     ranges: toRanges(positions),
   }
 }

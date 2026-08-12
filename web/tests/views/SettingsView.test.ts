@@ -173,28 +173,28 @@ describe('opening a section', () => {
     const options = wrapper
       .findAllComponents(SettingsOptionRow)
       .map((row) => row.props('option').id)
-    expect(options).toEqual(['system', 'light', 'dark'])
+    expect(options).toEqual(['theme'])
   })
 
-  it('marks exactly one theme row as being in force', async () => {
+  it('names the theme in force on its one row', async () => {
     const wrapper = await open()
     await wrapper.findComponent(SettingsSectionRow).trigger('click')
     await nextTick()
 
-    const on = wrapper.findAllComponents(SettingsOptionRow).filter((row) => row.props('option').on)
-    expect(on).toHaveLength(1)
+    expect(wrapper.findComponent(SettingsOptionRow).props('option').value).toBe('device')
   })
 
-  it('applies the theme a row names', async () => {
+  it('steps to the next theme each time the row is run', async () => {
     const wrapper = await open()
     await wrapper.findComponent(SettingsSectionRow).trigger('click')
     await nextTick()
 
-    const dark = wrapper
-      .findAllComponents(SettingsOptionRow)
-      .find((row) => row.props('option').id === 'dark')!
+    wrapper.findComponent(SettingsOptionRow).props('option').run()
+    await nextTick()
 
-    dark.props('option').run()
+    expect(document.documentElement.getAttribute('data-theme')).toBe('light')
+
+    wrapper.findComponent(SettingsOptionRow).props('option').run()
     await nextTick()
 
     expect(document.documentElement.getAttribute('data-theme')).toBe('dark')

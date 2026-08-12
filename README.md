@@ -379,7 +379,7 @@ these is a real environment variable.
 | `OIDC_ISSUER`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET` | required when `AUTH_MODE=oidc`; see [the api README](api/README.md#setting-up-an-oidc-provider) |
 | `TRUST_PROXY` | off by default; set to the number of proxies in front (`1` behind nginx) so `req.ip` is the caller and not a header |
 | `BRAND_TITLE`, `BRAND_SUBTITLE` | the wordmark and the line under it |
-| `BRAND_ACCENT_LIGHT`, `BRAND_ACCENT_DARK` | the accent, one six-digit hex per theme |
+| `BRAND_ACCENT_LIGHT`, `BRAND_ACCENT_DARK` | the accent, one six-digit hex per theme; the favicons, the iOS home-screen icon and the web manifest are drawn from it at boot |
 | `LOCAL_SETUP_TOKEN` | gates creating the first account; generated and printed when unset |
 | `SESSION_MAX_AGE_MS`, `SESSION_REMEMBER_MAX_AGE_MS` | idle windows, not lifetimes; they roll forward on use |
 | `DIELE_SEED_STOCK_CONFIG` | `false` creates the database without the stock engines, commands and ports |

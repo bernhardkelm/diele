@@ -57,6 +57,7 @@
     "test:coverage": "run-s test:coverage:api test:coverage:web",
     "test:coverage:api": "npm run test:coverage -w @diele/api",
     "test:coverage:web": "npm run test:coverage -w @diele/web",
+    "favicons:stock": "tsx scripts/stockFavicons.ts",
     "format": "run-s format:common format:api format:web",
     "format:common": "npm run format -w @diele/common",
     "format:api": "npm run format -w @diele/api",

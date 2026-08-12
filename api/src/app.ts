@@ -15,6 +15,7 @@ import { configRouter } from './bootstrap/routes.js'
 import { config } from './config.js'
 import { entriesRouter } from './connectors/routes.js'
 import { ApiError } from './errors.js'
+import { createFaviconRouter } from './favicon/routes.js'
 import { healthRouter } from './health/routes.js'
 import { createSiteRouter } from './site/routes.js'
 
@@ -71,6 +72,11 @@ export function createApp(siteRoot: string = config.webRoot): Express {
 
   // Before the gate below, because the login screen is part of the app it is gating: mounted
   // after it, the document and its assets would answer 401 to anyone not already signed in.
+  //
+  // The icons lead, because they are drawn from this deployment's accent rather than read from
+  // the build, and the build ships a stock set under the same names for the router below to
+  // serve when this one is not reached.
+  app.use(createFaviconRouter())
   app.use(createSiteRouter(siteRoot))
 
   app.use(attachSession())

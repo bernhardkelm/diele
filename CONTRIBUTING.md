@@ -107,6 +107,12 @@ A view fills the screen on its own. `AdminView`, `StyleguideView` and `LoginGate
 A component used by exactly one view lives beside it, which is why `StyleguideTokenRow` sits in
 `views/`. Move it out the day a second view needs it.
 
+`public/favicon/` is generated, not drawn by hand: `api/src/favicon/` draws the set from the
+configured accent at boot and serves it ahead of these, and `npm run favicons:stock` rewrites this
+copy from the same code. The dev server proxies `/favicon` to the api alongside `/api`, so a
+checkout shows the accent it is configured with; this copy is what answers where the api is not in
+front of it, such as `vite preview`.
+
 A composable returns what its consumers use, not everything it holds. Add a member back the day
 something calls it.
 

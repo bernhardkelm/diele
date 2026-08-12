@@ -3,6 +3,7 @@ import { mount } from '@vue/test-utils'
 import AdminIconField from '@/features/admin/AdminIconField.vue'
 import AdminSelectField from '@/features/admin/AdminSelectField.vue'
 import { resetIcons } from '@/composables/useIcons'
+import { resetPortalConfig } from '@/composables/usePortalConfig'
 
 const SQUARE = {
   id: 3,
@@ -21,10 +22,20 @@ interface FieldProps {
  * @param {object} options - What the upload should answer with
  * @returns {ReturnType<typeof vi.fn>} - The stubbed fetch
  */
-function stubApi(options: { upload?: { status: number; body: unknown } } = {}) {
+function stubApi(
+  options: {
+    upload?: { status: number; body: unknown }
+    remove?: { status: number; body: unknown }
+  } = {},
+) {
   return vi.fn((_input: RequestInfo | URL, init?: RequestInit) => {
     if (init?.method === 'POST') {
       const answer = options.upload ?? { status: 201, body: { icon: CIRCLE } }
+      return Promise.resolve(new Response(JSON.stringify(answer.body), { status: answer.status }))
+    }
+
+    if (init?.method === 'DELETE') {
+      const answer = options.remove ?? { status: 200, body: { ok: true } }
       return Promise.resolve(new Response(JSON.stringify(answer.body), { status: answer.status }))
     }
 
@@ -59,6 +70,7 @@ function chooseFile(input: HTMLInputElement, contents: string | undefined): void
 
 beforeEach(() => {
   resetIcons()
+  resetPortalConfig()
   vi.restoreAllMocks()
   vi.spyOn(console, 'warn').mockImplementation(() => {})
   vi.stubGlobal('fetch', stubApi())
@@ -66,6 +78,7 @@ beforeEach(() => {
 
 afterEach(() => {
   resetIcons()
+  resetPortalConfig()
   vi.unstubAllGlobals()
 })
 
@@ -163,5 +176,108 @@ describe('uploading one', () => {
     await vi.waitFor(() => expect(wrapper.text()).toContain('not an svg'))
 
     expect(wrapper.emitted('update:modelValue')).toBeUndefined()
+  })
+})
+
+describe('deleting one', () => {
+  it('offers nothing to delete while no icon is chosen', async () => {
+    const wrapper = await open({ modelValue: null })
+
+    expect(wrapper.find('.icon__delete').attributes('disabled')).toBeDefined()
+  })
+
+  // A delete takes the icon off every card that uses it, not only off the one being edited.
+  it('asks a second time before it deletes', async () => {
+    const wrapper = await open({ modelValue: 3 })
+
+    await wrapper.find('.icon__delete').trigger('click')
+
+    expect(wrapper.find('.icon__delete').text()).toBe('Press again to delete')
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined()
+    expect(wrapper.findComponent(AdminSelectField).props('options')).toHaveLength(2)
+  })
+
+  it('deletes on the second press and clears the field', async () => {
+    const wrapper = await open({ modelValue: 3 })
+
+    await wrapper.find('.icon__delete').trigger('click')
+    await wrapper.find('.icon__delete').trigger('click')
+    await vi.waitFor(() => expect(wrapper.emitted('update:modelValue')).toBeTruthy())
+
+    expect(wrapper.emitted('update:modelValue')).toEqual([[null]])
+    expect(wrapper.findComponent(AdminSelectField).props('options')).toEqual([
+      { value: '', label: 'No icon' },
+    ])
+  })
+
+  // Armed against the icon that was chosen when it was armed: switching the picker in between
+  // would otherwise delete whatever the second press happened to land on.
+  it('disarms when the chosen icon changes', async () => {
+    const wrapper = await open({ modelValue: 3 })
+
+    await wrapper.find('.icon__delete').trigger('click')
+    await wrapper.setProps({ modelValue: null })
+
+    expect(wrapper.find('.icon__delete').text()).toBe('Delete icon')
+  })
+
+  // A pending delete must not be completed later by a click aimed at something else.
+  it('disarms once focus leaves the field', async () => {
+    const wrapper = await open({ modelValue: 3 })
+    const outside = document.createElement('button')
+    document.body.append(outside)
+
+    await wrapper.find('.icon__delete').trigger('click')
+    await wrapper.find('.icon').trigger('focusout', { relatedTarget: outside })
+
+    expect(wrapper.find('.icon__delete').text()).toBe('Delete icon')
+    outside.remove()
+  })
+
+  it('stays armed while focus moves within the field', async () => {
+    const wrapper = await open({ modelValue: 3 })
+    const inside = wrapper.find('input[type="file"]').element
+
+    await wrapper.find('.icon__delete').trigger('click')
+    await wrapper.find('.icon').trigger('focusout', { relatedTarget: inside })
+
+    expect(wrapper.find('.icon__delete').text()).toBe('Press again to delete')
+  })
+
+  // A refused upload leaves the selection alone, so nothing else here would disarm it.
+  it('disarms when an upload is offered instead', async () => {
+    const wrapper = await open({ modelValue: 3 })
+    const input = wrapper.find('input[type="file"]').element as HTMLInputElement
+
+    await wrapper.find('.icon__delete').trigger('click')
+    chooseFile(input, '<svg/>')
+    await wrapper.find('input[type="file"]').trigger('change')
+
+    expect(wrapper.find('.icon__delete').text()).toBe('Delete icon')
+  })
+
+  // The button's own label changes under the focus already on it, which is not reliably read out.
+  it('announces the armed state to assistive technology', async () => {
+    const wrapper = await open({ modelValue: 3 })
+
+    expect(wrapper.find('[role="status"]').exists()).toBe(false)
+
+    await wrapper.find('.icon__delete').trigger('click')
+
+    expect(wrapper.find('[role="status"]').text()).toBe('Press again to delete')
+  })
+
+  it('keeps the icon and says why when the server refused', async () => {
+    vi.stubGlobal('fetch', stubApi({ remove: { status: 404, body: { error: 'icon not found' } } }))
+    const wrapper = await open({ modelValue: 3 })
+
+    await wrapper.find('.icon__delete').trigger('click')
+    await wrapper.find('.icon__delete').trigger('click')
+    await vi.waitFor(() => expect(wrapper.text()).toContain('icon not found'))
+
+    expect(wrapper.emitted('update:modelValue')).toBeUndefined()
+    expect(wrapper.findComponent(AdminSelectField).props('options')).toHaveLength(2)
+    // a refused delete leaves nothing armed, so the next press asks again
+    expect(wrapper.find('.icon__delete').text()).toBe('Delete icon')
   })
 })

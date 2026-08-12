@@ -1,3 +1,1 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64"><metadata><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:dc="http://purl.org/dc/elements/1.1/"><rdf:Description><dc:creator>RealFaviconGenerator</dc:creator><dc:source>https://realfavicongenerator.net</dc:source></rdf:Description></rdf:RDF></metadata><rect width="64" height="64" rx="14.08" fill="#0C0D10"></rect><g transform="translate(10.41 17.61) scale(1.107)">
-    <path d="M4,13 Q11,3 19,13 Q27,23 35,13" stroke="#E8756A" stroke-width="6" fill="none" stroke-linecap="round"></path>
-  </g></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64"><rect width="64" height="64" rx="14.08" fill="#0e0f12"/><g transform="translate(10.413 17.609) scale(1.1070)"><path d="M4,13 Q11,3 19,13 Q27,23 35,13" fill="none" stroke="#22c55e" stroke-width="6" stroke-linecap="round"/></g></svg>

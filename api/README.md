@@ -24,7 +24,7 @@ whole set.
 | `DB_PATH` | where the SQLite file lives, default `data/diele.db`; a relative path is resolved from the repo root |
 | `PUBLIC_ORIGIN` | origin the browser reaches diele on; the OIDC redirect uri is derived from it |
 | `BRAND_TITLE`, `BRAND_SUBTITLE` | the wordmark and the line under it |
-| `BRAND_ACCENT_LIGHT`, `BRAND_ACCENT_DARK` | the accent, one six-digit hex per theme |
+| `BRAND_ACCENT_LIGHT`, `BRAND_ACCENT_DARK` | the accent, one six-digit hex per theme; `src/favicon/` draws the icon set from the dark one at boot and serves it ahead of the stock copy in the build |
 | `AUTH_MODE` | `local` (default), `oidc` or `dev` |
 | `OIDC_ISSUER`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET` | required when `AUTH_MODE=oidc` |
 | `OIDC_SCOPES`, `OIDC_DISPLAY_NAME` | scopes requested, and what the sign-in button says |
