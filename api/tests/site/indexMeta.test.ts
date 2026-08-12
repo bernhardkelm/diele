@@ -41,6 +41,14 @@ test('the brand and the version are stamped where the placeholder was', () => {
   assert.equal(metaContent(html, 'diele:version'), '1.2.3')
 })
 
+// Safari reads neither the manifest nor the wordmark for the label under a home-screen icon, so
+// a deployment that is not stamped here is one whose icon carries the project's name.
+test('the ios home-screen label is the configured title', () => {
+  const html = injectRuntime(DOCUMENT, { brand: BRAND, version: '1.2.3' })
+
+  assert.equal(metaContent(html, 'apple-mobile-web-app-title'), 'acme')
+})
+
 // The wordmark is whatever the environment said, and it lands in an attribute in the document
 // the portal is served as. A quote that closed it early would put the rest of it in markup.
 test('a wordmark that carries markup cannot break out of its attribute', () => {

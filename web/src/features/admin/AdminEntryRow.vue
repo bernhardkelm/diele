@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed } from 'vue'
 import AdminEntryForm from '@/features/admin/AdminEntryForm.vue'
 import AdminRowActions from '@/features/admin/AdminRowActions.vue'
 import LoadingDots from '@/components/LoadingDots.vue'
 import ScrollingText from '@/components/ScrollingText.vue'
 import StatusDot from '@/components/StatusDot.vue'
+import { useArmedAction } from '@/composables/useArmedAction'
 import { useStationRow } from '@/composables/useStationRow'
 import type { RowAction, RowActionId } from '@/features/admin/adminRowActions'
 import { detailOf, summaryOf } from '@/features/admin/adminRowText'
@@ -49,7 +50,7 @@ const { attrs: stationAttrs, ownsEvent } = useStationRow({
 // Deleting is the one action with nothing to undo it, so the key asks twice. Held on the row
 // rather than in a dialog, because a confirmation that has to be reached for with the mouse
 // would undo the point of driving the list from the keyboard.
-const confirming = ref(false)
+const { armed: confirming, press, disarm, onFocusout } = useArmedAction()
 
 const name = computed(() => summaryOf(props.row))
 
@@ -150,35 +151,12 @@ function onKeydown(event: KeyboardEvent): void {
  */
 function run(id: RowActionId): void {
   if (id !== 'remove') {
-    confirming.value = false
+    disarm()
     emit('run', id)
     return
   }
 
-  if (!confirming.value) {
-    confirming.value = true
-    return
-  }
-
-  confirming.value = false
-  emit('run', 'remove')
-}
-
-/**
- * Disarms a pending delete once the row stops holding focus, so it cannot be completed later
- * by a keystroke aimed at something else.
- * @param {FocusEvent} event - Focus leaving the row or something inside it
- * @returns {void}
- */
-function onFocusout(event: FocusEvent): void {
-  const next = event.relatedTarget
-  const row = event.currentTarget as HTMLElement
-
-  if (next instanceof Node && row.contains(next)) {
-    return
-  }
-
-  confirming.value = false
+  press(() => emit('run', 'remove'))
 }
 </script>
 

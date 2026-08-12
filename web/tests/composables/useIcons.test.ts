@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { resetIcons, useIcons } from '@/composables/useIcons'
+import { resetPortalConfig } from '@/composables/usePortalConfig'
 
 const ICON = { id: 3, name: 'square', svg: '<svg viewBox="0 0 8 8"><path d="M0 0h8v8H0z"/></svg>' }
 
@@ -16,11 +17,14 @@ function svgFile(name: string, contents = '<svg/>'): File {
 beforeEach(() => {
   // Held at module scope, so an upload in one test is still in the library in the next.
   resetIcons()
+  resetPortalConfig()
   vi.restoreAllMocks()
+  vi.spyOn(console, 'warn').mockImplementation(() => {})
 })
 
 afterEach(() => {
   resetIcons()
+  resetPortalConfig()
   vi.unstubAllGlobals()
 })
 
@@ -121,6 +125,75 @@ describe('uploading an icon', () => {
 
     const library = useIcons()
     await library.upload(svgFile('x.svg'))
+
+    expect(library.busy.value).toBe(false)
+    expect(library.error.value).toBe('offline')
+  })
+})
+
+describe('deleting an icon', () => {
+  /**
+   * Answers the delete, and the configuration reread that follows it.
+   * @param {object} answer - Status and body the delete responds with
+   * @returns {ReturnType<typeof vi.fn>} - The stubbed fetch
+   */
+  function stubDelete(
+    answer: { status: number; body: unknown } = { status: 200, body: { ok: true } },
+  ) {
+    return vi.fn((_input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === 'DELETE') {
+        return Promise.resolve(new Response(JSON.stringify(answer.body), { status: answer.status }))
+      }
+
+      return Promise.resolve(new Response(JSON.stringify({ icons: [ICON] })))
+    })
+  }
+
+  it('addresses the icon by id and drops it from the library', async () => {
+    const fetchMock = stubDelete()
+    vi.stubGlobal('fetch', fetchMock)
+
+    const library = useIcons()
+    await library.load()
+
+    await expect(library.remove(ICON.id)).resolves.toBe(true)
+
+    expect(library.icons.value).toEqual([])
+    expect(
+      fetchMock.mock.calls.some(
+        ([url, init]) => String(url).endsWith('/icons/3') && init?.method === 'DELETE',
+      ),
+    ).toBe(true)
+  })
+
+  // The card referencing it is not deleted with it, the reference is cleared, so every page
+  // painting that card is showing a logo the database no longer holds.
+  it('reads the configuration again, so the cards lose the icon too', async () => {
+    const fetchMock = stubDelete()
+    vi.stubGlobal('fetch', fetchMock)
+
+    await useIcons().remove(ICON.id)
+
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/api/config'))).toBe(true)
+  })
+
+  it('keeps the icon and says why when the delete was refused', async () => {
+    vi.stubGlobal('fetch', stubDelete({ status: 404, body: { error: 'icon not found' } }))
+
+    const library = useIcons()
+    await library.load()
+
+    await expect(library.remove(ICON.id)).resolves.toBe(false)
+
+    expect(library.icons.value).toEqual([ICON])
+    expect(library.error.value).toBe('icon not found')
+  })
+
+  it('clears the busy flag whether it worked or not', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline')))
+
+    const library = useIcons()
+    await library.remove(ICON.id)
 
     expect(library.busy.value).toBe(false)
     expect(library.error.value).toBe('offline')

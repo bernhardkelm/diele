@@ -36,6 +36,22 @@ describe('rankByScore', () => {
     expect(ranked[0]?.name).toBe('GitLab')
   })
 
+  // The whole point of quoting: a term short or common enough to reach half the portal has no
+  // other way to say it means only itself.
+  it('narrows to a literal hit for a quoted term', () => {
+    const repos: ReadonlyArray<Item> = [
+      { name: 'example-group/web' },
+      { name: 'example-group/web-ui' },
+      { name: 'example-app/webhooks' },
+    ]
+
+    expect(rankByScore(repos, 'exam we', fieldsOf).map((item) => item.name)).toHaveLength(3)
+    expect(rankByScore(repos, '"example-group/web"', fieldsOf).map((item) => item.name)).toEqual([
+      'example-group/web',
+      'example-group/web-ui',
+    ])
+  })
+
   it('keeps source order between equal scores', () => {
     const twins: ReadonlyArray<Item> = [{ name: 'alpha one' }, { name: 'alpha two' }]
     const ranked = rankByScore(twins, 'alpha', fieldsOf)

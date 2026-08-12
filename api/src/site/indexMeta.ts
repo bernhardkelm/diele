@@ -1,4 +1,5 @@
 import type { ApiBrand } from '@diele/common'
+import { PAGE_DARK, PAGE_LIGHT } from '#favicon/mark.js'
 
 /** The comment `web/index.html` carries, so neither side may rename it alone. */
 const PLACEHOLDER = '<!--diele:brand-->'
@@ -37,6 +38,12 @@ function escapeAttribute(value: string): string {
  * the built-in defaults until the providers endpoint answered. Everything behind the gate keeps
  * reading the cache and is untouched by this.
  *
+ * The theme colour is stamped here as well, one per scheme, because it is what a phone paints
+ * the bar above the page with and the page under it is painted from the same two values.
+ *
+ * The iOS home-screen label likewise: Safari reads neither the manifest nor the wordmark for it,
+ * so the one place the configured title can reach that icon is a meta in this document.
+ *
  * A document without the placeholder comes back unchanged, which is the case for a build that
  * predates it.
  * @param {string} html - The built index.html
@@ -47,6 +54,9 @@ export function injectRuntime(html: string, runtime: StampedRuntime): string {
   const tags = [
     `<meta name="${BRAND_META_NAME}" content="${escapeAttribute(JSON.stringify(runtime.brand))}">`,
     `<meta name="${VERSION_META_NAME}" content="${escapeAttribute(runtime.version)}">`,
+    `<meta name="theme-color" media="(prefers-color-scheme: light)" content="${PAGE_LIGHT}">`,
+    `<meta name="theme-color" media="(prefers-color-scheme: dark)" content="${PAGE_DARK}">`,
+    `<meta name="apple-mobile-web-app-title" content="${escapeAttribute(runtime.brand.title)}">`,
   ].join('\n    ')
 
   // A replacer function rather than the string itself: `$&` and its siblings are substitutions

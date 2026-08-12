@@ -27,13 +27,16 @@ const { attrs: stationAttrs, ownsEvent } = useStationRow({
   level: 2,
 })
 
+const state = computed(() => props.option.value ?? (props.option.on ? 'on' : 'off'))
+
 // the trail word is a glyph as far as assistive technology is concerned, so the state is said
 // here instead, the way an admin row says it is off
-const label = computed(() => `${props.option.label}, ${props.option.on ? 'on' : 'off'}`)
+const label = computed(() => `${props.option.label}, ${state.value}`)
 
 /**
- * Flips the setting. `d` as well as Enter, so the key means the same thing it does on an admin
- * row, and only when the row itself is the target.
+ * Runs the setting: a switch flips, a row naming more than two states steps to the next. `d` as
+ * well as Enter, so the key means the same thing it does on an admin row, and only when the row
+ * itself is the target.
  * @param {KeyboardEvent} event - Key press being handled
  * @returns {void}
  */
@@ -65,7 +68,7 @@ function onKeydown(event: KeyboardEvent): void {
 
     <span class="option__trail row-trail" aria-hidden="true">
       <span class="option__switch" :class="{ 'option__switch--off': !option.on }">
-        {{ option.on ? 'on' : 'off' }}
+        {{ state }}
       </span>
     </span>
   </li>

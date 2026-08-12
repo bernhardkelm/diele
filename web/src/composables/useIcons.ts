@@ -1,5 +1,6 @@
 import { ref, type Ref } from 'vue'
 import { ADMIN_ICONS_URL } from '@/config/api'
+import { refreshPortalConfig } from '@/composables/usePortalConfig'
 import { apiMessage, readPayload } from '@/helpers/apiError'
 import type { ApiIcon } from '@diele/common'
 
@@ -10,6 +11,8 @@ export interface IconLibrary {
   load: () => Promise<void>
   /** Uploads an svg and returns the stored icon, or undefined when it was rejected */
   upload: (file: File) => Promise<ApiIcon | undefined>
+  /** Deletes an icon and answers whether it went through */
+  remove: (id: number) => Promise<boolean>
   svgFor: (id: number | null | undefined) => string
 }
 
@@ -98,6 +101,39 @@ export function useIcons(): IconLibrary {
   }
 
   /**
+   * Deletes an icon. The card referencing it is not deleted with it, the reference is cleared,
+   * so every page painting that card is now showing a logo the database no longer holds and the
+   * configuration has to be read again.
+   * @param {number} id - Icon to delete
+   * @returns {Promise<boolean>} - True when it went through
+   */
+  async function remove(id: number): Promise<boolean> {
+    busy.value = true
+    error.value = undefined
+
+    try {
+      const response = await fetch(`${ADMIN_ICONS_URL}/${id}`, {
+        method: 'DELETE',
+        headers: { accept: 'application/json' },
+      })
+
+      if (!response.ok) {
+        throw new Error(apiMessage(await readPayload(response), 'delete failed'))
+      }
+
+      icons.value = icons.value.filter((icon) => icon.id !== id)
+      await refreshPortalConfig()
+
+      return true
+    } catch (cause) {
+      error.value = cause instanceof Error ? cause.message : String(cause)
+      return false
+    } finally {
+      busy.value = false
+    }
+  }
+
+  /**
    * Returns the markup of one icon, for the preview beside the picker.
    * @param {number | null | undefined} id - Icon to look up
    * @returns {string} - Sanitised svg markup, empty when there is none
@@ -110,5 +146,5 @@ export function useIcons(): IconLibrary {
     return icons.value.find((icon) => icon.id === id)?.svg ?? ''
   }
 
-  return { icons, error, busy, load, upload, svgFor }
+  return { icons, error, busy, load, upload, remove, svgFor }
 }

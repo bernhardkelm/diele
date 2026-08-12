@@ -20,6 +20,16 @@ export function settingsHintsFor(
   }
 
   if (station.kind === 'option') {
+    // A row naming more than two states steps rather than flips, and saying it turns something
+    // on would name the one thing pressing it does not do.
+    if (station.option.value !== undefined) {
+      return [
+        { text: '↵ steps to the next', key: true },
+        { text: 'd steps', key: true },
+        LEAVE_HINT,
+      ]
+    }
+
     return [{ text: '↵ turns it on/off', key: true }, { text: 'd on/off', key: true }, LEAVE_HINT]
   }
 

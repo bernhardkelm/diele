@@ -41,6 +41,10 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': { target: apiTarget, changeOrigin: true },
+      // The icons the api draws from this deployment's accent, rather than the stock set sitting
+      // under the same names in `public/`. Vite registers the proxy ahead of the middleware
+      // serving that directory, so this wins without the files having to move.
+      '/favicon': { target: apiTarget, changeOrigin: true },
     },
   },
   resolve: {

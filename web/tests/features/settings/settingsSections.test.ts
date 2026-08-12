@@ -3,7 +3,6 @@ import { searchSections, type SettingsSection } from '@/features/settings/settin
 import { buildSettingsStations, sectionKey } from '@/features/settings/settingsStations'
 import { settingsActions } from '@/features/settings/settingsActions'
 import { settingsHintsFor } from '@/features/settings/settingsHints'
-import { themeSection } from '@/features/settings/themeSection'
 import type { ListAction } from '@/helpers/listActions'
 
 /**
@@ -41,7 +40,7 @@ const hidden = section({
   ],
 })
 
-const sections = [themeSection('system', vi.fn()), hidden]
+const sections = [section(), hidden]
 
 describe('searchSections', () => {
   it('hands everything back in source order for a blank term', () => {
@@ -203,37 +202,6 @@ describe('settingsActions', () => {
   })
 })
 
-describe('themeSection', () => {
-  // Turning one on is what turns the others off, so there is no state where the portal has
-  // no theme at all.
-  it('marks exactly one theme as being in force', () => {
-    for (const current of ['system', 'light', 'dark'] as const) {
-      const on = themeSection(current, vi.fn()).options.filter((option) => option.on)
-
-      expect(on, current).toHaveLength(1)
-      expect(on[0]!.id).toBe(current)
-    }
-  })
-
-  it('reports the theme in force in its trail', () => {
-    expect(themeSection('system', vi.fn()).trail).toBe('device')
-    expect(themeSection('dark', vi.fn()).trail).toBe('dark')
-  })
-
-  it('applies the theme its row names', () => {
-    const set = vi.fn()
-    themeSection('system', set)
-      .options.find((option) => option.id === 'dark')!
-      .run()
-
-    expect(set).toHaveBeenCalledWith('dark')
-  })
-
-  it('falls back to the device wording for a theme it does not know', () => {
-    expect(themeSection('sepia' as never, vi.fn()).trail).toBe('device')
-  })
-})
-
 describe('settingsHintsFor', () => {
   it('names the field keys while nothing in the list holds focus', () => {
     expect(settingsHintsFor(undefined, false).map((hint) => hint.text)).toEqual([
@@ -277,5 +245,30 @@ describe('settingsHintsFor', () => {
       'esc leaves',
     ])
     expect(settingsHintsFor(action, false).map((h) => h.text)).toEqual(['↵ runs', 'esc leaves'])
+  })
+
+  // A row naming more than two states steps rather than flips, and saying it turns something on
+  // would name the one thing pressing it does not do.
+  it('names the stepping keys on a row that carries a value', () => {
+    const station = {
+      kind: 'option',
+      key: 'k',
+      label: 'Theme',
+      section: hidden,
+      option: {
+        id: 'theme',
+        label: 'Theme',
+        detail: 'pins the dark palette',
+        on: true,
+        value: 'dark',
+        run: vi.fn(),
+      },
+    } as const
+
+    expect(settingsHintsFor(station, false).map((h) => h.text)).toEqual([
+      '↵ steps to the next',
+      'd steps',
+      'esc leaves',
+    ])
   })
 })

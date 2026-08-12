@@ -1,11 +1,12 @@
 import type { ListAction } from '@/helpers/listActions'
 import { scoreFields } from '@/helpers/scoreFields'
 import type { SearchField } from '@/helpers/searchFields'
-import { tokenize } from '@/helpers/searchTokens'
+import { tokenize, type SearchToken } from '@/helpers/searchTokens'
 
 /**
- * One nested row of a section: a preference that is either in force or not. Everything a
- * section holds is a switch, so a row says which way it is set and flipping it is all it does.
+ * One nested row of a section. A row says which way it is set and running it is all it does:
+ * for most that is a switch flipping between two states, for one that names more than two it is
+ * a step to the next.
  */
 export interface SettingsOption {
   readonly id: string
@@ -13,6 +14,11 @@ export interface SettingsOption {
   /** One line under the name, saying what the setting does in the state it is in */
   readonly detail: string
   readonly on: boolean
+  /**
+   * Word the trail carries instead of `on`/`off`, for a row stepping through more settings than
+   * a switch can hold. Such a row is never dormant, so it is always `on` as well.
+   */
+  readonly value?: string
   readonly run: () => void
 }
 
@@ -64,12 +70,12 @@ function optionFields(option: SettingsOption): ReadonlyArray<SearchField> {
  * Filters and ranks the options a term addresses, in their declared order: a section's rows
  * are a fixed set someone reads down, not a result list to be reordered under them.
  * @param {ReadonlyArray<SettingsOption>} options - Rows of one section
- * @param {ReadonlyArray<string>} tokens - Lowercased tokens the query split into
+ * @param {ReadonlyArray<SearchToken>} tokens - Tokens the query split into
  * @returns {ReadonlyArray<SettingsOption>} - Matching options, in section order
  */
 function filterOptions(
   options: ReadonlyArray<SettingsOption>,
-  tokens: ReadonlyArray<string>,
+  tokens: ReadonlyArray<SearchToken>,
 ): ReadonlyArray<SettingsOption> {
   return options.filter((option) => scoreFields(optionFields(option), tokens) !== undefined)
 }

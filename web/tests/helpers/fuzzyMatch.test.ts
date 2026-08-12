@@ -1,5 +1,25 @@
 import { describe, expect, it } from 'vitest'
-import { fuzzyMatch } from '@/helpers/fuzzyMatch'
+import { fuzzyMatch, type FuzzyMatch } from '@/helpers/fuzzyMatch'
+
+/**
+ * Matches an ordinary, unquoted token, which is what all but the last block here is about.
+ * @param {string} text - Haystack
+ * @param {string} token - Lowercased token
+ * @returns {FuzzyMatch | undefined} - The match, or undefined
+ */
+function match(text: string, token: string): FuzzyMatch | undefined {
+  return fuzzyMatch(text, { text: token, exact: false })
+}
+
+/**
+ * Matches a quoted token.
+ * @param {string} text - Haystack
+ * @param {string} token - Lowercased token
+ * @returns {FuzzyMatch | undefined} - The match, or undefined
+ */
+function quoted(text: string, token: string): FuzzyMatch | undefined {
+  return fuzzyMatch(text, { text: token, exact: true })
+}
 
 /**
  * Scores a token against a text, failing the test when it did not match at all.
@@ -8,28 +28,28 @@ import { fuzzyMatch } from '@/helpers/fuzzyMatch'
  * @returns {number} - The score
  */
 function score(text: string, token: string): number {
-  const match = fuzzyMatch(text, token)
-  expect(match, `${token} did not match ${text}`).toBeDefined()
+  const found = match(text, token)
+  expect(found, `${token} did not match ${text}`).toBeDefined()
 
-  return match!.score
+  return found!.score
 }
 
 describe('what does not match', () => {
   it('refuses an empty text or token', () => {
-    expect(fuzzyMatch('', 'a')).toBeUndefined()
-    expect(fuzzyMatch('Grafana', '')).toBeUndefined()
+    expect(match('', 'a')).toBeUndefined()
+    expect(match('Grafana', '')).toBeUndefined()
   })
 
   it('refuses a token whose characters are not all there', () => {
-    expect(fuzzyMatch('Grafana', 'xyz')).toBeUndefined()
-    expect(fuzzyMatch('Grafana', 'grafanas')).toBeUndefined()
+    expect(match('Grafana', 'xyz')).toBeUndefined()
+    expect(match('Grafana', 'grafanas')).toBeUndefined()
   })
 
   // Letting a one or two character token scatter would match nearly everything, which is
   // worse than not matching at all.
   it('refuses a short token that would only match by scattering', () => {
-    expect(fuzzyMatch('Grafana', 'ga')).toBeUndefined()
-    expect(fuzzyMatch('Prometheus', 'ph')).toBeUndefined()
+    expect(match('Grafana', 'ga')).toBeUndefined()
+    expect(match('Prometheus', 'ph')).toBeUndefined()
   })
 })
 
@@ -65,28 +85,28 @@ describe('acronyms and subsequences', () => {
   // Landing every character on a word start is specific enough to stay useful two characters
   // down, which is what makes `uk` find `Uptime Kuma`.
   it('finds a name by the initials of its words', () => {
-    const match = fuzzyMatch('Uptime Kuma', 'uk')
+    const found = match('Uptime Kuma', 'uk')
 
-    expect(match).toBeDefined()
-    expect(match!.ranges).toEqual([
+    expect(found).toBeDefined()
+    expect(found!.ranges).toEqual([
       { start: 0, end: 1 },
       { start: 7, end: 8 },
     ])
   })
 
   it('tolerates a typo without matching everything', () => {
-    expect(fuzzyMatch('prometheus', 'prometeus')).toBeDefined()
-    expect(fuzzyMatch('prometheus', 'abc')).toBeUndefined()
+    expect(match('prometheus', 'prometeus')).toBeDefined()
+    expect(match('prometheus', 'abc')).toBeUndefined()
   })
 })
 
 describe('the ranges a renderer marks up', () => {
   it('reports one contiguous range for a literal hit', () => {
-    expect(fuzzyMatch('uptime kuma', 'kuma')!.ranges).toEqual([{ start: 7, end: 11 }])
+    expect(match('uptime kuma', 'kuma')!.ranges).toEqual([{ start: 7, end: 11 }])
   })
 
   it('reports ranges ascending and non-overlapping', () => {
-    const { ranges } = fuzzyMatch('example-group/web', 'egw')!
+    const { ranges } = match('example-group/web', 'egw')!
 
     for (const [index, range] of ranges.entries()) {
       expect(range.end).toBeGreaterThan(range.start)
@@ -100,14 +120,45 @@ describe('the ranges a renderer marks up', () => {
 
   // A forward pass alone misses this whenever an early character of the token repeats.
   it('picks the tightest window when a character repeats', () => {
-    const { ranges } = fuzzyMatch('aabac', 'abc')!
+    const { ranges } = match('aabac', 'abc')!
 
     expect(ranges.at(-1)!.end).toBe(5)
     expect(ranges[0]!.start).toBeGreaterThan(0)
   })
 
   it('matches case-insensitively but reports positions in the original text', () => {
-    expect(fuzzyMatch('GRAFANA', 'graf')!.ranges).toEqual([{ start: 0, end: 4 }])
+    expect(match('GRAFANA', 'graf')!.ranges).toEqual([{ start: 0, end: 4 }])
+  })
+})
+
+// Asking for a quoted term is asking for the guessing to stop.
+describe('a quoted token', () => {
+  it('still matches wherever it literally appears', () => {
+    expect(quoted('Grafana', 'grafana')).toBeDefined()
+    expect(quoted('uptime kuma', 'kuma')!.ranges).toEqual([{ start: 7, end: 11 }])
+    expect(quoted('GRAFANA', 'graf')!.ranges).toEqual([{ start: 0, end: 4 }])
+  })
+
+  it('scores a literal hit exactly as an unquoted one does', () => {
+    expect(quoted('uptime kuma', 'kuma')!.score).toBe(match('uptime kuma', 'kuma')!.score)
+  })
+
+  it('refuses the initials an unquoted token would have matched', () => {
+    expect(match('Uptime Kuma', 'uk')).toBeDefined()
+    expect(quoted('Uptime Kuma', 'uk')).toBeUndefined()
+  })
+
+  it('refuses the typo an unquoted token would have tolerated', () => {
+    expect(match('prometheus', 'prometeus')).toBeDefined()
+    expect(quoted('prometheus', 'prometeus')).toBeUndefined()
+  })
+
+  // The phrase is one token however many separators are inside it, so it has to be findable
+  // across them rather than only inside a single word.
+  it('matches a phrase carrying its own separators', () => {
+    expect(quoted('example-group/web', 'group/web')).toBeDefined()
+    expect(quoted('Uptime Kuma', 'uptime kuma')).toBeDefined()
+    expect(quoted('example-group/web-ui', 'group/web ui')).toBeUndefined()
   })
 })
 

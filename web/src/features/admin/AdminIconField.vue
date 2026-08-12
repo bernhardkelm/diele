@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted, useTemplateRef } from 'vue'
+import { computed, onMounted, useTemplateRef, watch } from 'vue'
 import AdminSelectField from '@/features/admin/AdminSelectField.vue'
+import { useArmedAction } from '@/composables/useArmedAction'
 import { useIcons } from '@/composables/useIcons'
 
 interface AdminIconFieldProps {
@@ -13,11 +14,20 @@ interface AdminIconFieldProps {
 const props = defineProps<AdminIconFieldProps>()
 const emit = defineEmits<{ 'update:modelValue': [value: number | null] }>()
 
-const { icons, error, busy, load, upload, svgFor } = useIcons()
+const { icons, error, busy, load, upload, remove, svgFor } = useIcons()
 const file = useTemplateRef<HTMLInputElement>('file')
 
 const selectedId = computed(() => (typeof props.modelValue === 'number' ? props.modelValue : null))
 const preview = computed(() => svgFor(selectedId.value))
+
+// A delete takes the icon off every card that uses it, not only off the one being edited, so it
+// asks for a second press. Armed against the icon that was chosen when it was armed: switching
+// the picker in between would otherwise delete whatever the second press happened to land on.
+const { armed, press, disarm, onFocusout } = useArmedAction()
+
+watch(selectedId, () => {
+  disarm()
+})
 
 // The blank option leads, so clearing an icon is a choice in the list rather than a second
 // control next to it.
@@ -45,6 +55,9 @@ async function onFile(event: Event): Promise<void> {
     return
   }
 
+  // an upload that is refused leaves the selection alone, so nothing else here would disarm it
+  disarm()
+
   const icon = await upload(chosen)
   if (icon) {
     emit('update:modelValue', icon.id)
@@ -55,10 +68,28 @@ async function onFile(event: Event): Promise<void> {
     file.value.value = ''
   }
 }
+
+/**
+ * Arms the delete on the first press and carries it out on the second, clearing the field so it
+ * is not left pointing at an icon that is gone.
+ * @returns {Promise<void>}
+ */
+async function onDelete(): Promise<void> {
+  const id = selectedId.value
+  if (id === null) {
+    return
+  }
+
+  await press(async () => {
+    if (await remove(id)) {
+      emit('update:modelValue', null)
+    }
+  })
+}
 </script>
 
 <template>
-  <div class="icon">
+  <div class="icon" @focusout="onFocusout">
     <div class="icon__row">
       <!-- Kept in the flow whether or not it holds anything, so choosing an icon does not
            shift the control it was chosen from. The list already says when there is none. -->
@@ -78,6 +109,21 @@ async function onFile(event: Event): Promise<void> {
       <button type="button" :disabled="busy" @click="file?.click()">
         {{ busy ? 'Uploading…' : 'Upload svg' }}
       </button>
+
+      <button
+        type="button"
+        class="icon__delete"
+        :class="{ 'icon__delete--armed': armed }"
+        :disabled="busy || selectedId === null"
+        @click="onDelete"
+      >
+        {{ armed ? 'Press again to delete' : 'Delete icon' }}
+      </button>
+
+      <!-- see AdminEntryRow .entry__confirm: an armed delete is announced rather than only
+           drawn. The words are on the button too, but a label that changes under the focus
+           already on it is not reliably read out. -->
+      <span v-if="armed" class="icon__confirm" role="status">Press again to delete</span>
 
       <input
         ref="file"
@@ -122,6 +168,25 @@ async function onFile(event: Event): Promise<void> {
 
 .icon__file {
   display: none;
+}
+
+/* see AdminEntryRow .entry__confirm: an armed delete carries the same colour wherever it is
+   asked for a second time. Stated for hover too, which the base rule would otherwise take back
+   to the ordinary foreground. */
+.icon__delete--armed,
+.icon__delete--armed:hover:not(:disabled) {
+  color: var(--diele-status-down);
+}
+
+/* see StatusDot .status__label: carried for assistive technology only, the button beside it
+   already says the same thing on screen */
+.icon__confirm {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 .icon__error {
