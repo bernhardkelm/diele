@@ -1,6 +1,6 @@
 {
   "name": "@diele/common",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "private": true,
   "description": "Wire types shared by the diele api and web app.",
   "license": "AGPL-3.0-or-later",
