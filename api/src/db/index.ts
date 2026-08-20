@@ -6,10 +6,11 @@ import { migrate } from './migrate.js'
 import { init } from './migrations/001_init.js'
 import { sessionIdToken } from './migrations/002_session_id_token.js'
 import { healthBindings } from './migrations/003_health_bindings.js'
+import { signalSilences } from './migrations/004_signal_silences.js'
 
 export type DB = Database.Database
 
-const MIGRATIONS = [init, sessionIdToken, healthBindings]
+const MIGRATIONS = [init, sessionIdToken, healthBindings, signalSilences]
 
 let db: DB | null = null
 

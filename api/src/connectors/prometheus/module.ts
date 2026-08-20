@@ -2,14 +2,18 @@ import { z } from 'zod'
 import { isHttpUrl } from '#fieldSchemas.js'
 import { messageOf, redactSecrets } from '#connectors/redact.js'
 import { mapLimit } from '#health/pool.js'
+import { DEFAULT_FLOOR } from '#signals/severity.js'
 import type { ApiFieldSpec } from '@diele/common'
-import { instantQuery, QueryRejectedError } from './client.js'
+import { instantQuery, listAlerts, listManagedAlerts, QueryRejectedError } from './client.js'
+import { signalsOf } from './alerts.js'
+import { managedSignalsOf } from './managedAlerts.js'
 import { readingOf } from './map.js'
 import type {
   ConnectorContext,
   ConnectorModule,
   HealthReading,
   HealthRequest,
+  Signal,
   VerifyContext,
 } from '#connectors/types.js'
 
@@ -31,28 +35,72 @@ const FIELDS: ReadonlyArray<ApiFieldSpec> = [
     input: 'secret',
     hint: 'only where the instance asks for one; stored encrypted and never returned',
   },
+  {
+    key: 'alertmanagerUrl',
+    label: 'Alertmanager',
+    input: 'url',
+    placeholder: 'https://alertmanager.example.com',
+    hint: 'optional; alerts are then read from here instead, so silences count and an HA pair is one alert',
+  },
+  {
+    key: 'minSeverity',
+    label: 'Alerts from',
+    input: 'select',
+    default: DEFAULT_FLOOR,
+    options: [
+      { value: 'critical', label: 'Critical only' },
+      { value: 'warning', label: 'Warning and critical' },
+      { value: 'info', label: 'Info and up, everything it reports' },
+    ],
+    hint: 'the least severe level that reaches the portal',
+  },
+  {
+    key: 'hideWatchdog',
+    label: 'Hide Watchdog',
+    input: 'toggle',
+    default: true,
+    hint: 'it fires forever by design, so it is noise; leave it showing to prove the path is up',
+  },
 ]
 
+// trailing slashes would double up in every url built from this
+const origin = z
+  .string()
+  .trim()
+  .min(1)
+  .refine(isHttpUrl, 'must be an absolute http(s) url')
+  .transform((value) => value.replace(/\/+$/, ''))
+
 const configSchema = z.object({
-  baseUrl: z
-    .string()
-    .trim()
-    .min(1)
-    .refine(isHttpUrl, 'must be an absolute http(s) url')
-    // trailing slashes would double up in every url built from this
-    .transform((value) => value.replace(/\/+$/, '')),
+  baseUrl: origin,
+  // An empty box is no Alertmanager rather than an invalid one, so clearing the field is how it
+  // is switched back off.
+  alertmanagerUrl: z
+    .union([origin, z.literal('')])
+    .optional()
+    .transform((value) => value || undefined),
+  // A row stored before the choice existed carries no value, and keeps what it already reported
+  minSeverity: z.enum(['info', 'warning', 'critical']).default(DEFAULT_FLOOR),
+  hideWatchdog: z.boolean().default(true),
 })
 
 /**
  * Checks that the query api answers before anything is stored. `query=1` is the cheapest
  * expression there is and still exercises the whole path: the origin, the auth and the parser.
+ *
+ * An Alertmanager that has been named is checked too, so a typo in that box is caught while
+ * someone is still looking at the form rather than showing up as a line that never appears.
  * @param {VerifyContext} context - Validated config, the submitted credentials and a deadline
  * @returns {Promise<void>}
  */
 async function verify(context: VerifyContext): Promise<void> {
-  const { baseUrl } = configSchema.parse(context.config)
+  const { baseUrl, alertmanagerUrl } = configSchema.parse(context.config)
 
   await instantQuery(baseUrl, '1', context.secrets.token, context.signal)
+
+  if (alertmanagerUrl) {
+    await listManagedAlerts(alertmanagerUrl, context.secrets.token, context.signal)
+  }
 }
 
 /**
@@ -121,11 +169,41 @@ async function resolveHealth(
   return readings
 }
 
+/**
+ * Reads what is currently firing. One request whatever is bound, unlike the per-entry queries
+ * above: an alert belongs to no card, so there is nothing to run once per entry.
+ *
+ * An Alertmanager wins where one is named, because it knows two things the instance behind it
+ * cannot: which alerts have been silenced, and which arrived from somewhere other than this
+ * Prometheus' own rules. Without one the rules are all there is to read, which is the whole of
+ * what a lone Prometheus knows.
+ *
+ * Throws rather than swallowing, so a source that cannot be reached is recorded as such instead
+ * of reading as nothing being wrong, which is the one thing a quiet alert line must never mean.
+ * @param {ConnectorContext} context - Validated config, decrypted credentials and the signal
+ * @returns {Promise<ReadonlyArray<Signal>>} - What is firing
+ */
+async function readSignals(context: ConnectorContext): Promise<ReadonlyArray<Signal>> {
+  const { baseUrl, alertmanagerUrl, minSeverity, hideWatchdog } = configSchema.parse(context.config)
+  const token = context.secrets.token
+  const reported = { connectorId: context.id, floor: minSeverity, hideWatchdog }
+
+  if (alertmanagerUrl) {
+    const managed = await listManagedAlerts(alertmanagerUrl, token, context.signal)
+
+    return managedSignalsOf(managed, { ...reported, baseUrl: alertmanagerUrl })
+  }
+
+  const alerts = await listAlerts(baseUrl, token, context.signal)
+
+  return signalsOf(alerts, { ...reported, baseUrl })
+}
+
 export const prometheusModule: ConnectorModule = {
   // Shadows the planned row of the same id, which is what takes it out of the admin list
   type: 'prometheus',
   label: 'Prometheus',
-  description: 'Card and site states from a query of your own.',
+  description: 'Card and site states from a query of your own, and the alerts its rules fire.',
   mark: 'pr',
   // Decorates entries someone else produced rather than supplying any of its own
   produces: [],
@@ -143,4 +221,5 @@ export const prometheusModule: ConnectorModule = {
   defaultIntervalSeconds: 60,
   verify,
   resolveHealth,
+  readSignals,
 }

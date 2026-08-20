@@ -21,6 +21,7 @@ import { reorderSchema } from '#fieldSchemas.js'
 import { runSync } from '#connectors/sync.js'
 import { verifyConnector } from '#connectors/verify.js'
 import { readSecrets, writeSecret } from '#secrets/repository.js'
+import { forgetSource } from '#signals/cache.js'
 
 export const connectorRouter: Router = Router()
 
@@ -117,13 +118,21 @@ connectorRouter.patch('/:type/:id', async (req, res) => {
     }
   })()
 
+  // What it reports is decided as it is read, so the answer held from before this edit is now the
+  // old settings' answer. Dropped rather than left to lapse, which is what made a narrowed floor
+  // look like it had not taken until the interval came round.
+  forgetSource(id)
+
   await runSync(id)
 
   res.json({ row: toAdminRow(readConnector(id), module) })
 })
 
 connectorRouter.put('/:type/:id/enabled', (req, res) => {
-  setConnectorEnabled(scopedIdParam(req), enabledBody(req))
+  const id = scopedIdParam(req)
+
+  setConnectorEnabled(id, enabledBody(req))
+  forgetSource(id)
 
   res.json({ ok: true })
 })
@@ -146,7 +155,11 @@ connectorRouter.post('/:type/:id/sync', async (req, res) => {
 })
 
 connectorRouter.delete('/:type/:id', (req, res) => {
-  deleteConnector(scopedIdParam(req))
+  const id = scopedIdParam(req)
+
+  deleteConnector(id)
+  // Its answer would otherwise outlive it by up to an interval, reporting a source that is gone
+  forgetSource(id)
 
   res.json({ ok: true })
 })
