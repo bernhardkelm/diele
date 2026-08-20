@@ -394,24 +394,22 @@ feature has a switch of its own in the panel, and with it off the portal asks it
 
 ### Planned
 
-Agreed on, not built. The ones that are a row in the admin panel already say so there too, each
-declaring the capabilities it will answer to, which is where the shape it is expected to take is
-written down.
+What is coming, in roughly the order it is meant to land.
 
 | | |
 | --- | --- |
 | **Grafana** | dashboards, suggested as results when the term matches them |
 | **Notion** | pages from a private workspace, suggested as you type |
 | **Users and roles** | only the first account exists today; the `groups` claim is already carried onto the session, so the seam is there |
-| **Sessions and devices** | every session an account has open, listed in the user settings and revocable one at a time; the session is already opaque and server-side, so the record is there |
-| **Personal entries** | cards, saved sites, slash commands and search engines a user adds for themselves, on top of what an admin defines rather than instead of it |
-| **History** | opt in, and the urls you open are kept whole and offered in the search; the user settings list them, to drop one, to clear the lot, or to keep one as a saved site |
-| **Ranking that follows you** | what you open already wins ties, but only in the browser that opened it; kept per account it survives a new device and a cleared browser |
-| **Inline answers** | `12*7`, `40f in c`, a hex or base conversion answered above the results, without the term reaching an engine |
-| **General component hardening and polish** | every view gone through once more: edge cases, empty and error states, focus order, and the rough edges only daily use turns up |
+| **Sessions and devices** | every session an account has open, listed in the user settings and revocable one at a time |
+| **Personal entries** | cards, saved sites, slash commands and search engines a user adds for themselves, on top of the ones an admin defines |
+| **History** | opt in, and the urls you open are kept and offered in the search, listed in the user settings to drop, to clear, or to keep as a saved site |
+| **Ranking that follows you** | what you open most keeps winning ties, on every browser you sign in from rather than only the one that opened it |
+| **Inline answers** | `12*7`, `40f in c`, a hex or base conversion answered above the results instead of handed to an engine |
+| **General component hardening and polish** | every view once more over: edge cases, empty and error states, focus order |
 
-Less certain: a resting page that paints the last known cards while the api answers, and the
-extension beyond Chrome.
+Under consideration: a resting page that paints the last known cards while the api answers, and
+the extension beyond Chrome.
 
 ## Installation
 
