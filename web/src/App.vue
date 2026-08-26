@@ -153,7 +153,10 @@ const { readingFor } = useHealth(() => portalShowing.value)
 
 // Asked for only where the portal has said it wants them, so an instance with the switch off
 // never makes the request at all rather than polling for an answer it would not draw.
-const { signals, silence } = useSignals(() => portalShowing.value && alertsEnabled.value)
+const { signals, total: signalTotal, silenced, silence, restore } = useSignals(
+  () => portalShowing.value && alertsEnabled.value,
+  () => user.value?.canAdmin === true,
+)
 const { isLive } = useLocalhostStatus(() => sites.value)
 const altHeld = useAltHeld()
 </script>
@@ -174,8 +177,11 @@ const altHeld = useAltHeld()
          so it stays put whether or not one is typed. -->
     <AlertList
       :signals="signals"
+      :total="signalTotal"
+      :silenced="silenced"
       :for-everyone="user?.canAdmin"
       @silence="(id) => void silence(id)"
+      @restore="(id) => void restore(id)"
     />
 
     <LauncherBar

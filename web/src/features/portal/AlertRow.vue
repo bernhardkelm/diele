@@ -8,26 +8,46 @@ interface AlertRowProps {
   signal: ApiSignal
   /** Whether silencing takes the line off the whole portal rather than this account's */
   forEveryone?: boolean
+  /** Whether this line is already quietened, and so drawn as the list's held-back half */
+  silenced?: boolean
+  /** Whether whoever is looking may bring it back, false where the other scope quietened it */
+  restorable?: boolean
 }
 
 const props = defineProps<AlertRowProps>()
-const emit = defineEmits<{ silence: [] }>()
+const emit = defineEmits<{ toggle: [] }>()
 
 const since = computed(() =>
   props.signal.since ? formatRelativeTime(props.signal.since) : undefined,
 )
 
-const silenceLabel = computed(() =>
-  props.forEveryone
+// Only the scope that owns a silence may lift it, so a line quietened in the other one carries no
+// way back rather than a control that would quietly do nothing.
+const actionable = computed(() => !props.silenced || props.restorable === true)
+
+const action = computed(() => (props.silenced ? 'restore' : 'silence'))
+
+const actionLabel = computed(() => {
+  if (props.silenced) {
+    return props.forEveryone
+      ? `Bring ${props.signal.label} back for everyone`
+      : `Bring ${props.signal.label} back`
+  }
+
+  return props.forEveryone
     ? `Silence ${props.signal.label} for everyone until it clears`
-    : `Silence ${props.signal.label} until it clears`,
-)
+    : `Silence ${props.signal.label} until it clears`
+})
+
+// Said rather than shown, the trail word being a glyph to assistive technology: this line is
+// quietened by a choice this account cannot unmake.
+const heldLabel = computed(() => `${props.signal.label}, silenced for the whole portal`)
 </script>
 
 <template>
   <!-- Laid out like a connector row: the name takes what is left, what you can do to it appears
        between, and the time ends on the section's right edge where every other list puts it. -->
-  <li class="alert">
+  <li class="alert" :class="{ 'alert--silenced': silenced }">
     <!-- A link only where the source said where it shows this in full. The detail is an admin's,
          the link is not: anyone who can see that something is firing can go and read it. -->
     <component
@@ -48,11 +68,16 @@ const silenceLabel = computed(() =>
 
     <!-- Quietens it here and not in the source: nothing about this reaches whatever raised it,
          and the line comes back on its own if the condition clears and fires again. -->
-    <span class="alert__actions">
-      <button class="alert__silence" :title="silenceLabel" @click="emit('silence')">
-        <span aria-hidden="true">silence</span>
-        <span class="alert__sr">{{ silenceLabel }}</span>
+    <span class="alert__actions" :class="{ 'alert__actions--shown': !actionable }">
+      <button v-if="actionable" class="alert__silence" :title="actionLabel" @click="emit('toggle')">
+        <span aria-hidden="true">{{ action }}</span>
+        <span class="alert__sr">{{ actionLabel }}</span>
       </button>
+
+      <span v-else class="alert__held" :title="heldLabel">
+        <span aria-hidden="true">portal</span>
+        <span class="alert__sr">{{ heldLabel }}</span>
+      </span>
     </span>
 
     <span class="alert__activity">{{ since }}</span>
@@ -141,6 +166,24 @@ a.alert__main:hover .alert__name,
 
 .alert:hover .alert__activity {
   color: var(--diele-fg);
+}
+
+/* Quietened lines are the list's held-back half, so they read as present rather than as current:
+   the name loses its weight and the whole row sits back a step. */
+.alert--silenced .alert__name {
+  font-weight: 400;
+  color: var(--diele-fg-muted);
+}
+
+.alert--silenced .alert__main {
+  opacity: 0.7;
+}
+
+/* Stays put rather than appearing on hover: the marker is not something you can press, so a
+   reader hunting for the control has to see there is none without going looking. Set on the
+   container, since opacity on the child cannot undo it. */
+.alert__actions--shown {
+  opacity: 1;
 }
 
 .alert__sr {

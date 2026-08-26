@@ -1,19 +1,39 @@
+import type { SilencedIds } from '@diele/common'
 import { getDb } from '#db/index.js'
 
 /**
- * Reads the silences that apply to one person: the portal's own, and their own.
+ * Reads the silences that apply to one person, kept in the two scopes they sit in.
+ *
+ * Split rather than merged, because the portal's own and their own are not lifted by the same
+ * people: only an admin may bring back what the portal quietened, so a list offering everyone a
+ * way back on every line would offer most of them one that does nothing.
+ * @param {number} userId - Whoever is asking
+ * @returns {SilencedIds} - Quietened for everyone, and quietened by them
+ */
+export function readSilencedScopes(userId: number): SilencedIds {
+  const rows = getDb()
+    .prepare('SELECT signal_id, user_id FROM signal_silences WHERE user_id IS NULL OR user_id = ?')
+    .all(userId) as Array<{ signal_id: string; user_id: number | null }>
+
+  return {
+    all: rows.filter((row) => row.user_id === null).map((row) => row.signal_id),
+    mine: rows.filter((row) => row.user_id !== null).map((row) => row.signal_id),
+  }
+}
+
+/**
+ * Reads the silences that apply to one person as one set, for a caller that only asks whether a
+ * line is quietened at all rather than by whom.
  *
  * Two scopes but one action, unlike a hidden entry: who is asking decides which of the two a
  * silence lands in, so nobody has to be taught the difference before they can quieten a line.
  * @param {number} userId - Whoever is asking
- * @returns {ReadonlySet<string>} - Signal ids not to show them
+ * @returns {ReadonlySet<string>} - Signal ids quietened for them, in either scope
  */
 export function readSilenced(userId: number): ReadonlySet<string> {
-  const rows = getDb()
-    .prepare('SELECT signal_id FROM signal_silences WHERE user_id IS NULL OR user_id = ?')
-    .all(userId) as Array<{ signal_id: string }>
+  const { all, mine } = readSilencedScopes(userId)
 
-  return new Set(rows.map((row) => row.signal_id))
+  return new Set([...all, ...mine])
 }
 
 /**
@@ -82,4 +102,31 @@ export function sweepSilences(connectorId: number, liveIds: ReadonlyArray<string
     `DELETE FROM signal_silences
      WHERE signal_id LIKE ? || '%' AND signal_id NOT IN (${holes})`,
   ).run(prefix, ...liveIds)
+}
+
+/**
+ * Forgets every silence belonging to one source.
+ *
+ * For a source that is gone rather than merely quiet: its conditions can never fire again, so the
+ * sweep that normally clears them, which runs against a read that answered, will never run. Not
+ * folded into `forgetSource`: that also runs on an ordinary settings edit, where the alert is
+ * still firing and the person who said they knew about it still does.
+ * @param {number} connectorId - Source that has been removed
+ * @returns {void}
+ */
+export function dropSilencesFor(connectorId: number): void {
+  getDb()
+    .prepare('DELETE FROM signal_silences WHERE signal_id LIKE ? || ?')
+    .run(`${connectorId}:`, '%')
+}
+
+/**
+ * Forgets every silence there is, for a configuration replaced wholesale.
+ *
+ * An import can swap the connectors outright, and an id is namespaced by a connector id that the
+ * new file may have given to something else entirely.
+ * @returns {void}
+ */
+export function dropAllSilences(): void {
+  getDb().prepare('DELETE FROM signal_silences').run()
 }

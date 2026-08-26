@@ -1,7 +1,13 @@
 import assert from 'node:assert/strict'
 import { beforeEach, test } from 'node:test'
 import { getDb } from '#db/index.js'
-import { readSilenced, setSilenced, sweepSilences } from '#signals/silences.js'
+import {
+  dropAllSilences,
+  dropSilencesFor,
+  readSilenced,
+  setSilenced,
+  sweepSilences,
+} from '#signals/silences.js'
 
 const ADMIN = 1
 const MEMBER = 2
@@ -84,6 +90,43 @@ test('a sweep takes both scopes with it, since the alert is gone for everyone', 
   setSilenced('4:gone', MEMBER, false, true)
 
   sweepSilences(4, [])
+
+  assert.equal(readSilenced(ADMIN).size, 0)
+  assert.equal(readSilenced(MEMBER).size, 0)
+})
+
+// A source that is gone never answers again, so the per-source sweep that normally clears these
+// never runs for them.
+test('removing a source forgets the silences of its conditions', () => {
+  setSilenced('4:abc', ADMIN, true, true)
+  setSilenced('4:def', MEMBER, false, true)
+  setSilenced('9:abc', ADMIN, true, true)
+
+  dropSilencesFor(4)
+
+  assert.ok(!readSilenced(ADMIN).has('4:abc'))
+  assert.ok(!readSilenced(MEMBER).has('4:def'))
+
+  // Another source's are untouched, the prefix being what namespaces them
+  assert.ok(readSilenced(ADMIN).has('9:abc'))
+})
+
+// `40:` must not be caught by a sweep of `4`, or removing one source would quietly clear another's
+test('a source id that prefixes another is not swept with it', () => {
+  setSilenced('4:abc', ADMIN, true, true)
+  setSilenced('40:abc', ADMIN, true, true)
+
+  dropSilencesFor(4)
+
+  assert.ok(!readSilenced(ADMIN).has('4:abc'))
+  assert.ok(readSilenced(ADMIN).has('40:abc'))
+})
+
+test('an imported configuration starts with no silences at all', () => {
+  setSilenced('4:abc', ADMIN, true, true)
+  setSilenced('9:def', MEMBER, false, true)
+
+  dropAllSilences()
 
   assert.equal(readSilenced(ADMIN).size, 0)
   assert.equal(readSilenced(MEMBER).size, 0)

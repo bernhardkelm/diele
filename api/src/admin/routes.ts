@@ -3,6 +3,7 @@ import { wakeScheduler } from '#connectors/scheduler.js'
 import { badRequest } from '#errors.js'
 import { resetHealth } from '#health/cache.js'
 import { resetSignals } from '#signals/cache.js'
+import { dropAllSilences } from '#signals/silences.js'
 import { isToggleable, setEnabled } from '#settings/toggles.js'
 import { commandsRouter } from './commandsRoutes.js'
 import { connectorRouter } from './connectorRoutes.js'
@@ -58,6 +59,9 @@ adminRouter.post('/import', (req, res) => {
   // go with them: they were read from connectors the file may have replaced outright.
   resetHealth()
   resetSignals()
+  // The ids these are keyed by are namespaced by a connector id the file may have given to
+  // something else entirely, so they cannot follow the configuration across the swap.
+  dropAllSilences()
 
   res.json({ ok: true, written })
 })

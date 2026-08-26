@@ -81,6 +81,33 @@ function refuseUnauthorized(response: Response, token: string | undefined): void
 }
 
 /**
+ * Fetches one endpoint and reads its body, as far as every caller here does it the same way.
+ *
+ * Only the identical half: the envelopes differ past this point, one carrying Prometheus' own
+ * `{status, data}` and the other a bare array, and a caller that could not be reached at all is
+ * told apart from one that answered by whether this threw.
+ * @param {string | URL} url - Endpoint to read
+ * @param {string | undefined} token - Bearer token, when the instance wants one
+ * @param {AbortSignal} signal - Aborts the request when the caller runs out of time
+ * @returns {Promise<{ response: Response; payload: unknown }>} - The response and its parsed body
+ */
+async function fetchJson(
+  url: string | URL,
+  token: string | undefined,
+  signal: AbortSignal,
+): Promise<{ response: Response; payload: unknown }> {
+  const response = await fetch(url, { headers: headersFor(token), signal })
+
+  refuseUnauthorized(response, token)
+
+  // A body that is not json at all reads as an absent one, the status then being what says what
+  // went wrong rather than a parse error from somewhere else entirely.
+  const payload = (await response.json().catch(() => undefined)) as unknown
+
+  return { response, payload }
+}
+
+/**
  * Runs one instant query.
  *
  * A query Prometheus itself rejects throws with its own message: a typo in PromQL is the most
@@ -100,15 +127,12 @@ export async function instantQuery(
   const url = new URL(`${baseUrl}/api/v1/query`)
   url.searchParams.set('query', query)
 
-  const response = await fetch(url, { headers: headersFor(token), signal })
-
-  refuseUnauthorized(response, token)
-
   // 400 and 422 carry Prometheus' own explanation of what is wrong with the query, which is
   // worth more than the status. Anything else is read as the status alone.
-  const payload = (await response.json().catch(() => undefined)) as
-    | { status?: string; data?: InstantResult; error?: string }
-    | undefined
+  const { response, payload } = (await fetchJson(url, token, signal)) as {
+    response: Response
+    payload: { status?: string; data?: InstantResult; error?: string } | undefined
+  }
 
   if (payload?.status === 'success' && payload.data) {
     return payload.data
@@ -145,13 +169,16 @@ export async function listAlerts(
   token: string | undefined,
   signal: AbortSignal,
 ): Promise<ReadonlyArray<AlertRecord>> {
-  const response = await fetch(`${baseUrl}/api/v1/alerts`, { headers: headersFor(token), signal })
-
-  refuseUnauthorized(response, token)
-
-  const payload = (await response.json().catch(() => undefined)) as
-    | { status?: string; data?: { alerts?: ReadonlyArray<AlertRecord> }; error?: string }
-    | undefined
+  const { response, payload } = (await fetchJson(
+    `${baseUrl}/api/v1/alerts`,
+    token,
+    signal,
+  )) as {
+    response: Response
+    payload:
+      | { status?: string; data?: { alerts?: ReadonlyArray<AlertRecord> }; error?: string }
+      | undefined
+  }
 
   if (payload?.status === 'success') {
     // An instance with no rules loaded answers `success` with no alerts key at all, which is
@@ -192,13 +219,9 @@ export async function listManagedAlerts(
   url.searchParams.set('inhibited', 'false')
   url.searchParams.set('unprocessed', 'false')
 
-  const response = await fetch(url, { headers: headersFor(token), signal })
-
-  refuseUnauthorized(response, token)
-
   // A bare array rather than the `{status, data}` envelope the Prometheus API uses, so anything
   // else is this not being an Alertmanager at all, which is worth saying in those words.
-  const payload = (await response.json().catch(() => undefined)) as unknown
+  const { response, payload } = await fetchJson(url, token, signal)
 
   if (!response.ok) {
     throw new Error(`the Alertmanager answered ${response.status}`)

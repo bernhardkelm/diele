@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import type { SignalSeverity } from '@diele/common'
 import type { Signal } from '#connectors/types.js'
 import { meetsFloor } from '#signals/severity.js'
@@ -5,12 +6,16 @@ import { meetsFloor } from '#signals/severity.js'
 /**
  * The severity words this understands. A source labelling an alert anything else is not saying
  * how loud it is in a vocabulary the portal shares, so it is left off rather than guessed at.
+ *
+ * A Map rather than an object, the key being a remote source's word: a plain literal answers for
+ * `constructor` and every other name on the prototype, and a lookup that says yes to those is one
+ * more thing standing between an alert and being read correctly.
  */
-const SEVERITIES: Readonly<Record<string, SignalSeverity>> = {
-  info: 'info',
-  warning: 'warning',
-  critical: 'critical',
-}
+const SEVERITIES: ReadonlyMap<string, SignalSeverity> = new Map([
+  ['info', 'info'],
+  ['warning', 'warning'],
+  ['critical', 'critical'],
+])
 
 /**
  * Alerts a stock install fires forever by design. `Watchdog` exists to prove the alerting path
@@ -26,10 +31,13 @@ const HEARTBEATS: ReadonlySet<string> = new Set(['watchdog'])
 /**
  * Hashes a label set into something short and stable.
  *
- * FNV-1a over the sorted pairs. Sorted because a JSON object's key order is whatever the source
- * serialised it in, and hashed rather than joined because the id is rendered as a DOM key: a
- * label set carries the instance and the job, which is the internal topology the detail is kept
- * from a non-admin for.
+ * Sorted pairs, because a JSON object's key order is whatever the source serialised it in. Hashed
+ * rather than joined because the id is rendered as a DOM key: a label set carries the instance and
+ * the job, which is the internal topology the detail is kept from a non-admin for.
+ *
+ * 64 bits of sha256 rather than a 32-bit sum: two label sets landing on one id would silence an
+ * alert nobody silenced, and at a few thousand conditions a 32-bit space is no longer wide enough
+ * to call that unlikely.
  *
  * Ours rather than Alertmanager's own fingerprint, so the same condition keeps its id when the
  * Alertmanager field is filled in or cleared and the alert starts arriving by the other road.
@@ -42,15 +50,7 @@ function fingerprint(labels: Record<string, string>): string {
     .map((key) => `${key}=${labels[key]}`)
     .join(',')
 
-  let hash = 0x811c9dc5
-
-  for (let index = 0; index < text.length; index += 1) {
-    hash ^= text.charCodeAt(index)
-    // The 32-bit FNV prime as shifts, since a plain multiply overflows into a float here
-    hash = (hash + (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24)) >>> 0
-  }
-
-  return hash.toString(16).padStart(8, '0')
+  return createHash('sha256').update(text).digest('hex').slice(0, 16)
 }
 
 /**
@@ -126,7 +126,7 @@ export function signalFrom(source: SignalSource): Signal | undefined {
   // page, because a pipeline being alive is not an incident.
   const severity = heartbeat
     ? 'info'
-    : SEVERITIES[source.labels.severity?.trim().toLowerCase() ?? '']
+    : SEVERITIES.get(source.labels.severity?.trim().toLowerCase() ?? '')
 
   if (!severity || (!heartbeat && !meetsFloor(severity, source.floor))) {
     return undefined

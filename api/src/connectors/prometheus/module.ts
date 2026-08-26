@@ -43,6 +43,12 @@ const FIELDS: ReadonlyArray<ApiFieldSpec> = [
     hint: 'optional; alerts are then read from here instead, so silences count and an HA pair is one alert',
   },
   {
+    key: 'alertmanagerToken',
+    label: 'Alertmanager token',
+    input: 'secret',
+    hint: 'only where it wants one of its own; the instance token is reused when both sit on the same origin',
+  },
+  {
     key: 'minSeverity',
     label: 'Alerts from',
     input: 'select',
@@ -85,6 +91,39 @@ const configSchema = z.object({
 })
 
 /**
+ * Returns which credential an Alertmanager may be sent, which is not always the instance's.
+ *
+ * A token is a secret shared with one origin. Sending the instance's to an Alertmanager somewhere
+ * else would hand that host a credential for Prometheus, so it is reused only where the two are
+ * the same origin and there is nothing to leak. A separate one is what covers the rest, and no
+ * credential at all is the honest answer where neither applies: a homelab Alertmanager behind a
+ * private network commonly wants none.
+ * @param {string} baseUrl - Prometheus origin
+ * @param {string} alertmanagerUrl - Alertmanager origin
+ * @param {Readonly<Record<string, string>>} secrets - Whatever is stored for this connector
+ * @returns {string | undefined} - Token to send, or undefined to send none
+ */
+function alertmanagerCredential(
+  baseUrl: string,
+  alertmanagerUrl: string,
+  secrets: Readonly<Record<string, string>>,
+): string | undefined {
+  const own = secrets.alertmanagerToken?.trim()
+
+  if (own) {
+    return own
+  }
+
+  // Both are already absolute http(s) urls by the time they get here, the schema having refused
+  // anything else, so neither of these can throw.
+  if (new URL(alertmanagerUrl).origin === new URL(baseUrl).origin) {
+    return secrets.token
+  }
+
+  return undefined
+}
+
+/**
  * Checks that the query api answers before anything is stored. `query=1` is the cheapest
  * expression there is and still exercises the whole path: the origin, the auth and the parser.
  *
@@ -99,7 +138,13 @@ async function verify(context: VerifyContext): Promise<void> {
   await instantQuery(baseUrl, '1', context.secrets.token, context.signal)
 
   if (alertmanagerUrl) {
-    await listManagedAlerts(alertmanagerUrl, context.secrets.token, context.signal)
+    // The same resolution the reads use, so the form exercises the credential that will actually
+    // be sent rather than one it would never reach for.
+    await listManagedAlerts(
+      alertmanagerUrl,
+      alertmanagerCredential(baseUrl, alertmanagerUrl, context.secrets),
+      context.signal,
+    )
   }
 }
 
@@ -189,7 +234,11 @@ async function readSignals(context: ConnectorContext): Promise<ReadonlyArray<Sig
   const reported = { connectorId: context.id, floor: minSeverity, hideWatchdog }
 
   if (alertmanagerUrl) {
-    const managed = await listManagedAlerts(alertmanagerUrl, token, context.signal)
+    const managed = await listManagedAlerts(
+      alertmanagerUrl,
+      alertmanagerCredential(baseUrl, alertmanagerUrl, context.secrets),
+      context.signal,
+    )
 
     return managedSignalsOf(managed, { ...reported, baseUrl: alertmanagerUrl })
   }
@@ -216,7 +265,7 @@ export const prometheusModule: ConnectorModule = {
     placeholder: 'up{job="nextcloud"}',
     hint: 'PromQL; non-zero is up, zero is down, an empty result leaves the dot off. One request per bound entry on every refresh',
   },
-  secretKeys: ['token'],
+  secretKeys: ['token', 'alertmanagerToken'],
   parseConfig: (input) => configSchema.parse(input),
   defaultIntervalSeconds: 60,
   verify,
