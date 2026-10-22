@@ -218,67 +218,106 @@ the repos of their own token rather than the instance's - is a code change rathe
 History is kept in a **second SQLite file**, `HISTORY_DB_PATH`, with its own connection and its own
 migrations in [`src/history/migrations/`](src/history/migrations/). It is the one thing here that
 is not configuration: a backup, an exclusion or a wipe can treat it on its own, the export does not
-carry it and an import does not touch it. The file is created by the first write, mode `0600`, so a
-deployment that never turns the feature on never has one. The connection runs with
-`secure_delete`, and a delete an account asks for checkpoints the log, so forgotten rows leave the
-disk. Boot refuses a `HISTORY_DB_PATH` that is the same file as `DB_PATH`: both ledgers are
-`user_version`. Every `/api/history` response is `Cache-Control: no-store`.
+carry it and an import does not touch it. The file is created, mode `0600`, by the first
+`PUT /api/history/preferences`, whichever account sends it and whatever the switches say, since an
+account may opt out or exclude a domain before an admin turns anything on. Nothing else creates it:
+every read, and every delete on an instance without the file, leaves the disk alone. The connection
+runs with `secure_delete`, and both a delete an account asks for and a prune that removed anything
+checkpoint the log with `TRUNCATE`, so forgotten rows leave the `-wal` too. Boot refuses a
+`HISTORY_DB_PATH` that is the same file as `DB_PATH`: both ledgers are `user_version`. Every
+`/api/history` response is `Cache-Control: no-store`.
 
 Rows are filed under `users.history_key`, a random 128-bit key created the first time an account
 sets its preferences, never under `users.id`. The history file can outlive a reset or a restore of
 the configuration, and an id handed out again would otherwise give a new account someone else's
 history. Foreign keys cannot cross files, so the prune deletes every owner whose key no account
-holds; with no account deletion in the code today, that sweep is what covers it.
+holds; with no account deletion in the code today, that sweep is what covers it. It is skipped, with
+one log line that names nobody, when the file holds rows and no account holds any of their keys:
+that is what a main database restored from before history, or a wrong `DB_PATH`, looks like, and
+sweeping then would delete everyone's history. The state served to the portal and the extension
+carries `account`, a 22-character sha256 digest of a fixed label and the key, so a source can tell
+whose history it buffered without ever seeing the key or the user id. Entry ids are random positive
+integers below 2^53, so an id says nothing about how many entries the instance has created.
 
 Three switches gate it, all off by default: `history` for the instance, and `historyDiele` and
 `historyExtension` beneath it for each source, on only while `history` is too. Each account opts in
-for itself on top. Switching any of them off stops recording and serving and deletes nothing;
-while `history` is off the prune only sweeps the rows of owners no account holds any more. A write
-re-checks every gate, the account's exclusions and whether it deleted anything since the batch
-arrived, so a probe that finishes late cannot write back what was just switched off or forgotten.
+for itself on top. `history` off stops recording and serving; a source switch off stops
+**recording** from that source and nothing else. None of them deletes anything, and neither does
+an account opting out: while `history` is off, and for every account that opted out, the prune only
+sweeps the rows of owners no account holds any more, and leaves the one-off expiry and the caps
+alone. A write re-checks every gate, the account's exclusions and whether it deleted anything since
+the batch arrived, so a probe that finishes late cannot write back what was just switched off or
+forgotten.
 
 The server decides what is kept, in [`src/history/filters.ts`](src/history/filters.ts). A url is
 stored as origin and path only: no credentials, query, fragment or matrix parameters
-(`;jsessionid=`), the host lowercased without a trailing dot, a default port and a trailing slash
-(except the root's) dropped. A visit is dropped entirely when it:
+(`;jsessionid=`, written out or encoded as `%3B`), the host lowercased without a trailing dot, a
+default port dropped, and empty segments dropped, the trailing slash with them. A visit is dropped
+entirely when it:
 
 - is not http(s), or is longer than 2000 characters;
-- is diele's own origin, or names a loopback, link-local, metadata or other special-purpose host;
+- is diele's own origin, or names, by name or as an ip literal, a loopback, link-local, metadata or
+  other special-purpose host; nothing here is resolved;
 - is a search results page: an engine or slash command configured here, with the term in a
   parameter or in the path, on the template's host with or without `www.` or below it, or the
-  built-in list, Google Maps included;
+  built-in list, Google Maps included. A template with the term straight after the root, such as
+  `https://github.com/{query}`, matches a url with exactly one path segment on that host, with or
+  without `www.`, and no subdomain;
 - carries a token-like path segment, long, random and not word-like (UUIDs and 32-hex page ids
   pass);
-- is a capability link: an opaque id after a segment holding a word such as `reset`, `password`,
-  `invite`, `join`, `login`, `share` or `token`, page ids included, an encoded `/` counting as a
-  boundary;
+- is a capability link: a segment holding a word such as `reset`, `password`, `invite`, `join`,
+  `login`, `email`, `share` or `token`, directly followed by an opaque id, page ids included, an
+  encoded `/` counting as a boundary. Only that next segment is judged, a one-letter keyword (`s`)
+  counts only as a whole segment, and a slug (words joined by `-`, `_` or `.`, camelCase words
+  included) is never an id, so `/auth-service/blob/main/...` and `/auth/oauth2-setup-guide` are kept;
 - falls on a domain the account excluded.
 
-Segments are percent-decoded twice before they are judged. A url that arrives with three distinct
-titles depends on its query string, and is folded into its origin-only entry for good; only
-digests of those titles are kept. A title from the portal itself is ignored, since it only ever
+Segments are percent-decoded twice before they are judged. The same rules, run without DNS, are
+pinned case by case in [`tests/history/fixtures/filterCases.json`](tests/history/fixtures/filterCases.json),
+which the extension's port of these filters is tested against as well. A url that arrives with
+three distinct titles depends on its query string, and is folded into its origin-only entry for
+good; only digests of those titles are kept. Deleting the origin entry forgets the shells folded
+into it, in the same transaction. A title from the portal itself is ignored, since it only ever
 echoes one this server served. Titles lose their control and format characters and are capped at
-300 characters, and a reported visit time is held to the last thirty days. Each account keeps at
-most `HISTORY_MAX_ENTRIES` entries and a fifth of that in folded shells, oldest first, enforced on
-every insert as well as in the prune.
+300 characters. A title is dropped, and the visit kept, when it starts with a scheme, repeats the
+host, or contains, as whole words, a query value or fragment piece of three or more characters from
+the url as reported, since a site's own search page is titled with the term; whole words means
+bounded on both sides by the start or end of the title or by anything but a letter or a digit, so
+`?tab=all` leaves `Install` alone. A reported visit time is held to the last thirty days. With both
+sources on, a Go to is reported by the portal and by the extension; a visit to a url the **other**
+source recorded within 60 seconds of it does not count again, though a title the extension brings
+is still taken, and each visit pairs once. Each account keeps at most `HISTORY_MAX_ENTRIES` entries
+and a fifth of that in folded shells, oldest first, held once for every batch written as well as in
+the prune.
 
-A visit from the portal's own bar that the account does not hold yet is judged on where its host
-**resolves**: loopback, link-local, metadata and every other special-purpose address are dropped
-and never requested, since only global unicast counts as public; a private, unique-local or CGNAT
-address is kept unprobed, so the outcome says nothing about that
-network; a public one is requested once, HEAD then GET on 405 or 501, never following a redirect,
-and kept on any answer but 404 or 410. The request resolves again at connect time and refuses
-anything that is not public, which closes DNS rebinding. Only the stored form is sent. Every
-lookup is charged to the account, sixty per ten minutes, because whether a private url is kept says
-whether its name resolves; lookups run two at a time across the instance with a three-second wait,
-so they never hold more than half of libuv's thread pool. Probes are budgeted at thirty per account
-per ten minutes and also run two at a time. Both queues are bounded and drop rather than grow, an
-account may have two batches in flight, and nothing about any of it is logged. `HISTORY_PROBE=false`
-keeps public urls unprobed. Everything here is per account: what another account holds never
-spares a probe or counts towards a fold. The extension's visits are not probed.
+A visit from the portal's own bar that the account does not hold yet, and that the name checks
+above kept, is **probed only when its host resolves to public addresses alone** and the account
+has probes left: requested once, HEAD then GET on 405 or 501, never following a redirect, and kept
+on any answer but 404 or 410. Everything else is **kept unprobed**: a private, unique-local or
+CGNAT address, a name that resolves to loopback, link-local or a reserved range, one that does not
+resolve or not within three seconds, and any visit past the resolve or probe budget or a full
+queue. Whether an entry appears thus says nothing about which names the server's DNS can resolve,
+and the one-off prune clears a typo. An ip literal is judged as written, without a lookup.
 
-`GET /api/history` ranks by visit count weighted by Firefox-style recency buckets. The prune runs
-in the fifteen-minute cycle beside the session sweep.
+Names are resolved with c-ares (`dns.promises.Resolver`, A and AAAA, a short timeout and two
+tries), which asks the nameservers over its own sockets and holds none of libuv's four threads, so
+a stalled nameserver cannot starve sign-in hashing or the file system. It reads the nameservers,
+not the hosts file. The probe is pinned to the vetted address: its `lookup` hands that address
+back without resolving again, while the `Host` header and the TLS server name stay the hostname,
+so virtual hosting and certificates work and DNS rebinding has no second answer to use. Nothing in
+the probe path calls `getaddrinfo`. Only the stored form is sent. Lookups are budgeted at sixty per
+account and six hundred across the instance per ten minutes, so many accounts together cannot use
+the resolver as a scanner, and run four at a time with a three-second wait that counts from when
+the lookup was queued. Probes are budgeted at thirty per account per ten minutes and run two at a
+time. Both queues are bounded and drop rather than grow, an account may have two batches in
+flight, and nothing about any of it is logged. `HISTORY_PROBE=false` keeps public urls unprobed.
+Everything here is per account: what another account holds never spares a probe or counts towards
+a fold. The extension's visits are not resolved or probed, and are budgeted at 2000 per account per
+ten minutes; a batch past it is refused whole with a 429, which the extension keeps and sends again.
+
+`GET /api/history` ranks by visit count weighted by Firefox-style recency buckets, less the cards,
+saved sites and connector rows the portal serves under its current switches. The prune runs in the
+fifteen-minute cycle beside the session sweep.
 
 ## Icons
 
@@ -327,6 +366,50 @@ anything down - a cross-origin `no-cors` request comes back opaque, so reaching 
 the entire question it can ask. Everything else the portal probes runs server-side, where the
 status code is readable; see [Liveness](#liveness).
 
+## Content Security Policy
+
+The document is served under a policy that denies by default and allows each kind of resource
+from this origin only, built once at boot by [`src/site/contentSecurityPolicy.ts`](src/site/contentSecurityPolicy.ts).
+diele holds a person's visited history in the page while it is open, so a script that got in
+through an icon would otherwise reach all of it.
+
+| directive | allows | because |
+| --- | --- | --- |
+| `default-src` | `'none'` | anything not listed below is a decision nobody has made yet |
+| `script-src` | `'self'`, one `'sha256-…'` | the hashed bundle, and the inline script in `web/index.html` that pins the theme and catches early keystrokes; the hash is taken from the document as served, after the brand is stamped in, so editing that script moves it |
+| `style-src` | `'self'` | the extracted stylesheet; Vue writes `:style` bindings through the CSSOM, which no directive governs, and the icon sanitiser strips `style` attributes, so nothing needs `'unsafe-inline'` |
+| `img-src`, `font-src`, `manifest-src` | `'self'` | the favicons, the self-hosted woff2 files under `/assets`, and `site.webmanifest`; uploaded icons are inline svg, not images |
+| `connect-src` | `'self'`; `http(s)://localhost:*` and `http(s)://127.0.0.1:*` only while something is probed | the api, and the [local ports](#local-ports) probe, the one request the browser makes anywhere else. The loopback sources are added per request, only while local ports are on with a port saved or a saved site points at loopback, so the default portal cannot reach this machine at all. Any port rather than the saved ones, because the document is served ahead of the session gate and would publish them, and a port added in the admin panel would stay blocked until a reload; a switch flipped there likewise takes effect on the next load. `[::1]` cannot be named in a policy, so a probe there reads as nothing answering |
+| `object-src`, `base-uri`, `frame-ancestors` | `'none'` | no plugins, no `<base>` to repoint relative urls, and no page may frame diele |
+| `form-action` | `'self'` | every form submits through `fetch`; this keeps an injected one from posting anywhere else |
+| `require-trusted-types-for`, `trusted-types` (report-only) | `'script'`; `diele-svg vue` | the one way markup reaches `innerHTML` is `v-svg` ([`web/src/directives/trustedSvg.ts`](../web/src/directives/trustedSvg.ts)) and its `diele-svg` policy; `vue` is the policy Vue's runtime creates for compiled templates and `v-html`, which lint keeps out of the app because it passes any string |
+
+Search, launch, links and the OIDC redirect are navigations, which a policy does not restrict.
+Every other response, the api's json, the favicons and the assets, carries
+`default-src 'none'; frame-ancestors 'none'`: none of them is meant to render as a page. Every
+response, the document included, carries `X-Content-Type-Options: nosniff`, since `script-src
+'self'` trusts that nothing else on this origin is ever run as a script on a guessed type, and
+`Referrer-Policy: same-origin`, so a link out of the portal tells the site it leads to nothing
+about which instance it was opened from.
+
+The policy is served ahead of the session gate, so the login page's `connect-src` tells an
+anonymous visitor whether local-port probing is configured: the loopback sources are there or not.
+That one bit is accepted; which ports, and which sites, it never says.
+
+The Trusted Types row is sent as `Content-Security-Policy-Report-Only` beside the enforced policy,
+so a violation shows in the console without breaking the page. It moves into the enforced header
+once a release has run without a report.
+
+Not enforced by the vite dev server, which serves `index.html` itself and injects its own client
+and `<style>` elements. `npm run build` and the api on `:3000` serve the real policy.
+
+**Adding an external resource** - a font from a CDN, an avatar from GitLab, a browser-side fetch to
+another host - means adding that origin, and nothing wider, to the matching directive in
+`documentPolicy`, a row here, and the expectation in
+[`tests/site/contentSecurityPolicy.test.ts`](tests/site/contentSecurityPolicy.test.ts), which fails
+on any source it does not list. A new inline `<script>` or `<style>` in `web/index.html` needs
+nothing: it is hashed at boot like the existing one.
+
 ## Export and import
 
 `GET /api/admin/export` returns cards, saved sites, search engines, slash commands, local ports,
@@ -371,11 +454,12 @@ turns it back on.
 | `PUT` | `/api/entries/hidden` | hide an entry or bring it back, for yourself or for everyone |
 | `GET` | `/api/health` | how each bound entry last answered, and when to ask again |
 | `GET` | `/api/history` | the account's history state, and its most frecent entries less what the portal already offers |
+| `GET` | `/api/history/state` | the history state alone, without ranking anything: the switches, the opt-in, the excluded domains, how many entries are kept and the opaque `account` tag; what the extension reads on every load of the portal |
 | `GET` | `/api/history/entries` | every entry the account holds, most recent first, whatever the switches say |
-| `POST` | `/api/history/visits` | report visits from a source, up to 20 from `diele` and 200 from `extension`; answered at once, checked and written in the background; 403 while the feature, the source or the account's opt-in is off, 429 while the account already has two batches in flight |
-| `DELETE` | `/api/history/entries/:id` | forget one entry; 404 alike for one that is missing and one that is not yours |
+| `POST` | `/api/history/visits` | report visits from a source, up to 20 from `diele` and 200 from `extension`; answered at once, checked and written in the background; 403 while the feature, the source or the account's opt-in is off, 429 while the account already has two batches in flight or, from `extension`, the batch would take it past 2000 visits in ten minutes |
+| `DELETE` | `/api/history/entries/:id` | forget one entry, an origin entry with the shells folded into it; 404 alike for one that is missing and one that is not yours |
 | `DELETE` | `/api/history/entries` | forget them all; the preferences stay |
-| `PUT` | `/api/history/preferences` | opt in or out, set the excluded domains; adding one forgets what was kept on it |
+| `PUT` | `/api/history/preferences` | opt in or out, set the excluded domains; adding one forgets what was kept on it; creates the history file on first use, whatever the switches say |
 | `GET` | `/api/admin/features` | the registry the admin view renders from |
 | `GET`&nbsp;`POST` | `/api/admin/links/:kind` | list and create cards (`card`) or saved sites (`site`) |
 | `PATCH`&nbsp;`DELETE` | `/api/admin/links/:kind/:id` | edit and remove one |

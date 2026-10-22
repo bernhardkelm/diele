@@ -4,7 +4,13 @@ import { usePortalLauncher, type PortalLauncher } from '@/features/portal/usePor
 import { resetHistory, useHistory } from '@/composables/useHistory'
 import { withSetup } from '@tests/support/withSetup'
 import type { ApiCommand, ApiHistoryState, ApiHistoryVisits } from '@diele/common'
-import type { CardTarget, HistoryTarget, PortalTarget, SuggestionTarget } from '@/types/portal'
+import type {
+  CardTarget,
+  HistoryTarget,
+  PortalTarget,
+  RowTarget,
+  SuggestionTarget,
+} from '@/types/portal'
 
 const card: CardTarget = {
   ref: 'card:1',
@@ -133,6 +139,19 @@ describe('what the term adds to the list', () => {
     expect(result.matches.value.some((target) => target.url.includes('reddit.com'))).toBe(false)
   })
 
+  // A slash term addresses the commands alone, whatever else the keyword would match.
+  it('enters command mode for a slash term, leaving the cards out', async () => {
+    const youtube: CardTarget = { ...card, ref: 'card:yt', name: 'yt' }
+    const { result } = launcher({ targets: [youtube, savedSite] })
+
+    result.query.value = '/yt'
+    await nextTick()
+
+    expect(result.sections.value.cards).toEqual([])
+    expect(result.sections.value.order[0]).toBe('commands')
+    expect(result.sections.value.commands.map((entry) => entry.item.name)).toContain('/yt')
+  })
+
   it('offers the slash menu for a bare slash', async () => {
     const { result } = launcher()
 
@@ -204,6 +223,42 @@ describe('submitting', () => {
     result.submit(false)
 
     expect(assign).toHaveBeenCalledWith('https://grafana.example')
+  })
+
+  // The block that ranks first is painted first, so its first entry is what Enter opens.
+  it('opens a visited page that leads the matches, past the repos it outranks', async () => {
+    const heise: HistoryTarget = {
+      ref: 'history:heise',
+      kind: 'history',
+      name: 'heise online - IT-News, Nachrichten und Hintergründe | heise online',
+      title: 'heise online - IT-News, Nachrichten und Hintergründe | heise online',
+      url: 'https://www.heise.de/',
+      display: 'heise.de',
+      searchOnly: true,
+    }
+    const repos: ReadonlyArray<RowTarget> = [
+      'Klickmeister/freiheit-und-gleichheit-in-der-bildungsgeschichte',
+      'bernhardkelm/undisclosed',
+      'bernhardkelm/miwo_datasets',
+    ].map((path) => ({
+      ref: `github:1:${path}`,
+      kind: 'row',
+      name: path.split('/')[1]!,
+      detail: path.split('/')[0]!,
+      url: `https://github.com/${path}`,
+    }))
+    const { result } = launcher({ targets: [card, ...repos, heise] })
+
+    result.query.value = 'heise'
+    await nextTick()
+
+    expect(result.sections.value.order[0]).toBe('history')
+    expect(result.sections.value.rows).toEqual([])
+    expect(result.sections.value.history[0]?.index).toBe(0)
+
+    result.submit(false)
+
+    expect(assign).toHaveBeenCalledWith('https://www.heise.de/')
   })
 
   it('searches the term when nothing is highlighted', () => {
@@ -294,6 +349,9 @@ describe('what the selection announces', () => {
   })
 })
 
+/** How many pages the stubbed api says are kept, which no state held before an answer says */
+const KEPT = 4
+
 // Every launch feeds the ranking. Only an address typed into the field and a page offered from the
 // history are visits as well, and only where every switch on the way allows keeping them.
 describe('recording a launch', () => {
@@ -322,6 +380,7 @@ describe('recording a launch', () => {
           sources: { diele: true, extension: false },
           enabled: true,
           excludedDomains: [],
+          kept: KEPT,
           ...state,
         }
 
@@ -337,12 +396,13 @@ describe('recording a launch', () => {
   }
 
   /**
-   * Mounts a reader of the history and waits for its state to arrive.
+   * Mounts a reader of the history and waits for the state the api served, told apart from the
+   * one held before any answer by how much it says is kept.
    * @returns {Promise<void>}
    */
   async function historyRead(): Promise<void> {
     const { result } = withSetup(() => useHistory(() => true))
-    await vi.waitFor(() => expect(result.state.value.available).toBe(true))
+    await vi.waitFor(() => expect(result.state.value.kept).toBe(KEPT))
   }
 
   /**
@@ -374,8 +434,12 @@ describe('recording a launch', () => {
   })
 
   // Whatever the account chose about its history, a typed address must not stay in the browser.
-  it('leaves no typed address in storage, whether or not history is on', async () => {
-    stubHistory({ enabled: false })
+  it.each([
+    ['on', true],
+    ['off', false],
+  ])('leaves no typed address in storage while history is %s', async (_case, enabled) => {
+    stubHistory({ enabled })
+    await historyRead()
     const { result } = launcher()
 
     result.query.value = 'https://typed.example/reset?token=secret#frag'
@@ -416,16 +480,17 @@ describe('recording a launch', () => {
     expect(assign).toHaveBeenCalledWith('https://typed.example/some/page')
   })
 
-  it('posts a page offered from the history, with its title', async () => {
+  // The api keeps no title for a visit from diele, so none is sent.
+  it('posts a page offered from the history, without its title', async () => {
     const fetch = stubHistory()
     await historyRead()
     const { result } = launcher()
 
     result.recordLaunch(page)
 
-    expect(posted(fetch).map((visit) => visit.body.visits[0])).toMatchObject([
-      { url: 'https://github.com/example/diele', title: 'diele' },
-    ])
+    const visits = posted(fetch).map((visit) => visit.body.visits[0])
+    expect(visits).toMatchObject([{ url: 'https://github.com/example/diele' }])
+    expect(visits[0]).not.toHaveProperty('title')
   })
 
   // A slash command and a subreddit jump put the term in the url, so a launch of one is a search.
@@ -469,7 +534,8 @@ describe('recording a launch', () => {
   ])('posts nothing while %s', async (_case, state) => {
     const fetch = stubHistory(state)
     const { result: history } = withSetup(() => useHistory(() => true))
-    await vi.waitFor(() => expect(history.state.value).toMatchObject(state))
+    await vi.waitFor(() => expect(history.state.value.kept).toBe(KEPT))
+    expect(history.state.value).toMatchObject(state)
     const { result } = launcher()
 
     result.recordLaunch(page)

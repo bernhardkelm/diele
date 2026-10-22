@@ -49,9 +49,10 @@
   --diele-space-6: 1.5rem;
   --diele-space-8: 2rem;
   --diele-space-12: 3rem;
+  /* the bracket checkbox's glyph and the gap after it, and the indent of a row nested under one */
+  --diele-check-column: var(--diele-space-8);
 
-  --diele-font:
-    'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  --diele-font: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   --diele-font-mono: ui-monospace, 'SF Mono', Menlo, 'Geist Mono', monospace;
   --diele-font-brand: 'Space Grotesk', var(--diele-font);
 
@@ -196,6 +197,7 @@ body.panel .lede {
 .row {
   position: relative;
   display: flex;
+  flex-wrap: wrap;
   align-items: baseline;
   gap: var(--diele-space-2);
   padding: var(--diele-space-1) 0 var(--diele-space-1) var(--diele-space-6);
@@ -271,6 +273,121 @@ body.panel .lede {
 .row__remove:focus-visible {
   color: var(--diele-status-down);
   text-decoration: none;
+}
+
+/* The history switch takes a line of its own under the row, so the name keeps the width it had:
+   glyph, label and a few words of status on one baseline, the status truncating rather than
+   wrapping */
+.row__history {
+  display: flex;
+  flex-basis: 100%;
+  align-items: baseline;
+  gap: var(--diele-space-2);
+  min-width: 0;
+  font-size: var(--diele-text-sm);
+  white-space: nowrap;
+}
+
+/* Set in under the history switch it depends on by the glyph's own column, so its glyph stands
+   where the parent's label begins */
+.row__history--titles {
+  padding-left: var(--diele-check-column);
+}
+
+/* diele's bracket checkbox, the one `web/src/components/CheckBox.vue` draws. The platform
+   checkbox cannot take hairline rules and a mono face, so it is laid over the glyph at full size
+   and made transparent: it stays a real checkbox, which Space toggles, its label points at and
+   assistive technology reads as one. The label around it is the hover and click target. */
+.check {
+  display: inline-flex;
+  flex: none;
+  align-items: baseline;
+  cursor: pointer;
+}
+
+/* A fixed column wider than the three glyph characters, which holds the space before the label
+   too; a nested row is indented by the same token, which lines the two up */
+.check__control {
+  position: relative;
+  display: inline-flex;
+  flex: none;
+  width: var(--diele-check-column);
+}
+
+/* Covers the glyph rather than being hidden outright: an input with `display: none` leaves no
+   hit area of its own, and drops out of the tab order. */
+.check__input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: inherit;
+}
+
+/* Drawn from the input's own state, so the glyph never says other than the checkbox does, also
+   while a permission prompt is still open. */
+.check__box {
+  font-family: var(--diele-font-mono);
+  white-space: pre;
+  color: var(--diele-fg-muted);
+  transition: color var(--diele-transition);
+}
+
+.check__box::before {
+  content: '[ ]';
+}
+
+.check__input:checked + .check__box::before {
+  content: '[\00d7]';
+}
+
+.check__text {
+  color: var(--diele-fg-muted);
+  transition: color var(--diele-transition);
+}
+
+.check:hover .check__box,
+.check:hover .check__text,
+.check__input:checked + .check__box,
+.check:has(.check__input:checked) .check__text {
+  color: var(--diele-fg);
+}
+
+/* The accent on the brackets rather than the underline every other control focuses with: there
+   is no line under a glyph to draw, and a rule beneath three characters reads as a typo. */
+.check__input:focus-visible + .check__box {
+  color: var(--diele-accent);
+}
+
+.check:has(.check__input:disabled) {
+  cursor: not-allowed;
+}
+
+.check__input:disabled + .check__box {
+  opacity: 0.5;
+}
+
+.check:has(.check__input:disabled) .check__text {
+  color: var(--diele-fg-muted);
+}
+
+.row__status {
+  flex: 1;
+  min-width: 0;
+  line-height: 1.5;
+  color: var(--diele-fg-muted);
+}
+
+/* Read out, never shown: the few words on screen are enough to look at, not always to hear */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 .truncate {
@@ -359,6 +476,29 @@ button:focus-visible {
   font-family: var(--diele-font-mono);
   font-size: var(--diele-text-sm);
   color: var(--diele-fg-muted);
+}
+
+/* A note that runs to a paragraph is background to the controls around it, so it sits a size
+   step below them, with the leading a single line does not need */
+.note--block {
+  font-size: var(--diele-text-xs);
+  line-height: 1.6;
+}
+
+/* A link reads as part of the sentence it ends, and focuses the way the buttons do */
+.note a {
+  color: inherit;
+  text-decoration: underline;
+  transition: color var(--diele-transition);
+}
+
+.note a:hover {
+  color: var(--diele-fg);
+}
+
+.note a:focus-visible {
+  color: var(--diele-accent);
+  outline: none;
 }
 
 /* The button sits on the same line as the note it follows, so the two read as one sentence. */

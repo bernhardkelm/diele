@@ -164,7 +164,8 @@ export async function listFeatures(): Promise<ReadonlyArray<ApiFeature>> {
     {
       id: 'historyExtension',
       label: 'From the extension',
-      description: 'Pages the browser extension saw load, for accounts that installed it.',
+      description:
+        'Pages the browser extension saw load, for accounts that switched history on in it.',
       kind: 'builtin',
       produces: [],
       fields: [],

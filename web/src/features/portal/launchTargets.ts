@@ -13,12 +13,26 @@ export interface Indexed<T> {
   readonly item: T
 }
 
+/** The blocks the results render as, each drawn by its own list. */
+export type SectionKey = 'commands' | 'suggestions' | 'cards' | 'rows' | 'history'
+
+/** Order of the blocks on the resting page, and between two that rank the same while searching */
+export const SECTION_ORDER: ReadonlyArray<SectionKey> = [
+  'commands',
+  'suggestions',
+  'cards',
+  'rows',
+  'history',
+]
+
 export interface PartitionedTargets {
   readonly commands: ReadonlyArray<Indexed<CommandTarget>>
   readonly suggestions: ReadonlyArray<Indexed<SuggestionTarget>>
   readonly cards: ReadonlyArray<Indexed<CardTarget>>
   readonly rows: ReadonlyArray<Indexed<RowTarget>>
   readonly history: ReadonlyArray<Indexed<HistoryTarget>>
+  /** Every block in the order the page paints it, which is the order the matches put them in */
+  readonly order: ReadonlyArray<SectionKey>
 }
 
 /**
@@ -68,10 +82,52 @@ export function isCard(target: PortalTarget): target is CardTarget {
 }
 
 /**
+ * Returns the block a target renders in. Read off `kind` rather than off where a target came
+ * from, which is what lets a second forge or a new connector land without a case of its own.
+ * @param {PortalTarget} target - Target to place
+ * @returns {SectionKey} - Block that draws it
+ */
+export function sectionKeyOf(target: PortalTarget): SectionKey {
+  switch (target.kind) {
+    case 'command':
+      return 'commands'
+    case 'suggestion':
+      return 'suggestions'
+    case 'card':
+      return 'cards'
+    case 'row':
+      return 'rows'
+    case 'history':
+      return 'history'
+  }
+}
+
+/**
+ * Returns every block in the order its first match appears, then the ones nothing matched in
+ * their resting order. The matches already hold each block together, so painting the blocks in
+ * this order keeps what the arrows walk and what `↵` opens the order on screen.
+ * @param {ReadonlyArray<PortalTarget>} matches - Current launcher matches, in order
+ * @returns {ReadonlyArray<SectionKey>} - All five blocks, each once
+ */
+function paintOrder(matches: ReadonlyArray<PortalTarget>): ReadonlyArray<SectionKey> {
+  const order = new Set<SectionKey>()
+
+  for (const target of matches) {
+    order.add(sectionKeyOf(target))
+  }
+
+  for (const key of SECTION_ORDER) {
+    order.add(key)
+  }
+
+  return [...order]
+}
+
+/**
  * Splits the launcher's matches into the sections that render them, carrying each entry's
  * position in the combined list so the digit shortcuts stay continuous across all of them.
  * @param {ReadonlyArray<PortalTarget>} matches - Current launcher matches, in order
- * @returns {PartitionedTargets} - Matches grouped by section, each tagged with its index
+ * @returns {PartitionedTargets} - Matches grouped by section, each tagged with its index, and the order to paint them in
  */
 export function partitionTargets(matches: ReadonlyArray<PortalTarget>): PartitionedTargets {
   const commands: Indexed<CommandTarget>[] = []
@@ -94,5 +150,5 @@ export function partitionTargets(matches: ReadonlyArray<PortalTarget>): Partitio
     }
   })
 
-  return { commands, suggestions, cards, rows, history }
+  return { commands, suggestions, cards, rows, history, order: paintOrder(matches) }
 }

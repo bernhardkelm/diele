@@ -326,6 +326,7 @@ describe('visited pages', () => {
     sources: { diele: true, extension: false },
     enabled: true,
     excludedDomains: [],
+    kept: 1,
   }
 
   const ENTRIES_SERVED = [
@@ -338,6 +339,13 @@ describe('visited pages', () => {
     },
     // a card already reaches this one, with the trailing slash the api's own dedupe missed
     { id: 2, url: 'https://grafana.example/', visits: 9, lastVisitedAt: '2026-10-02T00:00:00Z' },
+    {
+      id: 3,
+      url: 'https://exam.example/',
+      title: 'Results',
+      visits: 1,
+      lastVisitedAt: '2026-10-03T00:00:00Z',
+    },
   ]
 
   const posts: Array<{ url: string; init?: RequestInit }> = []
@@ -390,8 +398,8 @@ describe('visited pages', () => {
     expect(wrapper.findComponent(HistoryRow).exists()).toBe(false)
   })
 
-  // Something the portal was told about always wins, so the visited page comes after the card.
-  it('offers a matching page after everything the portal knows, saying it is history', async () => {
+  // The card is the term itself where the visited page only starts with it, so the card leads.
+  it('offers a matching page after a card that matches better, saying it is history', async () => {
     const wrapper = await open()
     await vi.waitFor(() => expect(wrapper.findComponent(EntryRow).exists()).toBe(true))
 
@@ -406,6 +414,23 @@ describe('visited pages', () => {
     const order = wrapper
       .find('.grid')
       .element.compareDocumentPosition(wrapper.find('.history').element)
+    expect(order & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  // The blocks are painted in the order they rank, so the arrows and Enter follow the screen.
+  it('paints a visited page above a repo it outranks, highlighting it first', async () => {
+    const wrapper = await open()
+    await vi.waitFor(() => expect(wrapper.findComponent(EntryRow).exists()).toBe(true))
+
+    await search(wrapper, 'exam')
+    await vi.waitFor(() => expect(wrapper.findComponent(HistoryRow).exists()).toBe(true))
+
+    expect(wrapper.findComponent(EntryRow).exists()).toBe(true)
+    expect(wrapper.findComponent(HistoryRow).props('active')).toBe(true)
+
+    const order = wrapper
+      .find('.history')
+      .element.compareDocumentPosition(wrapper.find('.projects').element)
     expect(order & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   })
 

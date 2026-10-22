@@ -1,11 +1,17 @@
 export interface Budget {
   /**
-   * Takes one unit from an account's budget.
-   * @param {string} owner - The account's history key
+   * Takes units from an account's budget, all of them or none.
+   * @param {string} owner - The account's history key, or what an instance-wide budget is filed under
    * @param {number} now - Current time, in ms since the epoch
-   * @returns {boolean} - True when the account had one left
+   * @param {number} units - How many to take
+   * @returns {boolean} - True when the account had that many left
    */
-  take(owner: string, now?: number): boolean
+  take(owner: string, now?: number, units?: number): boolean
+}
+
+interface Spent {
+  readonly at: number
+  readonly units: number
 }
 
 /**
@@ -15,13 +21,13 @@ export interface Budget {
  * @returns {Budget} - The budget
  */
 export function createBudget(limit: number, windowMs: number): Budget {
-  // When each account's recent units were taken, oldest first.
-  const spent = new Map<string, number[]>()
+  // What each account took recently, oldest first.
+  const spent = new Map<string, Spent[]>()
 
   return {
-    take(owner: string, now: number = Date.now()): boolean {
-      for (const [key, stamps] of spent) {
-        const fresh = stamps.filter((stamp) => now - stamp < windowMs)
+    take(owner: string, now: number = Date.now(), units: number = 1): boolean {
+      for (const [key, entries] of spent) {
+        const fresh = entries.filter((entry) => now - entry.at < windowMs)
 
         if (fresh.length === 0) {
           spent.delete(key)
@@ -30,12 +36,13 @@ export function createBudget(limit: number, windowMs: number): Budget {
         }
       }
 
-      const stamps = spent.get(owner) ?? []
-      if (stamps.length >= limit) {
+      const entries = spent.get(owner) ?? []
+      const used = entries.reduce((sum, entry) => sum + entry.units, 0)
+      if (used + units > limit) {
         return false
       }
 
-      spent.set(owner, [...stamps, now])
+      spent.set(owner, [...entries, { at: now, units }])
       return true
     },
   }

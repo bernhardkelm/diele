@@ -1,47 +1,67 @@
-import { lookup } from 'node:dns/promises'
-import {
-  type AddressClass,
-  classifyAddress,
-  classifyHostname,
-  strictestClass,
-} from './addresses.js'
+import { Resolver as DnsResolver } from 'node:dns/promises'
+import { isIP } from 'node:net'
+import { classifyAddress } from './addresses.js'
 
 /** Resolves a name to every address it has. */
 export type Resolver = (hostname: string) => Promise<ReadonlyArray<string>>
 
-/**
- * Resolves a name the way a connection would, through the system resolver.
- * @param {string} hostname - Name to resolve
- * @returns {Promise<ReadonlyArray<string>>} - Every address it resolved to
- */
-export async function lookupAll(hostname: string): Promise<ReadonlyArray<string>> {
-  const addresses = await lookup(hostname, { all: true, verbatim: true })
+/** How long the first try waits for a nameserver, in ms; c-ares doubles it for the second. */
+const TRY_TIMEOUT_MS = 750
 
-  return addresses.map((entry) => entry.address)
+/** Tries per nameserver before a lookup gives up. */
+const TRIES = 2
+
+let resolver: DnsResolver | undefined
+
+/**
+ * Hands out the one resolver every history lookup shares, created on first use. It is c-ares, which
+ * asks the nameservers over its own sockets on the event loop: a stalled answer holds no libuv
+ * thread, unlike `dns.lookup`, so it cannot starve sign-in hashing, the file system or any other
+ * lookup. It reads the nameservers but not the hosts file.
+ * @returns {DnsResolver} - The shared resolver
+ */
+function sharedResolver(): DnsResolver {
+  resolver ??= new DnsResolver({ timeout: TRY_TIMEOUT_MS, tries: TRIES })
+  return resolver
 }
 
 /**
- * Decides where a host leads. A name is resolved, so `127.0.0.1.nip.io` and its kind are judged on
- * where they point rather than on how they are spelled, and a name with several addresses counts
- * as the most sensitive of them.
- * @param {string} hostname - Host, trailing dot removed
- * @param {Resolver} resolve - How a name is resolved
- * @returns {Promise<AddressClass | undefined>} - Where it leads, or undefined when it does not resolve
+ * Resolves a name's A and AAAA records together, ipv4 first, so a host without ipv6 routing tries
+ * the address it can reach. A family that has no records, or fails, contributes nothing.
+ * @param {string} hostname - Name to resolve
+ * @returns {Promise<ReadonlyArray<string>>} - Every address found, empty when none was
  */
-export async function classifyHost(
-  hostname: string,
-  resolve: Resolver = lookupAll,
-): Promise<AddressClass | undefined> {
-  const byName = classifyHostname(hostname)
-  if (byName) {
-    return byName
-  }
+export async function resolveAll(hostname: string): Promise<ReadonlyArray<string>> {
+  const dns = sharedResolver()
+  const answers = await Promise.allSettled([dns.resolve4(hostname), dns.resolve6(hostname)])
 
-  try {
-    const addresses = await resolve(hostname)
+  return answers.flatMap((answer) => (answer.status === 'fulfilled' ? answer.value : []))
+}
 
-    return addresses.length > 0 ? strictestClass(addresses.map(classifyAddress)) : undefined
-  } catch {
+/**
+ * Reads the address an ip literal host names, without resolving anything.
+ * @param {string} hostname - Host as the URL parser gives it, trailing dot removed
+ * @returns {string | undefined} - The address without brackets, or undefined for a name
+ */
+export function literalAddress(hostname: string): string | undefined {
+  const bare = hostname.replace(/^\[|\]$/g, '')
+
+  return isIP(bare) === 0 ? undefined : bare
+}
+
+/**
+ * Picks the address a probe may be pinned to: the first of a resolution in which every address
+ * is public. One private, loopback, link-local or reserved address among them, or none at all,
+ * means nothing is requested.
+ * @param {ReadonlyArray<string> | undefined} addresses - What a name resolved to, undefined when it did not
+ * @returns {string | undefined} - The address to connect to, or undefined when none may be
+ */
+export function publicAddress(addresses: ReadonlyArray<string> | undefined): string | undefined {
+  if (!addresses || addresses.length === 0) {
     return undefined
   }
+
+  return addresses.every((address) => classifyAddress(address) === 'public')
+    ? addresses[0]
+    : undefined
 }

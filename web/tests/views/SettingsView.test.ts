@@ -335,6 +335,7 @@ describe('the history section', () => {
     sources: { diele: true, extension: false },
     enabled: true,
     excludedDomains: ['bank.example'],
+    kept: 1,
   }
 
   const PAGE: ApiHistoryEntry = {
@@ -350,9 +351,13 @@ describe('the history section', () => {
   /**
    * Answers the history endpoints on top of the rest of the view's, recording every call.
    * @param {ApiHistoryState | undefined} state - What the instance and the account allow, or undefined for an api that refuses the read
+   * @param {object} options - What is kept, and the status a write answers with
    * @returns {void}
    */
-  function stubHistory(state: ApiHistoryState | undefined = STATE): void {
+  function stubHistory(
+    state: ApiHistoryState | undefined = STATE,
+    { kept = [PAGE], writeStatus = 204 }: { kept?: ApiHistoryEntry[]; writeStatus?: number } = {},
+  ): void {
     const api = stubApi()
 
     vi.stubGlobal(
@@ -376,7 +381,16 @@ describe('the history section', () => {
         }
 
         if (url === '/api/history/entries' && method === 'GET') {
-          return Promise.resolve(new Response(JSON.stringify({ entries: [PAGE] })))
+          return Promise.resolve(new Response(JSON.stringify({ entries: kept })))
+        }
+
+        if (writeStatus !== 204) {
+          return Promise.resolve(new Response(JSON.stringify({}), { status: writeStatus }))
+        }
+
+        if (method === 'DELETE') {
+          const id = Number(url.split('/').at(-1))
+          kept = url === '/api/history/entries' ? [] : kept.filter((entry) => entry.id !== id)
         }
 
         if (url === '/api/history/preferences') {
@@ -393,9 +407,10 @@ describe('the history section', () => {
    * Opens the history section, mounting the view first unless one is given, and waits for its
    * kept pages.
    * @param {VueWrapper} [mounted] - A view already on screen
+   * @param {number} [rows] - Item rows to wait for, the excluded domain and one page by default
    * @returns {Promise<VueWrapper>} - The mounted view
    */
-  async function openHistory(mounted?: VueWrapper): Promise<VueWrapper> {
+  async function openHistory(mounted?: VueWrapper, rows = 2): Promise<VueWrapper> {
     const wrapper = mounted ?? (await open())
     const row = await vi.waitFor(() => {
       const found = wrapper
@@ -407,7 +422,7 @@ describe('the history section', () => {
     })
 
     await row.trigger('click')
-    await vi.waitFor(() => expect(wrapper.findAllComponents(SettingsItemRow)).toHaveLength(2))
+    await vi.waitFor(() => expect(wrapper.findAllComponents(SettingsItemRow)).toHaveLength(rows))
 
     return wrapper
   }
@@ -447,8 +462,8 @@ describe('the history section', () => {
   })
 
   // Not a disabled row, not a hint: an instance that does not offer it says nothing about it.
-  it('says nothing about history where the instance does not offer it', async () => {
-    stubHistory({ ...STATE, available: false })
+  it('says nothing about history where the instance does not offer it and keeps nothing', async () => {
+    stubHistory({ ...STATE, available: false, kept: 0 }, { kept: [] })
     const wrapper = await open()
     await vi.waitFor(() => expect(writes.some((call) => call.url === '/api/history')).toBe(true))
     await nextTick()
@@ -642,5 +657,182 @@ describe('the history section', () => {
 
     const items = wrapper.findAllComponents(SettingsItemRow).map((row) => row.props('item').id)
     expect(items).toEqual(['page:1'])
+  })
+
+  // The admin turning history off leaves what was kept reachable for forgetting, and nothing else.
+  it('lists only what is kept, and the way to forget it, once the instance stops offering history', async () => {
+    stubHistory({ ...STATE, available: false, enabled: false })
+    const wrapper = await openHistory(undefined, 1)
+
+    expect(wrapper.text()).toContain('no longer keeps history')
+    expect(wrapper.findAllComponents(SettingsOptionRow)).toHaveLength(0)
+    expect(wrapper.find('[data-station="field:history:exclude"]').exists()).toBe(false)
+    expect(wrapper.find('[data-station="action:history:clear-history"]').exists()).toBe(true)
+
+    await focus(wrapper, 'item:history:page:1')
+    await press(wrapper, 'Enter')
+    await press(wrapper, 'Enter')
+
+    await vi.waitFor(() =>
+      expect(writes.find((call) => call.method === 'DELETE')?.url).toBe('/api/history/entries/1'),
+    )
+    await vi.waitFor(() => expect(wrapper.text()).toContain('nothing is kept for you'))
+  })
+
+  it('says above the list when a page could not be forgotten, and keeps it', async () => {
+    stubHistory(STATE, { writeStatus: 500 })
+    const wrapper = await openHistory()
+
+    await focus(wrapper, 'item:history:page:1')
+    await press(wrapper, 'Enter')
+    await press(wrapper, 'Enter')
+
+    await vi.waitFor(() =>
+      expect(wrapper.find('.settings__error').text()).toBe(
+        'the portal did not forget that page, try again',
+      ),
+    )
+    expect(wrapper.find('.settings__error').attributes('role')).toBe('alert')
+    expect(wrapper.find('[data-station="item:history:page:1"]').exists()).toBe(true)
+  })
+
+  describe('forgetting with the pointer', () => {
+    /**
+     * Presses a row's forget button the way a pointer does: the press focuses the button, then
+     * clicks it. Looked up afresh each time, the way a second click lands on whatever is drawn
+     * there by then.
+     * @param {VueWrapper} wrapper - The mounted view
+     * @param {string} station - Station key of the row
+     * @returns {Promise<void>}
+     */
+    async function clickForget(wrapper: VueWrapper, station: string): Promise<void> {
+      const button = wrapper.find<HTMLButtonElement>(`[data-station="${station}"] .item__remove`)
+      expect(button.exists()).toBe(true)
+
+      button.element.focus()
+      await button.trigger('click')
+      await nextTick()
+    }
+
+    const deletes = (): ReadonlyArray<string> =>
+      writes.filter((call) => call.method === 'DELETE').map((call) => call.url)
+
+    it.each([
+      ['while the portal offers history', STATE, 2],
+      ['once the portal stopped offering it', { ...STATE, available: false, enabled: false }, 1],
+    ])('forgets a page on the second click of its button %s', async (_case, state, rows) => {
+      stubHistory(state)
+      const wrapper = await openHistory(undefined, rows)
+
+      await clickForget(wrapper, 'item:history:page:1')
+
+      expect(deletes()).toEqual([])
+      expect(wrapper.find('[data-station="item:history:page:1"] .item__remove').text()).toBe(
+        'press again to delete',
+      )
+      // the press focused the button, which must still be there for the second one
+      expect(document.activeElement?.classList.contains('item__remove')).toBe(true)
+
+      await clickForget(wrapper, 'item:history:page:1')
+
+      await vi.waitFor(() => expect(deletes()).toEqual(['/api/history/entries/1']))
+      await vi.waitFor(() =>
+        expect(wrapper.find('[data-station="item:history:page:1"]').exists()).toBe(false),
+      )
+    })
+
+    it('disarms once the pointer moves focus somewhere else', async () => {
+      stubHistory()
+      const wrapper = await openHistory()
+
+      await clickForget(wrapper, 'item:history:page:1')
+      wrapper.find<HTMLInputElement>('.launcher__input').element.focus()
+      await nextTick()
+
+      expect(wrapper.find('[data-station="item:history:page:1"] .item__remove').text()).toBe('del')
+
+      await clickForget(wrapper, 'item:history:page:1')
+
+      expect(deletes()).toEqual([])
+    })
+
+    it('stops excluding a domain on one click of its button', async () => {
+      stubHistory()
+      const wrapper = await openHistory()
+
+      await clickForget(wrapper, 'item:history:domain:bank.example')
+
+      await vi.waitFor(() =>
+        expect(writes.find((call) => call.method === 'PUT')?.body).toEqual({ excludedDomains: [] }),
+      )
+    })
+
+    it('forgets every page on the second click of its row', async () => {
+      stubHistory()
+      const wrapper = await openHistory()
+      const row = wrapper.find('[data-station="action:history:clear-history"]')
+
+      await row.trigger('click')
+      expect(wrapper.text()).toContain('press again to forget all')
+      expect(deletes()).toEqual([])
+
+      await wrapper.find('[data-station="action:history:clear-history"]').trigger('click')
+
+      await vi.waitFor(() => expect(deletes()).toEqual(['/api/history/entries']))
+    })
+  })
+
+  describe('a long history', () => {
+    const many: ApiHistoryEntry[] = Array.from({ length: 150 }, (_, index) => ({
+      ...PAGE,
+      id: index + 1,
+      url: `https://site${index + 1}.example/`,
+      title: `page ${index + 1}`,
+    }))
+
+    it('lists a hundred pages, and moves the caret onto the first of the next ones it lists', async () => {
+      stubHistory({ ...STATE, kept: 150 }, { kept: many })
+      const wrapper = await openHistory(undefined, 101)
+
+      expect(wrapper.text()).toContain('Show 50 more')
+
+      await focus(wrapper, 'action:history:more-pages')
+      await press(wrapper, 'Enter')
+
+      await vi.waitFor(() => expect(wrapper.findAllComponents(SettingsItemRow)).toHaveLength(151))
+      expect(wrapper.find('[data-station="action:history:more-pages"]').exists()).toBe(false)
+      await vi.waitFor(() =>
+        expect(document.activeElement?.getAttribute('data-station')).toBe('item:history:page:101'),
+      )
+    })
+
+    it('finds a page beyond the first hundred through the filter bar', async () => {
+      stubHistory({ ...STATE, kept: 150 }, { kept: many })
+      const wrapper = await openHistory(undefined, 101)
+
+      await wrapper.find('.launcher__input').setValue('site140')
+      await nextTick()
+
+      const items = wrapper.findAllComponents(SettingsItemRow).map((row) => row.props('item').id)
+      expect(items).toEqual(['page:140'])
+    })
+
+    it('puts the caret on the next page after forgetting one', async () => {
+      stubHistory({ ...STATE, kept: 150 }, { kept: many })
+      const wrapper = await openHistory(undefined, 101)
+
+      await focus(wrapper, 'item:history:page:3')
+      await press(wrapper, 'Enter')
+      await press(wrapper, 'Enter')
+
+      await vi.waitFor(() =>
+        expect(wrapper.find('[data-station="item:history:page:3"]').exists()).toBe(false),
+      )
+      await vi.waitFor(() =>
+        expect(document.activeElement?.getAttribute('data-station')).toBe('item:history:page:4'),
+      )
+      // the page past the first hundred moves up into the list rather than the list shrinking
+      expect(wrapper.find('[data-station="item:history:page:101"]').exists()).toBe(true)
+    })
   })
 })

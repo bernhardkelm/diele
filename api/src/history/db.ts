@@ -5,8 +5,9 @@ import { config } from '#config.js'
 import type { DB } from '#db/index.js'
 import { migrate } from '#db/migrate.js'
 import { init } from './migrations/001_init.js'
+import { randomIds } from './migrations/002_randomIds.js'
 
-const MIGRATIONS = [init]
+const MIGRATIONS = [init, randomIds]
 
 let db: DB | null = null
 

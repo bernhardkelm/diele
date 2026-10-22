@@ -1,13 +1,17 @@
 import { BlockList, isIP } from 'node:net'
 
 /**
- * Where an address leads, as far as recording a visit to it goes:
+ * Where an address leads, as far as recording a visit to it goes. Written as the host, by name or
+ * as a literal:
  * - `loopback`: the visitor's own machine, dropped
  * - `linkLocal`: link-local and cloud metadata, dropped and never requested
  * - `reserved`: any other special-purpose address, documentation, multicast, 6to4 and the like,
  *   dropped and never requested
  * - `private`: a private, unique-local or carrier-grade NAT network, kept without a probe
  * - `public`: global unicast and nothing else, probed when probing is on
+ *
+ * A name that only resolves to one of them is judged on `public` alone: every address public is
+ * probed, anything else is kept unprobed.
  */
 export type AddressClass = 'loopback' | 'linkLocal' | 'reserved' | 'private' | 'public'
 
@@ -214,22 +218,4 @@ export function classifyHostname(hostname: string): AddressClass | undefined {
  */
 export function isUnreachable(address: AddressClass | undefined): boolean {
   return address === 'loopback' || address === 'linkLocal' || address === 'reserved'
-}
-
-/**
- * Ranks the classes from the one that must never be reached to the one that may be, so a name
- * resolving to several addresses is treated as its most sensitive one.
- * @param {ReadonlyArray<AddressClass>} classes - Classes of every address a name resolved to
- * @returns {AddressClass} - The most sensitive of them
- */
-export function strictestClass(classes: ReadonlyArray<AddressClass>): AddressClass {
-  const order: ReadonlyArray<AddressClass> = [
-    'linkLocal',
-    'loopback',
-    'reserved',
-    'private',
-    'public',
-  ]
-
-  return order.find((candidate) => classes.includes(candidate)) ?? 'loopback'
 }

@@ -30,9 +30,19 @@ export interface ApiHistoryState {
   readonly enabled: boolean
   /** Domains never recorded for this account; each also covers its subdomains */
   readonly excludedDomains: ReadonlyArray<string>
+  /**
+   * How many pages are kept for this account, served whatever the switches say, so what was kept
+   * stays reachable for forgetting after the feature is switched off
+   */
+  readonly kept: number
+  /**
+   * Opaque and stable for this account's history, never a user id: an id can be handed out again
+   * after the main database is reset, this cannot. Absent until the account first touches history.
+   */
+  readonly account?: string
 }
 
-/** What `GET /api/history` serves the portal's search */
+/** What `GET /api/history` serves the portal's search; `GET /api/history/state` serves the state alone */
 export interface ApiHistory {
   readonly state: ApiHistoryState
   /**

@@ -60,6 +60,15 @@ historyRouter.get('/', (req, res) => {
   res.json(payload)
 })
 
+// The state alone, without ranking anything: the extension reads it on every load of the portal.
+historyRouter.get('/state', (req, res) => {
+  if (!req.user) {
+    throw unauthorized()
+  }
+
+  res.json(readState(readHistoryKey(req.user.id)))
+})
+
 // Served whatever the switches say: what was kept is the account's own, and seeing it is how it
 // gets removed, which must keep working after an admin has turned the feature off.
 historyRouter.get('/entries', (req, res) => {
@@ -93,9 +102,10 @@ historyRouter.post('/visits', (req, res) => {
     throw forbidden('history is off for this account')
   }
 
-  // 429 rather than a quiet drop, so a source can tell its visit was not taken and send it again.
+  // 429 rather than a quiet drop, so a source can tell its visit was not taken and send it again:
+  // earlier batches are still in flight, or the extension posted more visits than its budget.
   if (!startIngest(owner, batch)) {
-    throw tooManyRequests('earlier visits are still being checked, send these again shortly')
+    throw tooManyRequests('too many visits at once, send these again shortly')
   }
 
   res.json({ ok: true })

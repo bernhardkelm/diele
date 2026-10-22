@@ -14,7 +14,7 @@ after(async () => {
 
 // For a deployment that would rather not send this server's address to every site its people
 // open: a public page is kept as reported, and what must never be reached is still dropped.
-test('with probing off a public page is kept unprobed, loopback still dropped', async () => {
+test('with probing off a public page is kept unprobed, loopback by name still dropped', async () => {
   await api.signIn()
   const { id } = await api.get<{ id: number }>('/api/auth/me')
 
@@ -38,10 +38,10 @@ test('with probing off a public page is kept unprobed, loopback still dropped', 
     owner,
     {
       source: 'diele',
-      visits: [{ url: 'https://public.example/' }, { url: 'http://loop.example/' }],
+      visits: [{ url: 'https://public.example/' }, { url: 'http://localhost:8080/' }],
     },
     {
-      classify: async (hostname) => (hostname === 'loop.example' ? 'loopback' : 'public'),
+      resolve: async () => ['93.184.216.34'],
       exists: async (url) => {
         probed.push(url)
         return false

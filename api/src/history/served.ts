@@ -2,20 +2,25 @@ import type { ApiHistoryEntry } from '@diele/common'
 import { config } from '#config.js'
 import { listEntries as listConnectorEntries } from '#connectors/entries.js'
 import { listLinks } from '#links/repository.js'
+import { isEnabled } from '#settings/toggles.js'
 import { listEntries } from './entries.js'
 import { byFrecency } from './frecency.js'
 import { normaliseUrl } from './normalise.js'
 
 /**
- * Collects every url the portal already offers on its own, in stored form. A history line for a
- * card the person clicked every day would only repeat the card, one row further down.
- * @returns {ReadonlySet<string>} - Urls of the enabled cards, saved sites and connector entries
+ * Collects every url the portal offers on its own right now, in stored form. A history line for a
+ * card the person clicked every day would only repeat the card, one row further down. The same
+ * switches `/api/config` and `/api/entries` honour apply: a section switched off offers nothing,
+ * so its urls are history like any other.
+ * @returns {ReadonlySet<string>} - Urls of the cards, saved sites and connector entries served
  */
 export function knownUrls(): ReadonlySet<string> {
   const urls = [
-    ...listLinks('card').map((link) => link.url),
-    ...listLinks('site').map((link) => link.url),
-    ...listConnectorEntries().map((entry) => entry.url),
+    ...(isEnabled('cards') ? listLinks('card') : []).map((link) => link.url),
+    ...(isEnabled('sites') ? listLinks('site') : []).map((link) => link.url),
+    ...listConnectorEntries()
+      .filter((entry) => isEnabled(entry.connectorType))
+      .map((entry) => entry.url),
   ]
 
   return new Set(urls.map(normaliseUrl).filter((url): url is string => url !== undefined))

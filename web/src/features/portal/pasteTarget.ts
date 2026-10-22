@@ -7,7 +7,7 @@ import type { SuggestionTarget } from '@/types/portal'
 // would be worse than not offering at all. A term carrying a scheme skips this entirely.
 //
 // Country codes that are also common file extensions stay out for the same reason: md, py, rs,
-// cc, so, ps.
+// cc, so, ps, pl, in, am.
 const TLDS = new Set([
   // generic
   'academy',
@@ -57,7 +57,6 @@ const TLDS = new Set([
   // country codes, and the ones used as generic suffixes
   'ae',
   'ai',
-  'am',
   'ar',
   'at',
   'au',
@@ -88,7 +87,6 @@ const TLDS = new Set([
   'ie',
   'il',
   'im',
-  'in',
   'io',
   'is',
   'it',
@@ -105,7 +103,6 @@ const TLDS = new Set([
   'nl',
   'no',
   'nz',
-  'pl',
   'pt',
   'ro',
   'ru',

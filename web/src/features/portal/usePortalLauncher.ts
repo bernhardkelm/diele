@@ -86,12 +86,7 @@ export function usePortalLauncher(options: PortalLauncherOptions): PortalLaunche
   function recordLaunch(target: PortalTarget): void {
     rememberLaunch(target.ref)
 
-    if (isHistory(target)) {
-      recordVisit(target.url, target.title)
-      return
-    }
-
-    if (isSuggestion(target) && target.adHoc) {
+    if (isHistory(target) || (isSuggestion(target) && target.adHoc)) {
       recordVisit(target.url)
     }
   }
@@ -118,8 +113,10 @@ export function usePortalLauncher(options: PortalLauncherOptions): PortalLaunche
   } = useLauncher(options.targets, {
     // a slash term addresses the commands alone, so the ordinary targets sit it out rather
     // than fuzzy-matching the slash itself
-    match: (all, term) =>
-      parseSlash(term) ? [] : searchTargets(all, term, (target) => boostFor(target.ref)),
+    match: (all, term, leading) =>
+      parseSlash(term)
+        ? leading
+        : searchTargets(all, term, (target) => boostFor(target.ref), leading),
     onLaunch: recordLaunch,
     actionsOf: actionsFor,
     hasShortcut: isCard,

@@ -113,3 +113,22 @@ test('the configured engines are consulted alongside the built-in list', () => {
   assert.equal(isSearchPage(url, NONE), false)
   assert.equal(isSearchPage(url, ['https://search.example.com/find?term={query}']), true)
 })
+
+// `https://github.com/{query}` jumps to a user or a repository, not to every page on the site.
+test('a template with the term right after the root matches one segment on its own host', () => {
+  const template = 'https://github.com/{query}'
+
+  for (const raw of ['https://github.com/bernhardkelm', 'https://www.github.com/bernhardkelm/']) {
+    assert.equal(matchesEngine(new URL(raw), template), true, raw)
+  }
+
+  for (const raw of [
+    'https://github.com/',
+    'https://github.com/bernhardkelm/diele',
+    'https://github.com/bernhardkelm/diele/pull/27',
+    'https://gist.github.com/bernhardkelm',
+    'https://docs.github.com/en',
+  ]) {
+    assert.equal(matchesEngine(new URL(raw), template), false, raw)
+  }
+})

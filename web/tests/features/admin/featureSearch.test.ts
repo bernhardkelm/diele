@@ -54,7 +54,8 @@ describe('searchFeatures', () => {
 
   it('narrows rather than widens as a second word is typed', () => {
     expect(searchFeatures(features, 'search').length).toBeGreaterThan(0)
-    expect(searchFeatures(features, 'search engineszz')).toEqual([])
+    // three letters past `engines`, one more than a typo of that length may add
+    expect(searchFeatures(features, 'search engineszzz')).toEqual([])
   })
 
   it('offers nothing for a term that addresses none of them', () => {

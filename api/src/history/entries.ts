@@ -1,7 +1,7 @@
 import type { ApiHistoryEntry } from '@diele/common'
 import { checkpointHistory, getHistoryDb, peekHistoryDb } from './db.js'
 import { isOnDomain } from './domains.js'
-import { hostnameOf } from './normalise.js'
+import { hostnameOf, originOf } from './normalise.js'
 import { bumpForgetEpoch } from './preferences.js'
 
 export interface EntryRow {
@@ -73,7 +73,9 @@ function forget(owner: string, remove: () => number): number {
 }
 
 /**
- * Removes one entry, only when it belongs to the account asking.
+ * Removes one entry, only when it belongs to the account asking. An origin entry takes the shells
+ * folded into it along, in the same transaction: they name pages under that origin the account
+ * went to, and the origin is the only entry they ever show up as.
  * @param {string | undefined} owner - The account's history key, undefined when it has none
  * @param {number} id - Entry to remove
  * @returns {boolean} - True when something was removed
@@ -84,13 +86,48 @@ export function deleteEntry(owner: string | undefined, id: number): boolean {
     return false
   }
 
-  const removed = forget(
-    owner,
-    () =>
-      db.prepare('DELETE FROM history_entries WHERE id = ? AND owner = ?').run(id, owner).changes,
-  )
+  const removed = forget(owner, () => {
+    const row = db
+      .prepare('DELETE FROM history_entries WHERE id = ? AND owner = ? RETURNING url')
+      .get(id, owner) as { url: string } | undefined
+
+    if (!row) {
+      return 0
+    }
+
+    if (originOf(row.url) === row.url) {
+      const shells = db
+        .prepare('SELECT url FROM history_shells WHERE owner = ?')
+        .pluck()
+        .all(owner) as string[]
+      const remove = db.prepare('DELETE FROM history_shells WHERE owner = ? AND url = ?')
+
+      for (const shell of shells.filter((url) => originOf(url) === row.url)) {
+        remove.run(owner, shell)
+      }
+    }
+
+    return 1
+  })
 
   return removed > 0
+}
+
+/**
+ * Counts the entries an account holds, whatever the switches say.
+ * @param {string | undefined} owner - The account's history key, undefined when it has none
+ * @returns {number} - How many entries it keeps
+ */
+export function countEntries(owner: string | undefined): number {
+  if (owner === undefined) {
+    return 0
+  }
+
+  const row = peekHistoryDb()
+    ?.prepare('SELECT COUNT(*) AS count FROM history_entries WHERE owner = ?')
+    .get(owner) as { count: number } | undefined
+
+  return row?.count ?? 0
 }
 
 /**

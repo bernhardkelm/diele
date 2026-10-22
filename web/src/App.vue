@@ -1,5 +1,11 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, useTemplateRef, watch } from 'vue'
+import {
+  computed,
+  defineAsyncComponent,
+  shallowRef,
+  watch,
+  type ComponentPublicInstance,
+} from 'vue'
 import AdminView from '@/views/AdminView.vue'
 import AlertList from '@/features/portal/AlertList.vue'
 import CommandList from '@/features/portal/CommandList.vue'
@@ -21,7 +27,8 @@ import { ROUTES } from '@/composables/routes'
 import { useHashRoute } from '@/composables/useHashRoute'
 import { useHealth } from '@/composables/useHealth'
 import { useHiddenEntries } from '@/composables/useHiddenEntries'
-import { useHistory } from '@/composables/useHistory'
+import { rereadHistory, useHistory } from '@/composables/useHistory'
+import { useHistoryDelivery } from '@/composables/useHistoryDelivery'
 import { useLocalhostStatus } from '@/composables/useLocalhostStatus'
 import { usePortalConfig } from '@/composables/usePortalConfig'
 import { usePortalLauncher } from '@/features/portal/usePortalLauncher'
@@ -85,8 +92,18 @@ void loadProviders()
 
 // the tiles wrap wherever the viewport lets them, so the arrows ask the layout itself how
 // wide a row is rather than assuming a count
-const tileGrid = useTemplateRef<HTMLElement>('tileGrid')
+const tileGrid = shallowRef<HTMLElement | null>(null)
 const tileColumns = useGridColumns(tileGrid)
+
+/**
+ * Holds the tile grid's element. A function ref, because the grid renders inside the loop over
+ * the blocks, where a named template ref would collect an array instead.
+ * @param {Element | ComponentPublicInstance | null} element - The grid, or null once it is gone
+ * @returns {void}
+ */
+function setTileGrid(element: Element | ComponentPublicInstance | null): void {
+  tileGrid.value = element instanceof HTMLElement ? element : null
+}
 
 // Off is a deliberate setting rather than an absent one, so anything but false is on: a portal
 // that has never been told either way keeps the behaviour it shipped with.
@@ -119,15 +136,18 @@ const portalShowing = computed(
 
 const { entries: historyEntries } = useHistory(() => portalShowing.value)
 
+// a page the extension delivers while this tab is open is offered without waiting for the next one
+useHistoryDelivery(() => portalShowing.value, rereadHistory)
+
 // Visited pages are checked against every row, hidden ones included, so a repo kept out of the
 // list does not come back into it through the history.
 const visited = computed(() =>
   historyTargets(historyEntries.value, [...sites.value, ...cards.value, ...sorted.value]),
 )
 
-// saved sites lead, so a match on one lands at index 0 where it can be auto-highlighted;
-// cards keep their positions behind it, then the connector rows, whose own order already puts
-// a group page ahead of its repos, and the visited pages last of all
+// the resting order, which also breaks ties while searching: saved sites, the cards, then the
+// connector rows, whose own order already puts a group page ahead of its repos, and the visited
+// pages, most frecent first
 const targets = computed<ReadonlyArray<PortalTarget>>(() => [
   ...sites.value,
   ...cards.value,
@@ -165,7 +185,13 @@ const { readingFor } = useHealth(() => portalShowing.value)
 
 // Asked for only where the portal has said it wants them, so an instance with the switch off
 // never makes the request at all rather than polling for an answer it would not draw.
-const { signals, total: signalTotal, silenced, silence, restore } = useSignals(
+const {
+  signals,
+  total: signalTotal,
+  silenced,
+  silence,
+  restore,
+} = useSignals(
   () => portalShowing.value && alertsEnabled.value,
   () => user.value?.canAdmin === true,
 )
@@ -211,60 +237,70 @@ const altHeld = useAltHeld()
          sortable header and a grid of tiles, neither of which a listbox may contain. Which row
          holds the highlight is announced by the field's own live region instead. -->
     <main v-if="matches.length" id="launcher-results" class="stack" aria-label="Search results">
-      <CommandList
-        v-if="sections.commands.length"
-        :commands="sections.commands"
-        :active-index="highlight"
-        :query="commandQuery"
-        @run="runCommand"
-      />
-
-      <SiteList
-        v-if="sections.suggestions.length"
-        :sites="sections.suggestions"
-        :active-index="highlight"
-        :is-live="isLive"
-        :reading-for="readingFor"
-        :query="query"
-        @launch="recordLaunch($event)"
-      />
-
-      <div v-if="sections.cards.length" ref="tileGrid" class="grid">
-        <ServiceCard
-          v-for="(entry, position) in sections.cards"
-          :key="entry.item.ref"
-          :service="entry.item"
-          :shortcut="altHeld ? shortcutFor(position) : undefined"
-          :status="readingFor(entry.item.ref)"
-          :active="entry.index === highlight"
-          :query="query"
-          @launch="recordLaunch(entry.item)"
+      <!-- Painted in the order the matches rank the blocks, which is also the order the arrows
+           walk and the first of which ↵ opens. Each block stays whole; none is pinned in place. -->
+      <template v-for="section in sections.order" :key="section">
+        <CommandList
+          v-if="section === 'commands' && sections.commands.length"
+          :commands="sections.commands"
+          :active-index="highlight"
+          :query="commandQuery"
+          @run="runCommand"
         />
-      </div>
 
-      <EntriesLoading v-if="isLoadingEntries" />
+        <SiteList
+          v-else-if="section === 'suggestions' && sections.suggestions.length"
+          :sites="sections.suggestions"
+          :active-index="highlight"
+          :is-live="isLive"
+          :reading-for="readingFor"
+          :query="query"
+          @launch="recordLaunch($event)"
+        />
 
-      <EntryList
-        v-if="sections.rows.length"
-        :entries="sections.rows"
-        :marks="entryMarks"
-        :sort-key="sortKey"
-        :sort-direction="sortDirection"
-        :active-index="highlight"
-        :active-action="activeAction"
-        :refreshing="isRefreshingEntries"
-        :query="query"
-        @sort="sortBy"
-        @launch="recordLaunch($event)"
-      />
+        <div
+          v-else-if="section === 'cards' && sections.cards.length"
+          :ref="setTileGrid"
+          class="grid"
+        >
+          <ServiceCard
+            v-for="(entry, position) in sections.cards"
+            :key="entry.item.ref"
+            :service="entry.item"
+            :shortcut="altHeld ? shortcutFor(position) : undefined"
+            :status="readingFor(entry.item.ref)"
+            :active="entry.index === highlight"
+            :query="query"
+            @launch="recordLaunch(entry.item)"
+          />
+        </div>
 
-      <HistoryList
-        v-if="sections.history.length"
-        :pages="sections.history"
-        :active-index="highlight"
-        :query="query"
-        @launch="recordLaunch($event)"
-      />
+        <template v-else-if="section === 'rows'">
+          <EntriesLoading v-if="isLoadingEntries" />
+
+          <EntryList
+            v-if="sections.rows.length"
+            :entries="sections.rows"
+            :marks="entryMarks"
+            :sort-key="sortKey"
+            :sort-direction="sortDirection"
+            :active-index="highlight"
+            :active-action="activeAction"
+            :refreshing="isRefreshingEntries"
+            :query="query"
+            @sort="sortBy"
+            @launch="recordLaunch($event)"
+          />
+        </template>
+
+        <HistoryList
+          v-else-if="section === 'history' && sections.history.length"
+          :pages="sections.history"
+          :active-index="highlight"
+          :query="query"
+          @launch="recordLaunch($event)"
+        />
+      </template>
     </main>
     <p v-else class="page__empty">
       Nothing here matches “{{ query }}” — ↵ searches {{ engine?.name ?? 'the web' }}.

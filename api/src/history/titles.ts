@@ -1,4 +1,6 @@
 import { createHash } from 'node:crypto'
+import { parseVisitUrl } from './normalise.js'
+import { titleLeaksUrl } from './titleLeaks.js'
 
 /** Longer than any title a tab shows, and enough to keep a pasted essay out of the column. */
 export const MAX_TITLE = 300
@@ -31,4 +33,19 @@ export function cleanTitle(raw: string | undefined): string | undefined {
  */
 export function titleHash(title: string): string {
   return createHash('sha256').update(title).digest('base64url').slice(0, 22)
+}
+
+/**
+ * Decides which title a reported visit is stored with: the cleaned title, unless it gives away
+ * the query or fragment the stored url leaves out, or is only the address. A page script can post
+ * as the extension as well as the extension can, so a forged batch is held to the same rule.
+ * @param {string | undefined} raw - Title as the source reported it
+ * @param {string} url - Url as the source reported it, query and fragment intact
+ * @returns {string | undefined} - The title to store, or undefined when none is kept
+ */
+export function titleToStore(raw: string | undefined, url: string): string | undefined {
+  const title = cleanTitle(raw)
+  const parsed = title === undefined ? undefined : parseVisitUrl(url)
+
+  return title !== undefined && parsed && !titleLeaksUrl(title, parsed) ? title : undefined
 }

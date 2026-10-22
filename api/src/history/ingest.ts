@@ -5,10 +5,12 @@ import { listAllEngines } from '#engines/repository.js'
 import { admitted, type AdmissionChecks } from './admission.js'
 import { commitVisits } from './commit.js'
 import { hasEntry } from './entries.js'
+import { extensionVisitBudget } from './limits.js'
 import { acceptVisit, type VisitFilter } from './filters.js'
 import { originOfUrl } from './normalise.js'
 import { readPreferences } from './preferences.js'
 import type { Visit } from './record.js'
+import { titleToStore } from './titles.js'
 
 const DAY_MS = 24 * 60 * 60_000
 
@@ -69,9 +71,10 @@ function visitedAt(at: string | undefined, now: number): string {
 }
 
 /**
- * Filters, checks and records one batch of visits. A url opened through diele's own bar is only
- * kept once admitted, so a mistyped address never becomes a suggestion; one the account already
- * holds is counted straight away. The extension's visits are not probed: the browser saw them load.
+ * Filters, checks and records one batch of visits. A new url opened through diele's own bar is
+ * admitted first, so a public address that answers 404 never becomes a suggestion; one the account
+ * already holds is counted straight away. The extension's visits are not resolved or probed: the
+ * browser saw them load.
  * @param {string} owner - The account's history key
  * @param {ApiHistoryVisits} batch - Visits as the source reported them
  * @param {AdmissionChecks} checks - How hosts are resolved and pages asked about
@@ -89,12 +92,13 @@ export async function ingestVisits(
 
   const probed = batch.source === 'diele'
 
-  // The portal only ever sends back a title this server served it, so a title from it is never
-  // news, and it would be the cheapest way to mint shell pages by the batch.
   for (const visit of batch.visits) {
     const url = acceptVisit(visit.url, filter)
     if (url) {
-      visits.push({ url, title: probed ? undefined : visit.title, at: visitedAt(visit.at, now) })
+      // The portal only ever sends back a title this server served it, so a title from it is
+      // never news, and it would be the cheapest way to mint shell pages by the batch.
+      const title = probed ? undefined : titleToStore(visit.title, visit.url)
+      visits.push({ url, title, at: visitedAt(visit.at, now) })
     }
   }
 
@@ -123,11 +127,13 @@ export async function ingestVisits(
  * and a log line naming the url would keep what the account may since have deleted.
  *
  * An account with as many batches in flight as it may have is refused, so one account posting as
- * fast as it can holds a bounded amount of memory and work rather than all of it.
+ * fast as it can holds a bounded amount of memory and work rather than all of it. So is a batch
+ * from the extension that would take the account past its visit budget: each visit is a write,
+ * and the whole batch is refused rather than half of it kept, so sending it again later loses none.
  * @param {string} owner - The account's history key
  * @param {ApiHistoryVisits} batch - Visits as the source reported them
  * @param {AdmissionChecks} checks - How hosts are resolved and pages asked about
- * @returns {boolean} - True when the batch was started, false when the account is at its limit
+ * @returns {boolean} - True when the batch was started, false when the account is at a limit
  */
 export function startIngest(
   owner: string,
@@ -136,6 +142,13 @@ export function startIngest(
 ): boolean {
   const running = inFlight.get(owner) ?? 0
   if (running >= MAX_IN_FLIGHT) {
+    return false
+  }
+
+  if (
+    batch.source === 'extension' &&
+    !extensionVisitBudget.take(owner, Date.now(), batch.visits.length)
+  ) {
     return false
   }
 

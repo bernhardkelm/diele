@@ -1,3 +1,5 @@
+import { decodeSegment } from './tokens.js'
+
 /** Longer than any address a person opens on purpose, and past where a url is mostly payload. */
 export const MAX_URL_LENGTH = 2000
 
@@ -47,19 +49,37 @@ export function originOfUrl(url: URL): string {
 }
 
 /**
+ * Cuts the matrix parameters off one path segment. A `;` written out ends the segment's own part
+ * as the parser leaves it; an encoded one (`%3B`) is found on the segment decoded the way the token
+ * check decodes it, so `/path%3Bjsessionid%3D...` loses its session as well, and what is kept is
+ * encoded again.
+ * @param {string} segment - One path segment, still percent-encoded
+ * @returns {string} - The segment without its matrix parameters, possibly empty
+ */
+function withoutMatrix(segment: string): string {
+  const plain = segment.split(';')[0] ?? ''
+  const decoded = decodeSegment(plain)
+  const at = decoded.indexOf(';')
+
+  return at < 0 ? plain : encodeURIComponent(decoded.slice(0, at))
+}
+
+/**
  * Reduces a url to what is stored: origin and path. The query and fragment go because they are
  * where tokens, sessions and search terms ride, and so do the credentials and the matrix
- * parameters (`;jsessionid=...`), which the parser leaves in the path. The URL parser already
- * lowercases the host and drops a default port. A trailing slash is dropped everywhere but the
- * root, so `/docs` and `/docs/` are one entry.
+ * parameters (`;jsessionid=...`, plain or encoded), which the parser leaves in the path. The URL
+ * parser already lowercases the host and drops a default port. Empty segments are dropped, the
+ * trailing slash with them, so `/docs`, `/docs/` and a `/docs/;jsessionid=1` are one entry.
  * @param {URL} url - Parsed url
  * @returns {string} - Origin and path, the form every comparison here is made in
  */
 export function stripUrl(url: URL): string {
-  const segments = url.pathname.split('/').map((segment) => segment.split(';')[0] ?? '')
-  const path = segments.join('/').replace(/\/+$/, '')
+  const segments = url.pathname
+    .split('/')
+    .map(withoutMatrix)
+    .filter((segment) => segment.length > 0)
 
-  return `${originOfUrl(url)}${path.length > 0 ? path : '/'}`
+  return `${originOfUrl(url)}/${segments.join('/')}`
 }
 
 /**

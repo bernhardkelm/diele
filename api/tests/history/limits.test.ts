@@ -81,3 +81,28 @@ test('a job that fails answers nothing rather than throwing', async () => {
 
   assert.equal(await limiter.run(async () => Promise.reject(new Error('boom'))), undefined)
 })
+
+// The documented wait is the whole wait: a job still queued when it runs out never starts.
+test('the timeout counts from the call, and a job that waited it out never runs', async () => {
+  const limiter = createLimiter(1, 1)
+  const { job, release, started } = gate()
+
+  const first = limiter.run(job)
+  const queued = limiter.run(job, 10)
+
+  assert.equal(await queued, undefined)
+  release()
+  assert.equal(await first, true)
+  await tick()
+  assert.equal(started(), 0)
+})
+
+test('a budget takes several units at once, all of them or none', () => {
+  const budget = createBudget(5, 60_000)
+  const now = Date.now()
+
+  assert.equal(budget.take('poster', now, 3), true)
+  assert.equal(budget.take('poster', now, 3), false)
+  assert.equal(budget.take('poster', now, 2), true)
+  assert.equal(budget.take('poster', now), false)
+})

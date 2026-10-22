@@ -101,3 +101,32 @@ test('a domain covers itself and its subdomains, never a lookalike', () => {
   assert.equal(isOnDomain('notexample.com', 'example.com'), false)
   assert.equal(isOnDomain('example.com.evil.test', 'example.com'), false)
 })
+
+// Encoded, the `;` reaches the server as a matrix separator all the same once it is decoded.
+test('an encoded matrix parameter is stripped too, and what is kept is encoded again', () => {
+  assert.equal(
+    normaliseUrl('https://shop.example/path%3Bjsessionid%3D0123456789abcdef0123456789abcdef'),
+    'https://shop.example/path',
+  )
+  assert.equal(
+    normaliseUrl('https://shop.example/%253Bjsessionid%253D1/a'),
+    'https://shop.example/a',
+  )
+  assert.equal(
+    normaliseUrl('https://shop.example/caf%C3%A9%3Bv%3D1'),
+    'https://shop.example/caf%C3%A9',
+  )
+})
+
+test('a segment that was only matrix parameters leaves no empty segment behind', () => {
+  assert.equal(normaliseUrl('https://shop.example/a/;jsessionid=1/b'), 'https://shop.example/a/b')
+  assert.equal(
+    normaliseUrl('https://shop.example/a/%3Bjsessionid%3D1/b'),
+    'https://shop.example/a/b',
+  )
+  assert.equal(normaliseUrl('https://shop.example/;jsessionid=1'), 'https://shop.example/')
+  assert.equal(
+    normaliseUrl('https://example.com//double//slash'),
+    'https://example.com/double/slash',
+  )
+})

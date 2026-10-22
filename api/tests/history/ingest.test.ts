@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict'
 import { after, before, beforeEach, test } from 'node:test'
 import type { ApiHistoryEntry, ApiHistoryVisits } from '@diele/common'
-import type { AddressClass } from '#history/addresses.js'
 import { startApi, type TestApi } from '#tests/support/harness.js'
 
 let api: TestApi
@@ -17,25 +16,33 @@ let probed: string[] = []
 /** The urls the fake probe says exist. */
 let real = new Set<string>()
 
-/** Where the fake resolver says each host leads; anything unlisted is public. */
-let where = new Map<string, AddressClass | undefined>()
+/** A public address, what the fake resolver answers for any host it was not told about. */
+const PUBLIC = '93.184.216.34'
+
+/** What the fake resolver says each host resolves to; anything unlisted is public. */
+let where = new Map<string, ReadonlyArray<string>>()
+
+/** The address every probe was pinned to, in order. */
+let pinned: string[] = []
 
 /**
  * Stands in for resolving a host, answering from `where`.
  * @param {string} hostname - Host asked about
- * @returns {Promise<AddressClass | undefined>} - Its class
+ * @returns {Promise<ReadonlyArray<string>>} - Its addresses
  */
-async function classify(hostname: string): Promise<AddressClass | undefined> {
-  return where.has(hostname) ? where.get(hostname) : 'public'
+async function resolve(hostname: string): Promise<ReadonlyArray<string>> {
+  return where.get(hostname) ?? [PUBLIC]
 }
 
 /**
  * Stands in for the network probe, answering from `real` and noting every question.
  * @param {string} url - Page asked about
+ * @param {string} address - Where the probe is pinned to
  * @returns {Promise<boolean>} - Whether it is in `real`
  */
-async function exists(url: string): Promise<boolean> {
+async function exists(url: string, address: string): Promise<boolean> {
   probed.push(url)
+  pinned.push(address)
   return real.has(url)
 }
 
@@ -45,7 +52,7 @@ async function exists(url: string): Promise<boolean> {
  * @returns {Promise<void>}
  */
 function ingest(batch: ApiHistoryVisits): Promise<void> {
-  return ingestVisits(owner, batch, { classify, exists })
+  return ingestVisits(owner, batch, { resolve, exists })
 }
 
 /**
@@ -79,6 +86,7 @@ beforeEach(() => {
   clearEntries(owner)
   writePreferences(owner, { enabled: true, excludedDomains: [] })
   probed = []
+  pinned = []
   real = new Set()
   where = new Map()
 })
@@ -143,10 +151,10 @@ test('an account that opts out while a probe is in flight has nothing written', 
     owner,
     { source: 'diele', visits: [{ url: 'https://slow.example/' }] },
     {
-      classify,
-      exists: async (url) => {
+      resolve,
+      exists: async (url, address) => {
         writePreferences(owner, { enabled: false, excludedDomains: [] })
-        return exists(url)
+        return exists(url, address)
       },
     },
   )
@@ -199,10 +207,17 @@ test('a title is trimmed and capped, an empty one leaves the stored one standing
 
 // `/watch` with the video stripped off is not a page anyone means to go back to; the site is.
 test('a url that keeps arriving with new titles is folded into its origin', async () => {
-  for (const title of ['First video', 'Second video', 'Second video', 'Third video']) {
+  const videos: ReadonlyArray<readonly [string, string]> = [
+    ['dQw4w9WgXcQ', 'First video'],
+    ['9bZkp7q19f0', 'Second video'],
+    ['9bZkp7q19f0', 'Second video'],
+    ['kJQP7kiw5Fk', 'Third video'],
+  ]
+
+  for (const [id, title] of videos) {
     await ingest({
       source: 'extension',
-      visits: [{ url: `https://www.youtube.com/watch?v=${encodeURIComponent(title)}`, title }],
+      visits: [{ url: `https://www.youtube.com/watch?v=${id}`, title }],
     })
   }
 
@@ -280,7 +295,7 @@ test('a search page of an engine configured in diele is dropped', async () => {
 // The server's network is not the visitor's, so asking it what answers there would only tell the
 // visitor something about this server's surroundings. Kept unprobed; the one-off prune clears a typo.
 test('a page on a private network is kept without being probed', async () => {
-  where.set('nas.lan', 'private')
+  where.set('nas.lan', ['192.168.1.5'])
 
   await ingest({ source: 'diele', visits: [{ url: 'http://nas.lan/files' }] })
 
@@ -288,26 +303,71 @@ test('a page on a private network is kept without being probed', async () => {
   assert.equal(entryAt('http://nas.lan/files')?.visits, 1)
 })
 
-test('a name that resolves to loopback or link-local is dropped and never probed', async () => {
-  where.set('127.0.0.1.nip.io', 'loopback')
-  where.set('rebind.example', 'linkLocal')
+// Whether an entry appears must say nothing about what this server's resolver knows, so every
+// outcome that is not all-public ends the same way: kept, and never requested.
+test('a name that is not public by resolution is kept unprobed, whatever it resolved to', async () => {
+  where.set('127.0.0.1.nip.io', ['127.0.0.1'])
+  where.set('rebind.example', ['169.254.169.254'])
+  where.set('mixed.example', [PUBLIC, '10.0.0.1'])
+  where.set('docs.example', ['192.0.2.1'])
+  where.set('typo.example', [])
 
-  await ingest({
-    source: 'diele',
-    visits: [{ url: 'http://127.0.0.1.nip.io/' }, { url: 'http://rebind.example/latest' }],
-  })
+  const urls = [
+    'http://127.0.0.1.nip.io/',
+    'http://rebind.example/latest',
+    'https://mixed.example/',
+    'https://docs.example/',
+    'https://typo.example/',
+  ]
+  await ingest({ source: 'diele', visits: urls.map((url) => ({ url })) })
 
   assert.deepEqual(probed, [])
-  assert.deepEqual(listEntries(owner), [])
+  assert.deepEqual(
+    listEntries(owner)
+      .map((entry) => entry.url)
+      .sort(),
+    [...urls].sort(),
+  )
 })
 
-test('a name that does not resolve is not a page', async () => {
-  where.set('typo.example', undefined)
-
-  await ingest({ source: 'diele', visits: [{ url: 'https://typo.example/' }] })
+test('a resolver that fails or hangs past the wait keeps the url unprobed', async () => {
+  await ingestVisits(
+    owner,
+    { source: 'diele', visits: [{ url: 'https://broken.example/' }] },
+    { resolve: async () => Promise.reject(new Error('SERVFAIL')), exists },
+  )
 
   assert.deepEqual(probed, [])
-  assert.deepEqual(listEntries(owner), [])
+  assert.equal(entryAt('https://broken.example/')?.visits, 1)
+})
+
+test('a public name is probed at the address it was vetted at', async () => {
+  where.set('wiki.example', ['203.0.114.7', '2606:2800:220:1::1'])
+  real.add('https://wiki.example/vetted')
+
+  await ingest({ source: 'diele', visits: [{ url: 'https://wiki.example/vetted' }] })
+
+  assert.deepEqual(pinned, ['203.0.114.7'])
+  assert.equal(entryAt('https://wiki.example/vetted')?.visits, 1)
+})
+
+// A literal needs no lookup: a public one is probed as written, a private one kept unprobed.
+test('an ip literal is judged as written, without a lookup', async () => {
+  let lookups = 0
+  const counting = async (): Promise<ReadonlyArray<string>> => {
+    lookups += 1
+    return [PUBLIC]
+  }
+
+  await ingestVisits(
+    owner,
+    { source: 'diele', visits: [{ url: 'http://93.184.216.34/' }, { url: 'http://10.0.0.8/' }] },
+    { resolve: counting, exists },
+  )
+
+  assert.equal(lookups, 0)
+  assert.deepEqual(pinned, ['93.184.216.34'])
+  assert.equal(entryAt('http://10.0.0.8/')?.visits, 1)
 })
 
 // Only the stripped url leaves this server, never the query or the credentials it arrived with.
@@ -330,10 +390,10 @@ test('a delete while a probe is in flight keeps the probe from writing anything 
     owner,
     { source: 'diele', visits: [{ url: 'https://late.example/' }] },
     {
-      classify,
-      exists: async (url) => {
+      resolve,
+      exists: async (url, address) => {
         clearEntries(owner)
-        return exists(url)
+        return exists(url, address)
       },
     },
   )
@@ -348,10 +408,10 @@ test('a domain excluded while a probe is in flight is not written', async () => 
     owner,
     { source: 'diele', visits: [{ url: 'https://soon-excluded.example/' }] },
     {
-      classify,
-      exists: async (url) => {
+      resolve,
+      exists: async (url, address) => {
         writePreferences(owner, { enabled: true, excludedDomains: ['soon-excluded.example'] })
-        return exists(url)
+        return exists(url, address)
       },
     },
   )
@@ -384,9 +444,13 @@ test('what another account holds neither spares a probe nor counts towards a fol
   const { recordVisit } = await import('#history/record.js')
   const other = 'another-account-key'
 
-  recordVisit(other, { url: 'https://shared.example/page', at: new Date().toISOString() })
+  recordVisit(other, { url: 'https://shared.example/page', at: new Date().toISOString() }, 'diele')
   for (const title of ['One', 'Two']) {
-    recordVisit(other, { url: 'https://tube.example/watch', title, at: new Date().toISOString() })
+    recordVisit(
+      other,
+      { url: 'https://tube.example/watch', title, at: new Date().toISOString() },
+      'extension',
+    )
   }
 
   real.add('https://shared.example/page')
@@ -432,7 +496,7 @@ async function shellCount(key: string): Promise<number> {
 
 // Without a cap of their own, folded shells would grow past every entry cap there is.
 test('an account keeps a fifth of its entry cap in shells, the oldest going first', async () => {
-  const { shellCap } = await import('#history/record.js')
+  const { shellCap } = await import('#history/caps.js')
   assert.equal(shellCap(), 1)
 
   for (const site of ['one', 'two', 'three']) {
@@ -453,7 +517,9 @@ test('an account keeps a fifth of its entry cap in shells, the oldest going firs
 
 // The portal only echoes titles this server served, so they are never news.
 test('a title from the portal itself is never stored and never folds anything', async () => {
-  await ingest({ source: 'extension', visits: [{ url: 'https://echo.example/page' }] })
+  // Older than the pairing window, so the portal's visits below each count.
+  const earlier = new Date(Date.now() - 5 * 60_000).toISOString()
+  await ingest({ source: 'extension', visits: [{ url: 'https://echo.example/page', at: earlier }] })
 
   for (const title of ['One', 'Two', 'Three', 'Four']) {
     await ingest({ source: 'diele', visits: [{ url: 'https://echo.example/page', title }] })
@@ -465,49 +531,59 @@ test('a title from the portal itself is never stored and never folds anything', 
   assert.equal(await shellCount(owner), 0)
 })
 
-// Whether a private url is kept says whether its name resolves, so lookups are an oracle too.
-test('every lookup is charged to the account, and past its budget a url is dropped', async () => {
+// Past its budget a url is not resolved at all, and kept unprobed, which is what any name that is
+// not public gets: the budget caps the lookups and gives nothing away.
+test('every lookup is charged to the account, and past its budget a url is kept unprobed', async () => {
   const budgeted = 'resolve-budget-owner'
   writePreferences(budgeted, { enabled: true, excludedDomains: [] })
 
   let lookups = 0
-  const privateEverywhere = async (): Promise<AddressClass> => {
+  const privateEverywhere = async (): Promise<ReadonlyArray<string>> => {
     lookups += 1
-    return 'private'
+    return ['10.0.0.1']
   }
 
-  for (let batch = 0; batch < 4; batch += 1) {
+  for (let batch = 0; batch < 3; batch += 1) {
     const visits = Array.from({ length: 20 }, (_, index) => ({
       url: `http://host-${batch}-${index}.internal/`,
+      at: new Date(Date.now() - 60_000).toISOString(),
     }))
     await ingestVisits(
       budgeted,
       { source: 'diele', visits },
-      { classify: privateEverywhere, exists },
+      { resolve: privateEverywhere, exists },
     )
   }
 
+  await ingestVisits(
+    budgeted,
+    { source: 'diele', visits: [{ url: 'https://public-after-budget.example/' }] },
+    { resolve: async () => [PUBLIC], exists },
+  )
+
   assert.equal(lookups, 60)
-  assert.equal(listEntries(budgeted).length, 5)
   assert.deepEqual(probed, [])
+  assert.ok(
+    listEntries(budgeted).some((entry) => entry.url === 'https://public-after-budget.example/'),
+  )
 })
 
 test('an account may have two batches in flight and no more', async () => {
   const { startIngest, whenIngested, MAX_IN_FLIGHT } = await import('#history/ingest.js')
   const held: Array<() => void> = []
-  const hold = (): Promise<AddressClass> =>
-    new Promise((resolve) => {
-      held.push(() => resolve('public'))
+  const hold = (): Promise<ReadonlyArray<string>> =>
+    new Promise((answer) => {
+      held.push(() => answer([PUBLIC]))
     })
   const batch: ApiHistoryVisits = { source: 'diele', visits: [{ url: 'https://held.example/' }] }
 
   assert.equal(MAX_IN_FLIGHT, 2)
-  assert.equal(startIngest(owner, batch, { classify: hold, exists }), true)
-  assert.equal(startIngest(owner, batch, { classify: hold, exists }), true)
-  assert.equal(startIngest(owner, batch, { classify: hold, exists }), false)
-  assert.equal(startIngest('someone-else-entirely', batch, { classify: hold, exists }), true)
+  assert.equal(startIngest(owner, batch, { resolve: hold, exists }), true)
+  assert.equal(startIngest(owner, batch, { resolve: hold, exists }), true)
+  assert.equal(startIngest(owner, batch, { resolve: hold, exists }), false)
+  assert.equal(startIngest('someone-else-entirely', batch, { resolve: hold, exists }), true)
 
-  // Released as they arrive: only two lookups run at once, so the third waits for one of them.
+  // Released as they arrive, whichever lookups the limiter has started.
   let settled = false
   void whenIngested().then(() => {
     settled = true
@@ -518,6 +594,73 @@ test('an account may have two batches in flight and no more', async () => {
     await new Promise((resolve) => setImmediate(resolve))
   }
 
-  assert.equal(startIngest(owner, batch, { classify, exists }), true)
+  assert.equal(startIngest(owner, batch, { resolve, exists }), true)
+  await whenIngested()
+})
+
+// A page script can post as the extension, so the server holds a forged batch to the same rule.
+test('a title giving away the stripped query or fragment is dropped, the visit kept', async () => {
+  await ingest({
+    source: 'extension',
+    visits: [
+      {
+        url: 'https://shop.example/find?q=embarrassing+thing',
+        title: 'Embarrassing Thing - Search',
+      },
+      { url: 'https://docs.example/guide?lang=en', title: 'Installation guide' },
+    ],
+  })
+
+  const leaked = entryAt('https://shop.example/find')
+  assert.equal(leaked?.visits, 1)
+  assert.equal(leaked?.title, undefined)
+  assert.equal(entryAt('https://docs.example/guide')?.title, 'Installation guide')
+})
+
+// With both sources on, one Go to is reported by the portal as it opens and by the extension once
+// it has loaded; it is one visit.
+test('the same load reported by both sources counts once and keeps the extension title', async () => {
+  const start = Date.now() - 10 * 60_000
+  const at = (seconds: number): string => new Date(start + seconds * 1000).toISOString()
+  real.add('https://paired.example/page')
+
+  await ingest({ source: 'diele', visits: [{ url: 'https://paired.example/page', at: at(0) }] })
+  await ingest({
+    source: 'extension',
+    visits: [{ url: 'https://paired.example/page', title: 'Paired page', at: at(2) }],
+  })
+
+  assert.equal(entryAt('https://paired.example/page')?.visits, 1)
+  assert.equal(entryAt('https://paired.example/page')?.title, 'Paired page')
+
+  // Paired once, the next report counts again, from either source.
+  await ingest({
+    source: 'extension',
+    visits: [{ url: 'https://paired.example/page', at: at(20) }],
+  })
+  assert.equal(entryAt('https://paired.example/page')?.visits, 2)
+
+  // The same source twice is two visits, and so is the other source past the window.
+  await ingest({
+    source: 'extension',
+    visits: [{ url: 'https://paired.example/page', at: at(30) }],
+  })
+  await ingest({ source: 'diele', visits: [{ url: 'https://paired.example/page', at: at(200) }] })
+  assert.equal(entryAt('https://paired.example/page')?.visits, 4)
+})
+
+test('the extension may post a bounded number of visits per window, then gets refused', async () => {
+  const { startIngest, whenIngested } = await import('#history/ingest.js')
+  const visits = Array.from({ length: 200 }, () => ({ url: 'https://budget.example/' }))
+  const batch: ApiHistoryVisits = { source: 'extension', visits }
+
+  for (let round = 0; round < 10; round += 1) {
+    assert.equal(startIngest(owner, batch, { resolve, exists }), true, String(round))
+    await whenIngested()
+  }
+
+  assert.equal(startIngest(owner, batch, { resolve, exists }), false)
+  assert.equal(startIngest(owner, { source: 'diele', visits: [] }, { resolve, exists }), true)
+  assert.equal(startIngest('another-poster', batch, { resolve, exists }), true)
   await whenIngested()
 })

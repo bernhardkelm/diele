@@ -432,6 +432,70 @@ describe('what the panel writes', () => {
   })
 })
 
+// A pointer focuses the button it presses, so the button has to survive arming for the second
+// press to land on it.
+describe('deleting a row with the pointer', () => {
+  /**
+   * Presses the first card's delete button the way a pointer does: the press focuses the button,
+   * then clicks it. Looked up afresh each time, the way a second click lands on whatever is drawn
+   * there by then.
+   * @param {VueWrapper} wrapper - The mounted panel
+   * @returns {Promise<void>}
+   */
+  async function clickDelete(wrapper: VueWrapper): Promise<void> {
+    const button = wrapper
+      .findAllComponents(AdminEntryRow)[0]!
+      .find<HTMLButtonElement>('.actions__item--danger')
+    expect(button.exists()).toBe(true)
+
+    button.element.focus()
+    await button.trigger('click')
+    await nextTick()
+  }
+
+  const deletes = (): ReadonlyArray<string> =>
+    calls.filter((call) => call.method === 'DELETE').map((call) => call.url)
+
+  it('arms on the first click, asking again on the button it pressed', async () => {
+    const wrapper = await open()
+    await expand(wrapper, 'cards')
+
+    await clickDelete(wrapper)
+
+    const button = wrapper.findAllComponents(AdminEntryRow)[0]!.find('.actions__item--danger')
+    expect(button.text()).toBe('press again to delete')
+    expect(button.attributes('aria-label')).toBe('Press again to delete Grafana')
+    expect(document.activeElement).toBe(button.element)
+    expect(wrapper.find('.entry__confirm').attributes('role')).toBe('status')
+    expect(deletes()).toEqual([])
+  })
+
+  it('deletes on the second click, once', async () => {
+    const wrapper = await open()
+    await expand(wrapper, 'cards')
+
+    await clickDelete(wrapper)
+    await clickDelete(wrapper)
+
+    await vi.waitFor(() => expect(deletes()).toEqual(['/api/admin/links/card/1']))
+  })
+
+  it('disarms once focus moves somewhere else', async () => {
+    const wrapper = await open()
+    await expand(wrapper, 'cards')
+
+    await clickDelete(wrapper)
+    wrapper.find<HTMLInputElement>('.launcher__input').element.focus()
+    await nextTick()
+
+    expect(wrapper.find('.entry__confirm').exists()).toBe(false)
+
+    await clickDelete(wrapper)
+
+    expect(deletes()).toEqual([])
+  })
+})
+
 describe('adding and editing a row', () => {
   /**
    * Opens the blank form under an expanded feature.

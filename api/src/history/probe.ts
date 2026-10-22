@@ -1,8 +1,8 @@
-import { lookup as dnsLookup, type LookupAddress } from 'node:dns'
 import { request as httpRequest } from 'node:http'
 import { request as httpsRequest } from 'node:https'
-import type { LookupFunction } from 'node:net'
-import { type AddressClass, classifyAddress, classifyHostname } from './addresses.js'
+import { isIP, type LookupFunction } from 'node:net'
+import { type AddressClass, classifyAddress } from './addresses.js'
+import { literalAddress } from './resolve.js'
 
 /** Long enough for a service that is thinking, the same wait the liveness probe gives one. */
 const PROBE_TIMEOUT_MS = 5_000
@@ -18,48 +18,39 @@ export type AddressPolicy = (address: AddressClass) => boolean
 export const publicOnly: AddressPolicy = (address) => address === 'public'
 
 /**
- * Builds a resolver for the connection itself that refuses an address the policy does not allow.
- * The check sits at connect time because that is the resolution the request actually uses: one
- * made earlier can be answered differently a moment later, which is all a rebinding attack is.
- * @param {AddressPolicy} allow - Which addresses may be reached
+ * Builds a `lookup` for the connection that answers with an address already vetted and resolves
+ * nothing. The socket then connects where the check said it may, whatever the name would answer a
+ * moment later, which is all DNS rebinding is; and no `getaddrinfo` runs on libuv's thread pool.
+ * @param {string} address - The vetted address, without brackets
  * @returns {LookupFunction} - A `lookup` for `http.request`
  */
-export function guardedLookup(allow: AddressPolicy): LookupFunction {
-  return (hostname, options, callback) => {
-    dnsLookup(hostname, { ...options, all: true }, (error, addresses: LookupAddress[]) => {
-      if (error) {
-        callback(error, '', 0)
-        return
-      }
+export function pinnedLookup(address: string): LookupFunction {
+  const family = isIP(address)
 
-      const allowed =
-        addresses.length > 0 && addresses.every((entry) => allow(classifyAddress(entry.address)))
-      const first = addresses[0]
+  return (_hostname, options, callback) => {
+    if (options.all) {
+      callback(null, [{ address, family }])
+      return
+    }
 
-      if (!allowed || !first) {
-        callback(new Error('address refused'), '', 0)
-        return
-      }
-
-      if (options.all) {
-        callback(null, addresses)
-        return
-      }
-
-      callback(null, first.address, first.family)
-    })
+    callback(null, address, family)
   }
 }
 
 /**
- * Sends one request and reads its status, following nothing.
+ * Sends one request to the pinned address and reads its status, following nothing. The url keeps
+ * its hostname, so the `Host` header and the TLS server name are the site's and virtual hosting
+ * and certificate checks work as they would for a browser.
  * @param {URL} target - Page to ask about
  * @param {'HEAD' | 'GET'} method - How to ask
- * @param {AddressPolicy} allow - Which addresses may be reached
+ * @param {string} address - Where to connect
  * @returns {Promise<number>} - The status it answered with
  */
-function statusOf(target: URL, method: 'HEAD' | 'GET', allow: AddressPolicy): Promise<number> {
-  const request = target.protocol === 'https:' ? httpsRequest : httpRequest
+function statusOf(target: URL, method: 'HEAD' | 'GET', address: string): Promise<number> {
+  const secure = target.protocol === 'https:'
+  const request = secure ? httpsRequest : httpRequest
+  const hostname = target.hostname.replace(/\.+$/, '')
+  const named = literalAddress(hostname) === undefined
 
   return new Promise<number>((resolve, reject) => {
     const outgoing = request(
@@ -67,7 +58,9 @@ function statusOf(target: URL, method: 'HEAD' | 'GET', allow: AddressPolicy): Pr
       {
         method,
         agent: false,
-        lookup: guardedLookup(allow),
+        lookup: pinnedLookup(address),
+        // An ip literal is no server name, and node warns when one is passed as such.
+        ...(secure && named ? { servername: hostname } : {}),
         signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
         headers: { 'user-agent': 'diele', accept: '*/*' },
       },
@@ -86,27 +79,34 @@ function statusOf(target: URL, method: 'HEAD' | 'GET', allow: AddressPolicy): Pr
 /**
  * Asks whether a page exists, which is a looser question than whether it is up: any answer but
  * 404 and 410 says the address is real. A redirect, a 401 and a 403 all count, because a login
- * wall in front of a real page is the ordinary case. No answer at all, a refused connection, a
- * name that does not resolve, an address the policy refuses or a timeout, says it is not.
+ * wall in front of a real page is the ordinary case. No answer at all, a refused connection, an
+ * address the policy refuses or a timeout, says it is not.
  *
- * HEAD first, since only the status is wanted, and GET where a server refuses HEAD. Errors are
- * swallowed and nothing is logged: the url is the visitor's, and a log line would keep it.
+ * HEAD first, since only the status is wanted, and GET where a server refuses HEAD. Both go to
+ * the address given, never to a second resolution. Errors are swallowed and nothing is logged:
+ * the url is the visitor's, and a log line would keep it.
  * @param {string} url - Page to ask about, in stored form, so no query or credentials leave here
+ * @param {string} address - The address the host was vetted at, which the request is pinned to
  * @param {AddressPolicy} allow - Which addresses may be reached
  * @returns {Promise<boolean>} - True when something answered for it
  */
-export async function pageExists(url: string, allow: AddressPolicy = publicOnly): Promise<boolean> {
+export async function pageExists(
+  url: string,
+  address: string,
+  allow: AddressPolicy = publicOnly,
+): Promise<boolean> {
   try {
     const target = new URL(url)
-    // An ip literal is never resolved, so the connect-time check never sees it.
-    const byName = classifyHostname(target.hostname.replace(/\.+$/, ''))
-    if (byName && !allow(byName)) {
+    // A literal host is connected to as written, never through the lookup, so it is the address.
+    const literal = literalAddress(target.hostname.replace(/\.+$/, ''))
+
+    if (!allow(classifyAddress(address)) || (literal !== undefined && literal !== address)) {
       return false
     }
 
-    let status = await statusOf(target, 'HEAD', allow)
+    let status = await statusOf(target, 'HEAD', address)
     if (status === 405 || status === 501) {
-      status = await statusOf(target, 'GET', allow)
+      status = await statusOf(target, 'GET', address)
     }
 
     return status !== 404 && status !== 410

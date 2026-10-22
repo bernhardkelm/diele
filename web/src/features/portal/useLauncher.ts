@@ -84,10 +84,11 @@ interface TileGrid {
 
 export interface LauncherOptions<T> {
   /**
-   * Filters and orders the fixed targets for a term. Whatever it returns first is what Enter
-   * opens, so a ranking one belongs here. Defaults to a plain substring filter.
+   * Filters and orders the fixed targets for a term, placing the ones `dynamicTargets` made up
+   * among them. Whatever it returns first is what Enter opens, so a ranking one belongs here.
+   * Defaults to a plain substring filter behind the made-up targets.
    */
-  match?: (targets: ReadonlyArray<T>, term: string) => ReadonlyArray<T>
+  match?: (targets: ReadonlyArray<T>, term: string, leading: ReadonlyArray<T>) => ReadonlyArray<T>
   /** Called with the target a launch opened, before the page navigates away */
   onLaunch?: (target: T) => void
   /** Actions a target offers, default first; the left and right keys move between them */
@@ -98,8 +99,8 @@ export interface LauncherOptions<T> {
   enabled?: MaybeRefOrGetter<boolean>
   /**
    * Targets derived from the term itself rather than filtered out of the fixed list, such
-   * as "go to this url". They lead the matches, because a term that produced one is a
-   * stronger signal than anything the term merely matched.
+   * as "go to this url". They lead the matches unless `match` places them, because a term that
+   * produced one is a stronger signal than anything the term merely matched.
    */
   dynamicTargets?: (term: string) => ReadonlyArray<T>
   /** Targets rendered as tiles, which the arrows walk as a grid rather than as a list */
@@ -162,9 +163,11 @@ export function useLauncher<T extends LaunchTarget>(
       return all.filter((target) => !target.searchOnly)
     }
 
-    const found = (options.match ?? substringMatch)(all, term)
+    const leading = options.dynamicTargets?.(term) ?? []
 
-    return [...(options.dynamicTargets?.(term) ?? []), ...found]
+    return options.match
+      ? options.match(all, term, leading)
+      : [...leading, ...substringMatch(all, term)]
   })
 
   // -1 is what findIndex returns for a target that is no longer among the matches, which is

@@ -1,5 +1,7 @@
 import type { ApiHistoryState, HistorySource } from '@diele/common'
 import { isEnabled } from '#settings/toggles.js'
+import { accountTag } from './account.js'
+import { countEntries } from './entries.js'
 import { readPreferences } from './preferences.js'
 
 /** The admin switch each source is held under, beneath the feature's own. */
@@ -27,8 +29,8 @@ export function isSourceOn(source: HistorySource): boolean {
 }
 
 /**
- * Describes what the portal should show an account: what the instance offers and what the
- * account chose.
+ * Describes what the portal should show an account: what the instance offers, what the account
+ * chose, how much it keeps, and the tag its history is known by once it has a key.
  * @param {string | undefined} owner - The account's history key, undefined when it has none
  * @returns {ApiHistoryState} - The state, always served
  */
@@ -40,6 +42,8 @@ export function readState(owner: string | undefined): ApiHistoryState {
     sources: { diele: isSourceOn('diele'), extension: isSourceOn('extension') },
     enabled: preferences.enabled,
     excludedDomains: preferences.excludedDomains,
+    kept: countEntries(owner),
+    ...(owner === undefined ? {} : { account: accountTag(owner) }),
   }
 }
 

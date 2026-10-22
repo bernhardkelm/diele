@@ -97,7 +97,7 @@ describe('what the launcher matches', () => {
     result.query.value = 'x'
     await nextTick()
 
-    expect(match).toHaveBeenCalledWith([target('a')], 'x')
+    expect(match).toHaveBeenCalledWith([target('a')], 'x', [])
     expect(result.matches.value.map((t) => t.ref)).toEqual(['ranked'])
     wrapper.unmount()
   })

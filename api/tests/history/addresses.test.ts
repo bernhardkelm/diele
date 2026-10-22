@@ -5,9 +5,8 @@ import {
   classifyHostname,
   embeddedIpv4,
   isUnreachable,
-  strictestClass,
 } from '#history/addresses.js'
-import { classifyHost } from '#history/resolve.js'
+import { literalAddress, publicAddress, resolveAll } from '#history/resolve.js'
 
 test('each range is classified where it leads', () => {
   const cases: ReadonlyArray<readonly [string, string]> = [
@@ -102,12 +101,10 @@ test('the dropped classes are told apart from the kept ones', () => {
   assert.equal(isUnreachable('private'), false)
   assert.equal(isUnreachable('public'), false)
   assert.equal(isUnreachable(undefined), false)
-  assert.equal(strictestClass(['public', 'reserved']), 'reserved')
 })
 
 test('something that is not an address counts as the safe end', () => {
   assert.equal(classifyAddress('not-an-address'), 'loopback')
-  assert.equal(strictestClass([]), 'loopback')
 })
 
 test('the spellings that reach loopback by name alone are caught before resolving', () => {
@@ -126,29 +123,25 @@ test('the spellings that reach loopback by name alone are caught before resolvin
   assert.equal(classifyHostname('grafana.example'), undefined)
 })
 
-test('a name is judged on where it resolves, as its most sensitive address', async () => {
-  const resolveTo =
-    (addresses: ReadonlyArray<string>) => async (): Promise<ReadonlyArray<string>> =>
-      addresses
-
-  assert.equal(await classifyHost('127.0.0.1.nip.io', resolveTo(['127.0.0.1'])), 'loopback')
-  assert.equal(await classifyHost('nas.example', resolveTo(['192.168.1.5'])), 'private')
-  assert.equal(await classifyHost('mixed.example', resolveTo(['8.8.8.8', '10.0.0.1'])), 'private')
-  assert.equal(
-    await classifyHost('meta.example', resolveTo(['8.8.8.8', '169.254.169.254'])),
-    'linkLocal',
-  )
-  assert.equal(await classifyHost('public.example', resolveTo(['8.8.8.8'])), 'public')
-  assert.equal(await classifyHost('empty.example', resolveTo([])), undefined)
-  assert.equal(
-    await classifyHost('gone.example', async () => {
-      throw new Error('ENOTFOUND')
-    }),
-    undefined,
-  )
+// One address that is not public among them, or none at all, and nothing is requested.
+test('only a resolution in which every address is public gives one to probe', () => {
+  assert.equal(publicAddress(['93.184.216.34', '2606:2800:220:1::1']), '93.184.216.34')
+  assert.equal(publicAddress(['127.0.0.1']), undefined)
+  assert.equal(publicAddress(['192.168.1.5']), undefined)
+  assert.equal(publicAddress(['8.8.8.8', '10.0.0.1']), undefined)
+  assert.equal(publicAddress(['8.8.8.8', '169.254.169.254']), undefined)
+  assert.equal(publicAddress(['8.8.8.8', '::ffff:127.0.0.1']), undefined)
+  assert.equal(publicAddress([]), undefined)
+  assert.equal(publicAddress(undefined), undefined)
 })
 
-test('the system resolver is what is asked by default', async () => {
-  assert.equal(await classifyHost('localhost'), 'loopback')
-  assert.equal(await classifyHost('does-not-resolve.invalid'), undefined)
+test('an ip literal is read as written, a name is not an address', () => {
+  assert.equal(literalAddress('93.184.216.34'), '93.184.216.34')
+  assert.equal(literalAddress('[2606:2800:220:1::1]'), '2606:2800:220:1::1')
+  assert.equal(literalAddress('example.com'), undefined)
+})
+
+// c-ares asks the nameservers only, so a name nobody serves answers nothing rather than throwing.
+test('a name that does not resolve has no addresses', async () => {
+  assert.deepEqual(await resolveAll('does-not-resolve.invalid'), [])
 })

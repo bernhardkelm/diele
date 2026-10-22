@@ -87,21 +87,25 @@ function onKeydown(event: KeyboardEvent): void {
     <ScrollingText class="item__detail" :text="item.detail" :focused="focused" />
 
     <span class="item__trail row-trail">
-      <span v-if="armed" class="item__confirm" role="status">press again to delete</span>
+      <span v-if="item.note && !armed" class="item__note" aria-hidden="true">{{ item.note }}</span>
 
-      <template v-else>
-        <span v-if="item.note" class="item__note" aria-hidden="true">{{ item.note }}</span>
-        <button
-          class="item__remove"
-          type="button"
-          tabindex="-1"
-          :disabled="busy"
-          :aria-label="item.removeTitle"
-          @click.stop="remove"
-        >
-          del
-        </button>
-      </template>
+      <!-- Kept mounted while armed, the way AdminIconField keeps its delete button: a pointer
+           focuses the button it presses, and swapping it out takes that focus with it, which
+           fires the focusout that disarms the row before the second press can land. -->
+      <button
+        class="item__remove"
+        :class="{ 'item__remove--armed': armed }"
+        type="button"
+        tabindex="-1"
+        :disabled="busy"
+        :aria-label="armed ? `Press again: ${item.removeTitle}` : item.removeTitle"
+        @click.stop="remove"
+      >
+        {{ armed ? 'press again to delete' : 'del' }}
+      </button>
+
+      <!-- see AdminIconField .icon__confirm: announced as well as drawn -->
+      <span v-if="armed" class="item__confirm" role="status">press again to delete</span>
     </span>
   </li>
 </template>
@@ -123,8 +127,15 @@ function onKeydown(event: KeyboardEvent): void {
   min-width: 0;
 }
 
+/* see StatusDot .status__label: carried for assistive technology only, the button beside it
+   already says the same thing on screen */
 .item__confirm {
-  color: var(--diele-status-down);
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 /* see AdminRowActions: revealed rather than inserted, so the trail keeps its width */
@@ -142,6 +153,13 @@ function onKeydown(event: KeyboardEvent): void {
 
 .item__remove:hover:not(:disabled) {
   color: var(--diele-status-down);
+}
+
+/* see AdminEntryRow .entry__confirm: the question a destructive press asks takes the colour of
+   deleting, and stays on screen without a hover to reveal it */
+.item__remove--armed {
+  color: var(--diele-status-down);
+  opacity: 1;
 }
 
 @media (--diele-compact) {

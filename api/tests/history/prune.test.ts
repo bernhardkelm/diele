@@ -23,7 +23,7 @@ let readPreferences: typeof import('#history/preferences.js').readPreferences
  */
 function visit(url: string, visits: number, daysAgo: number, key = owner): void {
   for (let index = 0; index < visits; index += 1) {
-    recordVisit(key, { url, at: new Date(Date.now() - daysAgo * DAY).toISOString() })
+    recordVisit(key, { url, at: new Date(Date.now() - daysAgo * DAY).toISOString() }, 'extension')
   }
 }
 
@@ -66,6 +66,7 @@ before(async () => {
 
 beforeEach(() => {
   clearEntries(owner)
+  writePreferences(owner, { enabled: true, excludedDomains: [] })
 })
 
 after(async () => {
@@ -95,6 +96,7 @@ test('beyond the cap, the least recently visited go first', () => {
 
 test('the cap is per account', () => {
   const other = 'other-account-key'
+  writePreferences(other, { enabled: true, excludedDomains: [] })
   visit('https://mine.example/', 2, 2)
 
   for (const name of ['a', 'b', 'c']) {
@@ -156,4 +158,111 @@ test('beyond the shell cap, the oldest shells go first', async () => {
     left.map((row) => row.url),
     ['https://third.example/watch'],
   )
+})
+
+// Switching off never deletes, and an account opting out is switching off for itself.
+test('an account that opted out keeps what it has past the one-off window and the cap', () => {
+  writePreferences(owner, { enabled: false, excludedDomains: [] })
+  visit('https://once-old.example/', 1, 30)
+  for (const name of ['a', 'b', 'c', 'd']) {
+    visit(`https://${name}.example/`, 2, 1)
+  }
+
+  pruneHistory()
+  assert.equal(urls().length, 5)
+
+  writePreferences(owner, { enabled: true, excludedDomains: [] })
+  pruneHistory()
+  assert.equal(urls().length, 3)
+})
+
+/**
+ * Reads how many frames the write-ahead log holds.
+ * @returns {Promise<number>} - Frames in the log, 0 once it was truncated
+ */
+async function walFrames(): Promise<number> {
+  const { getHistoryDb } = await import('#history/db.js')
+  const [row] = getHistoryDb().pragma('wal_checkpoint(PASSIVE)') as Array<{ log: number }>
+
+  return row?.log ?? 0
+}
+
+// Until the log is folded in and truncated, it still holds the rows the prune just removed.
+test('a prune that removed anything truncates the log', async () => {
+  visit('https://once-old.example/', 1, 30)
+  assert.ok((await walFrames()) > 0)
+
+  pruneHistory()
+
+  assert.deepEqual(urls(), [])
+  assert.equal(await walFrames(), 0)
+})
+
+/**
+ * Sets every account's history key in the main database, the way a restore would leave it.
+ * @param {string | null} key - Key to set, null for none
+ * @returns {Promise<Array<{ id: number; history_key: string | null }>>} - The keys as they were
+ */
+async function setAllKeys(
+  key: string | null,
+): Promise<Array<{ id: number; history_key: string | null }>> {
+  const { getDb } = await import('#db/index.js')
+  const before = getDb().prepare('SELECT id, history_key FROM users').all() as Array<{
+    id: number
+    history_key: string | null
+  }>
+
+  getDb().prepare('UPDATE users SET history_key = ?').run(key)
+  return before
+}
+
+/**
+ * Puts the keys back as they were.
+ * @param {Array<{ id: number; history_key: string | null }>} rows - What `setAllKeys` returned
+ * @returns {Promise<void>}
+ */
+async function restoreKeys(rows: Array<{ id: number; history_key: string | null }>): Promise<void> {
+  const { getDb } = await import('#db/index.js')
+  const update = getDb().prepare('UPDATE users SET history_key = ? WHERE id = ?')
+
+  for (const row of rows) {
+    update.run(row.history_key, row.id)
+  }
+}
+
+// A main database restored from before history, or the wrong one, would otherwise empty the file.
+test('the sweep is skipped, and said once, when no account holds a key at all', async (t) => {
+  const warn = t.mock.method(console, 'warn', () => undefined)
+  visit('https://mine.example/', 2, 1)
+  const saved = await setAllKeys(null)
+
+  pruneHistory()
+  pruneHistory()
+  await restoreKeys(saved)
+
+  assert.deepEqual(urls(), ['https://mine.example/'])
+  assert.equal(warn.mock.callCount(), 1)
+  assert.equal(String(warn.mock.calls[0]?.arguments[0]).includes(owner), false)
+
+  // A sweep that runs again rearms the message for the next time.
+  pruneHistory()
+  assert.equal(warn.mock.callCount(), 1)
+})
+
+test('the sweep is skipped when it would remove every owner there is', async (t) => {
+  const warn = t.mock.method(console, 'warn', () => undefined)
+  visit('https://mine.example/', 2, 1)
+  const saved = await setAllKeys('a-key-the-file-has-never-seen')
+
+  pruneHistory()
+  await restoreKeys(saved)
+
+  assert.deepEqual(urls(), ['https://mine.example/'])
+  assert.equal(warn.mock.callCount(), 1)
+
+  // With one owner held again, the ghosts go as before.
+  visit('https://ghost.example/', 2, 1, 'key-of-a-deleted-account')
+  pruneHistory()
+  assert.deepEqual(urls('key-of-a-deleted-account'), [])
+  assert.deepEqual(urls(), ['https://mine.example/'])
 })

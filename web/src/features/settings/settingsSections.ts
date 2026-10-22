@@ -1,5 +1,7 @@
 import type { ListAction } from '@/helpers/listActions'
-import { scoreFields } from '@/helpers/scoreFields'
+import { dropGuesses } from '@/helpers/dropGuesses'
+import { MATCH_TIERS, type MatchTier } from '@/helpers/matchTiers'
+import { matchFields } from '@/helpers/scoreFields'
 import type { SearchField } from '@/helpers/searchFields'
 import { tokenize, type SearchToken } from '@/helpers/searchTokens'
 
@@ -60,8 +62,25 @@ export interface SettingsField {
   readonly submit: (value: string) => Promise<string | undefined>
 }
 
-/** A row after a section's options: one that adds, one that is removed on its own, or one that acts. */
-export type SettingsRow = SettingsField | SettingsItem | ListAction
+/**
+ * Items listed a page at a time behind a row that lists the next page, for a list that can run to
+ * thousands. A term searches every item, not only the listed ones, and pages what it found.
+ */
+export interface SettingsPagedItems {
+  readonly kind: 'paged'
+  readonly id: string
+  readonly items: ReadonlyArray<SettingsItem>
+  /** How many of the items are listed, the rest waiting behind the row `more` builds */
+  readonly shown: number
+  /** Builds the row listing the next page, from how many items are not listed yet */
+  readonly more: (hidden: number) => ListAction
+}
+
+/**
+ * A row after a section's options: one that adds, one that is removed on its own, one that acts,
+ * or a long run of removable ones listed a page at a time.
+ */
+export type SettingsRow = SettingsField | SettingsItem | ListAction | SettingsPagedItems
 
 /**
  * One group of preferences, which expands in place the way an admin feature does. Most sections
@@ -111,9 +130,42 @@ function optionFields(option: SettingsOption): ReadonlyArray<SearchField> {
 }
 
 /**
- * Filters the rows a term addresses, in their declared order. Only the items are narrowed: the
- * field and the actions act on the section as a whole, the way its restore row does, so a term
- * looking for one item must not take away the row that adds another.
+ * Returns the texts an item is searched over.
+ * @param {SettingsItem} item - Item to describe
+ * @returns {ReadonlyArray<SearchField>} - Weighted fields, the label first
+ */
+function itemFields(item: SettingsItem): ReadonlyArray<SearchField> {
+  return [
+    { text: item.label, weight: 1 },
+    { text: item.detail, weight: 0.5 },
+  ]
+}
+
+/**
+ * Filters rows down to the ones a term addresses, in their declared order, leaving out the ones
+ * only a typo found once another matched literally.
+ * @param {ReadonlyArray<T>} rows - Rows to filter
+ * @param {(row: T) => ReadonlyArray<SearchField>} fieldsOf - Weighted texts a row is searched over
+ * @param {ReadonlyArray<SearchToken>} tokens - Tokens the query split into
+ * @returns {ReadonlyArray<T>} - Matching rows, in declared order
+ */
+function matching<T>(
+  rows: ReadonlyArray<T>,
+  fieldsOf: (row: T) => ReadonlyArray<SearchField>,
+  tokens: ReadonlyArray<SearchToken>,
+): ReadonlyArray<T> {
+  const matched = rows.flatMap((row) => {
+    const match = matchFields(fieldsOf(row), tokens)
+    return match ? [{ row, tier: match.tier }] : []
+  })
+
+  return dropGuesses(matched).map((entry) => entry.row)
+}
+
+/**
+ * Filters the rows a term addresses, in their declared order. Only the items are narrowed, paged
+ * ones included: the field and the actions act on the section as a whole, the way its restore
+ * row does, so a term looking for one item must not take away the row that adds another.
  * @param {ReadonlyArray<SettingsRow>} rows - Rows after a section's options
  * @param {ReadonlyArray<SearchToken>} tokens - Tokens the query split into
  * @returns {ReadonlyArray<SettingsRow>} - Rows left standing, in section order
@@ -122,17 +174,18 @@ function filterRows(
   rows: ReadonlyArray<SettingsRow>,
   tokens: ReadonlyArray<SearchToken>,
 ): ReadonlyArray<SettingsRow> {
-  return rows.filter(
-    (row) =>
-      row.kind !== 'item' ||
-      scoreFields(
-        [
-          { text: row.label, weight: 1 },
-          { text: row.detail, weight: 0.5 },
-        ],
-        tokens,
-      ) !== undefined,
+  // every item of the section at once, so a literal hit on a loose row sets aside the guesses
+  // among the paged ones as well
+  const items = rows.flatMap((row) =>
+    row.kind === 'paged' ? row.items : row.kind === 'item' ? [row] : [],
   )
+  const kept = new Set(matching(items, itemFields, tokens))
+
+  return rows
+    .map((row) =>
+      row.kind === 'paged' ? { ...row, items: row.items.filter((item) => kept.has(item)) } : row,
+    )
+    .filter((row) => row.kind !== 'item' || kept.has(row))
 }
 
 /**
@@ -146,7 +199,7 @@ function filterOptions(
   options: ReadonlyArray<SettingsOption>,
   tokens: ReadonlyArray<SearchToken>,
 ): ReadonlyArray<SettingsOption> {
-  return options.filter((option) => scoreFields(optionFields(option), tokens) !== undefined)
+  return matching(options, optionFields, tokens)
 }
 
 /**
@@ -185,13 +238,18 @@ export function searchSections(
     return sections
   }
 
-  const ranked: Array<{ section: SettingsSection; score: number; order: number }> = []
+  const ranked: Array<{
+    section: SettingsSection
+    score: number
+    tier: MatchTier | undefined
+    order: number
+  }> = []
 
   sections.forEach((section, order) => {
     const open = section.id === expanded
-    const score = scoreFields(sectionFields(section), tokens)
+    const match = matchFields(sectionFields(section), tokens)
 
-    if (score === undefined && !open) {
+    if (!match && !open) {
       return
     }
 
@@ -199,12 +257,14 @@ export function searchSections(
       section: open ? narrow(section, tokens) : section,
       // an open section that the term missed still leads, since what it holds is what the
       // term is narrowing
-      score: score ?? Number.POSITIVE_INFINITY,
+      score: match?.score ?? Number.POSITIVE_INFINITY,
+      // an open section is never dropped, though a literal hit on it still sets guesses aside
+      tier: open && match?.tier === MATCH_TIERS.TYPO ? undefined : match?.tier,
       order,
     })
   })
 
-  ranked.sort((a, b) => b.score - a.score || a.order - b.order)
-
-  return ranked.map((entry) => entry.section)
+  return [...dropGuesses(ranked)]
+    .sort((a, b) => b.score - a.score || a.order - b.order)
+    .map((entry) => entry.section)
 }

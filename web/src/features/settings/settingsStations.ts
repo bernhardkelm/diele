@@ -3,7 +3,7 @@ import type {
   SettingsField,
   SettingsItem,
   SettingsOption,
-  SettingsRow,
+  SettingsPagedItems,
   SettingsSection,
 } from '@/features/settings/settingsSections'
 
@@ -47,6 +47,8 @@ interface ActionStation {
   readonly nested: boolean
   /** Section it belongs to, so Escape from it lands on the row that opened it */
   readonly section?: SettingsSection
+  /** Whether running it lists more rows where it stands, so the caret moves onto the first of them */
+  readonly reveals?: boolean
 }
 
 /**
@@ -82,10 +84,13 @@ function optionKey(sectionId: string, optionId: string): string {
 /**
  * Builds the station one of a section's later rows occupies.
  * @param {SettingsSection} section - Section the row belongs to
- * @param {SettingsRow} row - Row being addressed
+ * @param {SettingsField | SettingsItem | ListAction} row - Row being addressed
  * @returns {SettingsStation} - Its station, keyed by its kind so two kinds may share an id
  */
-function rowStation(section: SettingsSection, row: SettingsRow): SettingsStation {
+function rowStation(
+  section: SettingsSection,
+  row: SettingsField | SettingsItem | ListAction,
+): SettingsStation {
   const key = `${row.kind}:${section.id}:${row.id}`
 
   if (row.kind === 'field') {
@@ -97,6 +102,40 @@ function rowStation(section: SettingsSection, row: SettingsRow): SettingsStation
   }
 
   return { kind: 'action', key, label: row.label, action: row, nested: true, section }
+}
+
+/**
+ * Builds the stations a run of paged items occupies: the listed ones, then the row listing the
+ * next page while any are left.
+ * @param {SettingsSection} section - Section the items belong to
+ * @param {SettingsPagedItems} paged - Items and how many of them are listed
+ * @returns {ReadonlyArray<SettingsStation>} - Their stations, in order
+ */
+function pagedStations(
+  section: SettingsSection,
+  paged: SettingsPagedItems,
+): ReadonlyArray<SettingsStation> {
+  const listed = paged.items.slice(0, paged.shown).map((item) => rowStation(section, item))
+  const hidden = paged.items.length - listed.length
+
+  if (hidden <= 0) {
+    return listed
+  }
+
+  const more = paged.more(hidden)
+
+  return [
+    ...listed,
+    {
+      kind: 'action',
+      key: `action:${section.id}:${more.id}`,
+      label: more.label,
+      action: more,
+      nested: true,
+      section,
+      reveals: true,
+    },
+  ]
 }
 
 /**
@@ -149,7 +188,11 @@ export function buildSettingsStations(
     }
 
     for (const row of section.rows ?? []) {
-      stations.push(rowStation(section, row))
+      if (row.kind === 'paged') {
+        stations.push(...pagedStations(section, row))
+      } else {
+        stations.push(rowStation(section, row))
+      }
     }
   }
 

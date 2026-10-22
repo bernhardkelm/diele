@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
 import { historySection, type HistoryControls } from '@/features/settings/historySection'
-import { searchSections, type SettingsItem } from '@/features/settings/settingsSections'
+import {
+  searchSections,
+  type SettingsItem,
+  type SettingsPagedItems,
+} from '@/features/settings/settingsSections'
 import { buildSettingsStations } from '@/features/settings/settingsStations'
 import type { ListAction } from '@/helpers/listActions'
 import type { ApiHistoryEntry } from '@diele/common'
@@ -32,9 +36,12 @@ function controls(overrides: Partial<HistoryControls> = {}): HistoryControls {
       sources: { diele: true, extension: false },
       enabled: true,
       excludedDomains: ['bank.example'],
+      kept: 2,
     },
     kept: [PAGE, UNTITLED],
     keptStatus: 'read',
+    shown: 100,
+    showMore: vi.fn(),
     setEnabled: vi.fn(),
     exclude: vi.fn(() => Promise.resolve(undefined)),
     include: vi.fn(() => Promise.resolve()),
@@ -54,12 +61,27 @@ function clearRow(given: HistoryControls): ListAction {
 }
 
 /**
- * Returns the item rows of a section.
+ * Returns the item rows of a section, the paged kept pages included.
  * @param {HistoryControls} given - Controls the section is built from
  * @returns {ReadonlyArray<SettingsItem>} - Its items, in order
  */
 function itemsOf(given: HistoryControls): ReadonlyArray<SettingsItem> {
-  return historySection(given).rows!.filter((row) => row.kind === 'item') as SettingsItem[]
+  return historySection(given).rows!.flatMap((row) => {
+    if (row.kind === 'paged') {
+      return row.items
+    }
+
+    return row.kind === 'item' ? [row] : []
+  })
+}
+
+/**
+ * Returns the paged run of kept pages of a section.
+ * @param {HistoryControls} given - Controls the section is built from
+ * @returns {SettingsPagedItems} - Its kept pages
+ */
+function pagesOf(given: HistoryControls): SettingsPagedItems {
+  return historySection(given).rows!.find((row) => row.kind === 'paged') as SettingsPagedItems
 }
 
 describe('historySection', () => {
@@ -73,9 +95,9 @@ describe('historySection', () => {
       'field:exclude',
       'item:domain:bank.example',
       'action:clear-history',
-      'item:page:1',
-      'item:page:2',
+      'paged:pages',
     ])
+    expect(pagesOf(controls()).items.map((item) => item.id)).toEqual(['page:1', 'page:2'])
   })
 
   it('flips the opt-in the way it stands', () => {
@@ -99,11 +121,21 @@ describe('historySection', () => {
     expect(itemsOf(off).filter((item) => item.id.startsWith('page:'))).toHaveLength(2)
   })
 
+  it('says while on where kept pages come from, which is the sources the portal accepts', () => {
+    const detailFor = (diele: boolean, extension: boolean): string | undefined =>
+      historySection(controls({ state: { ...controls().state, sources: { diele, extension } } }))
+        .options[0]!.detail
+
+    expect(detailFor(true, false)).toMatch(/^pages opened from the portal are kept/)
+    expect(detailFor(false, true)).toMatch(/^pages the diele extension sends/)
+    expect(detailFor(true, true)).toMatch(/portal, and those the diele extension sends/)
+    expect(detailFor(false, false)).toMatch(/accepts visits from nowhere yet/)
+  })
+
   it('says in the copy that excluding a domain forgets what is kept on it', () => {
     const field = historySection(controls()).rows![0]!
 
-    expect(field.kind).toBe('field')
-    expect(field.label).toBe('Exclude a domain')
+    expect(field).toMatchObject({ kind: 'field', label: 'Exclude a domain' })
     expect(field.kind === 'field' && field.detail).toMatch(/forgets what is already kept there/)
   })
 
@@ -172,6 +204,95 @@ describe('historySection', () => {
 
     expect(given.include).toHaveBeenCalledWith('bank.example')
   })
+  it('names in its description the sources the portal accepts', () => {
+    const describedFor = (diele: boolean, extension: boolean): string =>
+      historySection(controls({ state: { ...controls().state, sources: { diele, extension } } }))
+        .description
+
+    expect(describedFor(true, false)).toMatch(/^pages opened from the portal, kept/)
+    expect(describedFor(false, true)).toMatch(/^pages sent by the diele extension/)
+    expect(describedFor(true, true)).toMatch(
+      /opened from the portal or sent by the diele extension/,
+    )
+    expect(describedFor(false, false)).toMatch(/accepts them from nowhere yet/)
+  })
+
+  // The api still serves and deletes what was kept, so it stays reachable for forgetting.
+  describe('once the portal no longer offers history', () => {
+    const off = (): HistoryControls =>
+      controls({ state: { ...controls().state, available: false, enabled: true } })
+
+    it('holds only the clearing row and the kept pages', () => {
+      const section = historySection(off())
+
+      expect(section.options).toEqual([])
+      expect(section.rows!.map((row) => `${row.kind}:${row.id}`)).toEqual([
+        'action:clear-history',
+        'paged:pages',
+      ])
+      expect(section.trail).toBe('off')
+      expect(section.description).toMatch(/no longer keeps history/)
+    })
+
+    it('says the pages are still kept from before, whatever the opt-in said', () => {
+      expect(clearRow(off()).description).toBe('forgets the 2 pages still kept from before')
+    })
+  })
+
+  describe('a long history', () => {
+    const many: ApiHistoryEntry[] = Array.from({ length: 250 }, (_, index) => ({
+      ...PAGE,
+      id: index + 1,
+      url: `https://site${index + 1}.example/`,
+      title: `page ${index + 1}`,
+    }))
+
+    /**
+     * Returns the keys of the stations a section occupies while open.
+     * @param {HistoryControls} given - Controls the section is built from
+     * @param {string} [query] - Term typed into the filter bar
+     * @returns {ReadonlyArray<string>} - Station keys, in ring order
+     */
+    function keysOf(given: HistoryControls, query = ''): ReadonlyArray<string> {
+      const sections = searchSections([historySection(given)], query, 'history')
+
+      return buildSettingsStations(sections, 'history', []).map((station) => station.key)
+    }
+
+    it('lists the first page of them in the ring, then the row listing the next', () => {
+      const showMore = vi.fn()
+      const given = controls({ kept: many, showMore })
+      const stations = buildSettingsStations([historySection(given)], 'history', [])
+      const more = stations.at(-1)!
+
+      expect(keysOf(given).filter((key) => key.startsWith('item:history:page:'))).toHaveLength(100)
+      expect(more).toMatchObject({ kind: 'action', reveals: true })
+      expect(more.kind === 'action' && more.action).toMatchObject({
+        id: 'more-pages',
+        label: 'Show 100 more',
+        description: '150 older pages not listed yet',
+        trail: '150',
+      })
+
+      if (more.kind === 'action') {
+        more.action.run()
+      }
+
+      expect(showMore).toHaveBeenCalled()
+    })
+
+    it('lists no such row once every page is listed', () => {
+      const keys = keysOf(controls({ kept: many, shown: 300 }))
+
+      expect(keys.filter((key) => key.startsWith('item:history:page:'))).toHaveLength(250)
+      expect(keys).not.toContain('action:history:more-pages')
+    })
+
+    // The filter bar searches every kept page, not only the ones listed.
+    it('finds a page beyond the first hundred through a term', () => {
+      expect(keysOf(controls({ kept: many }), 'site240')).toContain('item:history:page:240')
+    })
+  })
 })
 
 describe('searching an open history section', () => {
@@ -180,7 +301,12 @@ describe('searching an open history section', () => {
   it('narrows the pages and domains, and keeps the field and the clearing row', () => {
     const [section] = searchSections([historySection(controls())], 'github', 'history')
 
-    expect(section!.rows!.map((row) => row.id)).toEqual(['exclude', 'clear-history', 'page:1'])
+    expect(section!.rows!.map((row) => row.id)).toEqual(['exclude', 'clear-history', 'pages'])
+    expect(
+      (section!.rows!.find((row) => row.kind === 'paged') as SettingsPagedItems).items.map(
+        (item) => item.id,
+      ),
+    ).toEqual(['page:1'])
   })
 
   it('finds the section itself by what it does', () => {

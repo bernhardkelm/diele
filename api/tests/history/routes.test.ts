@@ -80,9 +80,11 @@ test('a portal that never turned history on serves the state and creates no file
       sources: { diele: false, extension: false },
       enabled: false,
       excludedDomains: [],
+      kept: 0,
     },
     entries: [],
   })
+  assert.deepEqual(await api.get<ApiHistoryState>('/api/history/state'), payload.state)
   assert.deepEqual(await allEntries(), [])
   assert.equal(existsSync(historyDbPath), false)
 
@@ -92,7 +94,7 @@ test('a portal that never turned history on serves the state and creates no file
 
 // A copy in any cache outlives the delete that removed the entries from the database.
 test('nothing under the history may be stored by a cache', async () => {
-  for (const path of ['/api/history', '/api/history/entries']) {
+  for (const path of ['/api/history', '/api/history/state', '/api/history/entries']) {
     assert.equal((await api.request(path)).headers.get('cache-control'), 'no-store', path)
   }
 
@@ -153,6 +155,21 @@ test('a visit is refused until the feature, the source and the account all say y
   assert.equal(await postVisits({ ...batch, source: 'diele' }), 403)
 })
 
+// The extension tells accounts apart by it, so it has to be stable and give nothing away.
+test('the state alone carries what is kept and an opaque tag for the account', async () => {
+  const { readHistoryKey } = await import('#users/historyKey.js')
+  const key = readHistoryKey(userId) ?? ''
+  const state = await api.get<ApiHistoryState>('/api/history/state')
+  const { state: full } = await api.get<ApiHistory>('/api/history')
+
+  assert.deepEqual(state, full)
+  assert.equal(state.kept, (await allEntries()).length)
+  assert.match(state.account ?? '', /^[\w-]{22}$/)
+  assert.notEqual(state.account, key)
+  assert.equal(JSON.stringify(state).includes(key), false)
+  assert.equal((await api.get<ApiHistoryState>('/api/history/state')).account, state.account)
+})
+
 test('what is kept is the stripped url, and what is not worth keeping is dropped', async () => {
   await api.request('/api/history/entries', { method: 'DELETE' })
 
@@ -193,9 +210,9 @@ test('a batch past what the account may have in flight is answered 429', async (
   const { readHistoryKey } = await import('#users/historyKey.js')
   const owner = readHistoryKey(userId) ?? ''
   const held: Array<() => void> = []
-  const hold = (): Promise<'public'> =>
+  const hold = (): Promise<ReadonlyArray<string>> =>
     new Promise((resolve) => {
-      held.push(() => resolve('public'))
+      held.push(() => resolve(['93.184.216.34']))
     })
   const batch: ApiHistoryVisits = { source: 'extension', visits: [] }
 
@@ -203,7 +220,7 @@ test('a batch past what the account may have in flight is answered 429', async (
     startIngest(
       owner,
       { source: 'diele', visits: [{ url: 'https://h1.example/' }] },
-      { classify: hold },
+      { resolve: hold },
     ),
     true,
   )
@@ -211,7 +228,7 @@ test('a batch past what the account may have in flight is answered 429', async (
     startIngest(
       owner,
       { source: 'diele', visits: [{ url: 'https://h2.example/' }] },
-      { classify: hold },
+      { resolve: hold },
     ),
     true,
   )
@@ -279,6 +296,16 @@ test('the portal is not offered a page it already shows as a card or saved site'
 
   assert.deepEqual(served, ['https://grafana.example/d/abc/overview'])
   assert.equal((await allEntries()).length, 3)
+
+  // A section switched off offers nothing, so its pages are history like any other.
+  await setSwitch('sites', false)
+  const unshadowed = (await api.get<ApiHistory>('/api/history')).entries.map((entry) => entry.url)
+  await setSwitch('sites', true)
+
+  assert.deepEqual(unshadowed.sort(), [
+    'https://chat.example/',
+    'https://grafana.example/d/abc/overview',
+  ])
 })
 
 // Switching off stops recording and serving, and nothing else.
@@ -365,7 +392,11 @@ test('one entry can be deleted, and only one the account holds', async () => {
   // Someone else's entry answers exactly like one that does not exist, and stays.
   const { recordVisit } = await import('#history/record.js')
   const { listEntries } = await import('#history/entries.js')
-  recordVisit('someone-else', { url: 'https://theirs.example/', at: new Date().toISOString() })
+  recordVisit(
+    'someone-else',
+    { url: 'https://theirs.example/', at: new Date().toISOString() },
+    'extension',
+  )
   const [theirs] = listEntries('someone-else')
   assert.ok(theirs)
 
@@ -376,6 +407,40 @@ test('one entry can be deleted, and only one the account holds', async () => {
 
   const malformed = await api.request('/api/history/entries/abc', { method: 'DELETE' })
   assert.equal(malformed.status, 400)
+})
+
+// A shell only ever shows up as its origin, so deleting the origin is how it is forgotten.
+test('deleting an origin entry forgets the shells folded into it, and only those', async () => {
+  const { getHistoryDb } = await import('#history/db.js')
+  const { readHistoryKey } = await import('#users/historyKey.js')
+  const owner = readHistoryKey(userId) ?? ''
+  const shells = (): string[] =>
+    (
+      getHistoryDb()
+        .prepare('SELECT url FROM history_shells WHERE owner = ? ORDER BY url')
+        .all(owner) as Array<{ url: string }>
+    ).map((row) => row.url)
+
+  for (const site of ['tube.example', 'other-tube.example']) {
+    for (const [index, title] of ['One', 'Two', 'Three'].entries()) {
+      await postVisits({
+        source: 'extension',
+        visits: [{ url: `https://${site}/watch?v=${index}`, title }],
+      })
+    }
+  }
+
+  assert.deepEqual(shells(), ['https://other-tube.example/watch', 'https://tube.example/watch'])
+  const origin = (await allEntries()).find((entry) => entry.url === 'https://tube.example/')
+  assert.ok(origin)
+
+  const removed = await api.request(`/api/history/entries/${origin.id}`, { method: 'DELETE' })
+  assert.equal(removed.status, 200)
+  assert.deepEqual(shells(), ['https://other-tube.example/watch'])
+
+  // No longer a shell, the page is an entry of its own again.
+  await postVisits({ source: 'extension', visits: [{ url: 'https://tube.example/watch?v=9' }] })
+  assert.ok((await allEntries()).some((entry) => entry.url === 'https://tube.example/watch'))
 })
 
 test('clearing removes every entry and keeps the preferences', async () => {

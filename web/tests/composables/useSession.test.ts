@@ -4,7 +4,8 @@ import { resetConnectorEntries, useConnectorEntries } from '@/composables/useCon
 import { resetHistory, useHistory } from '@/composables/useHistory'
 import { withSetup } from '@tests/support/withSetup'
 import { resetPortalConfig } from '@/composables/usePortalConfig'
-import { useSession } from '@/composables/useSession'
+import { resetSession, useSession } from '@/composables/useSession'
+import { useLaunchHistory } from '@/features/portal/useLaunchHistory'
 
 const ENTRIES = {
   entries: [
@@ -146,6 +147,39 @@ describe('signing out', () => {
     expect(localStorage.getItem(LAUNCH_HISTORY_KEY)).toBeNull()
   })
 
+  // A reader already on screen ranks from memory, so clearing storage alone would leave it ranking.
+  it('clears the ranking a reader on screen holds as well, on every route out', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL) =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify(
+              String(input).includes('/api/auth/providers')
+                ? { providers: [], mode: 'local' }
+                : { logoutUrl: '/' },
+            ),
+          ),
+        ),
+      ),
+    )
+
+    const { result: ranking } = withSetup(() => useLaunchHistory())
+    const session = useSession()
+    await session.loadProviders()
+
+    for (const leave of [session.signOut, session.signOutEverywhere, session.signIn]) {
+      ranking.remember('card:1')
+      expect(ranking.boostFor('card:1')).toBeGreaterThan(0)
+
+      await leave()
+
+      expect(ranking.boostFor('card:1')).toBe(0)
+    }
+
+    resetSession()
+  })
+
   // Where someone has been is held in memory, and the next account on this page must not see it.
   it('drops the visited pages held in memory', async () => {
     const state = {
@@ -153,6 +187,7 @@ describe('signing out', () => {
       sources: { diele: true, extension: false },
       enabled: true,
       excludedDomains: [],
+      kept: 1,
     }
     const page = { id: 1, url: 'https://a.example/', visits: 1, lastVisitedAt: '2026-10-01' }
 

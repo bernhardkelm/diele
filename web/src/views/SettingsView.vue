@@ -56,7 +56,7 @@ if (routeSection.value) {
 // The route owns which section is open, so opening one survives a step back.
 const expanded = computed(() => routeSection.value)
 
-const history = useHistorySection(() => expanded.value)
+const { section: history, error: historyError } = useHistorySection(() => expanded.value)
 
 // Offered whenever a connector is configured, whether or not it has produced anything yet: a
 // connector that is failing still has rows someone hid, and hiding the switch would strand them.
@@ -64,7 +64,8 @@ const history = useHistorySection(() => expanded.value)
 // This account's own list only. Keeping an entry from everyone belongs to the admin panel,
 // under the connector that produced it.
 //
-// History is listed only where the instance offers it, and otherwise not mentioned at all.
+// History is listed where the instance offers it or still keeps pages for this account, and
+// otherwise not mentioned at all.
 const sections = computed<ReadonlyArray<SettingsSection>>(() => {
   const listed: SettingsSection[] = [themeSection(preference.value, setTheme)]
 
@@ -151,8 +152,16 @@ function open(station: SettingsStation): void {
   }
 
   if (station.kind === 'action') {
-    if (!station.action.disabled) {
-      station.action.run()
+    if (station.action.disabled) {
+      return
+    }
+
+    const index = stations.value.indexOf(station)
+    station.action.run()
+
+    // the rows it listed take its place, so the caret lands on the first of them
+    if (station.reveals) {
+      void restore({ type: 'position', index })
     }
 
     return
@@ -308,6 +317,9 @@ function onFocusin(event: FocusEvent): void {
       @submit="submit"
     />
 
+    <!-- see AdminView: a refused change is said above the list, where it is read the same way -->
+    <p v-if="historyError" class="settings__error" role="alert">{{ historyError }}</p>
+
     <main class="settings__body">
       <ul
         v-if="stations.length"
@@ -404,6 +416,18 @@ function onFocusin(event: FocusEvent): void {
    selector inside any one of them cannot see the other two. */
 .settings__list > li + li {
   border-top: 1px solid var(--diele-rule);
+}
+
+.settings__error {
+  width: 100%;
+  max-width: var(--diele-content-width);
+  margin: 0;
+  padding: var(--diele-space-3);
+  font-family: var(--diele-font-mono);
+  font-size: var(--diele-text-md);
+  color: var(--diele-status-down);
+  border: 1px solid var(--diele-status-down);
+  border-radius: var(--diele-radius-sm);
 }
 
 .settings__empty {

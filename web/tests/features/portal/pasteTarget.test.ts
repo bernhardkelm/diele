@@ -70,6 +70,9 @@ describe('terms that are not urls', () => {
       'lib.so',
       'util.cc',
       'build.ps',
+      'install.pl',
+      'setup.in',
+      'Makefile.am',
     ]) {
       expect(pasteTargetFor(term), term).toBeUndefined()
     }

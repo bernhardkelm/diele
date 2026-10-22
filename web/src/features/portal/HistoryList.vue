@@ -29,7 +29,7 @@ const emit = defineEmits<{ launch: [page: HistoryTarget] }>()
 </template>
 
 <style scoped>
-/* see SiteList: the same list, last on the page because a visited page is the weakest match.
+/* see SiteList: the same list, for pages visited rather than saved.
    A page sets its own title, so a long or lookalike one must never squeeze its address out: the
    address column keeps a floor the title cannot take from it. */
 .history {

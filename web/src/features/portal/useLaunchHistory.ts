@@ -1,8 +1,8 @@
-import { ref } from 'vue'
+import { shallowRef } from 'vue'
 import { pushRecent } from '@/helpers/recentList'
 import { LAUNCH_HISTORY_KEY } from '@/config/api'
 import { isMadeUpRef } from '@/features/portal/dynamicTarget'
-import { readStringList, writeJson } from '@/helpers/storage'
+import { readStringList, removeStored, writeJson } from '@/helpers/storage'
 
 /** Entries kept; past this the oldest fall off */
 const LIMIT = 30
@@ -45,14 +45,27 @@ function readRefs(): string[] {
   return kept.slice(0, LIMIT)
 }
 
+// Shared at module scope the way the session is, so signing out clears the list every reader
+// ranks from rather than only the copy in storage. Newest first, so the cap drops the oldest.
+const refs = shallowRef<ReadonlyArray<string>>([])
+
+/**
+ * Forgets the ranking, in memory and in storage, so what one account opened does not rank for
+ * whoever signs in next on this browser.
+ * @returns {void}
+ */
+export function resetLaunchHistory(): void {
+  removeStored(LAUNCH_HISTORY_KEY)
+  refs.value = []
+}
+
 /**
  * Tracks which targets actually get opened, so the ones you reach for keep winning ties. The
  * bonus is small enough that a weak match never overtakes a strong one on habit alone.
  * @returns {LaunchHistory} - Reader and recorder over the stored history
  */
 export function useLaunchHistory(): LaunchHistory {
-  // newest first, so the cap drops the oldest
-  const refs = ref<string[]>(readRefs())
+  refs.value = readRefs()
 
   /**
    * Returns the score bonus a target has earned, decaying with how long ago it was opened.

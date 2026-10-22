@@ -81,10 +81,25 @@ function onTemplateHost(url: URL, pattern: URL): boolean {
 }
 
 /**
+ * Returns whether a url's host is exactly the template's, a leading `www.` ignored on both, with
+ * the same port. What a template with its term straight after the root covers is that one site's
+ * top level, never its subdomains, which are other sites.
+ * @param {URL} url - Url as reported
+ * @param {URL} pattern - The template, parsed
+ * @returns {boolean} - True when the url is on the template's own host
+ */
+function onExactHost(url: URL, pattern: URL): boolean {
+  const base = hostnameOf(pattern).replace(/^www\./, '')
+
+  return url.port === pattern.port && hostnameOf(url).replace(/^www\./, '') === base
+}
+
+/**
  * Returns whether a url is what one of diele's own engines or slash commands submits a term to.
  * A template carries `{query}` either as a parameter's value, which matches the same site and
  * path with that parameter present, or inside its path, which matches anything below the part
- * before it.
+ * before it. A term straight after the root, as in `https://github.com/{query}`, matches a url
+ * with exactly one path segment on that host alone: anything more would take the whole site.
  * @param {URL} url - Url as reported, query intact
  * @param {string} template - An engine's or a slash command's url template
  * @returns {boolean} - True when the url is that template's results page
@@ -114,6 +129,10 @@ export function matchesEngine(url: URL, template: string): boolean {
   }
 
   const prefix = pattern.pathname.slice(0, at)
+
+  if (prefix === '/') {
+    return onExactHost(url, pattern) && /^\/[^/]+\/?$/.test(url.pathname)
+  }
 
   return url.pathname.startsWith(prefix) && url.pathname.length > prefix.length
 }
