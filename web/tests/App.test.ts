@@ -7,12 +7,14 @@ import EntryRow from '@/features/portal/EntryRow.vue'
 import LauncherBar from '@/components/LauncherBar.vue'
 import LoginGate from '@/views/LoginGate.vue'
 import ServiceCard from '@/features/portal/ServiceCard.vue'
+import SignedOutBanner from '@/features/portal/SignedOutBanner.vue'
 import SiteRow from '@/features/portal/SiteRow.vue'
 import { CONFIG_CACHE_KEY } from '@/config/api'
 import { resetAdmin } from '@/features/admin/useAdmin'
 import { resetPortalConfig } from '@/composables/usePortalConfig'
 import { resetConnectorEntries } from '@/composables/useConnectorEntries'
-import { resetSession } from '@/composables/useSession'
+import { resetSession, useSession } from '@/composables/useSession'
+import { sessionLapsed } from '@/composables/sessionLapse'
 
 const CONFIG = {
   brand: { title: 'diele', subtitle: 'start page', accentLight: '#16a34a', accentDark: '#22c55e' },
@@ -315,5 +317,184 @@ describe('the routes', () => {
     await vi.waitFor(() => expect(wrapper.findComponent(LoginGate).exists()).toBe(true))
 
     expect(localStorage.getItem(CONFIG_CACHE_KEY)).not.toBeNull()
+  })
+
+  // A 403 is an account the panel turns away, which signing in again would not change, so it
+  // keeps the panel and says why rather than handing the screen to a gate that would only loop.
+  it('keeps the panel and says why when the admin api refuses rather than lapses', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL) => {
+        if (String(input).includes('/api/admin/')) {
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({ error: 'administration is not permitted for this account' }),
+              { status: 403 },
+            ),
+          )
+        }
+
+        return stubApi()(input)
+      }),
+    )
+
+    const wrapper = await open()
+    window.location.hash = '/admin'
+    window.dispatchEvent(new HashChangeEvent('hashchange'))
+
+    await vi.waitFor(() => expect(wrapper.text()).toContain('may not configure'))
+
+    expect(wrapper.findComponent(LoginGate).exists()).toBe(false)
+    expect(sessionLapsed.value).toBe(false)
+  })
+})
+
+describe('a session that lapses behind a cached portal', () => {
+  /**
+   * Fills the config cache the way a signed-in visit leaves it.
+   * @returns {void}
+   */
+  function seedCache(): void {
+    localStorage.setItem(
+      CONFIG_CACHE_KEY,
+      JSON.stringify({ storedAt: Date.now(), config: CONFIG, etag: 'W/"1"' }),
+    )
+  }
+
+  /**
+   * Answers every read that needs a session with a 401, the way the api does once it has ended.
+   * @param {'local' | 'oidc'} mode - How the deployment signs people in
+   * @returns {ReturnType<typeof vi.fn>} - The stubbed fetch
+   */
+  function stubLapsed(mode: 'local' | 'oidc' = 'local') {
+    return vi.fn((input: RequestInfo | URL) => {
+      const url = String(input)
+
+      if (url.includes('/api/auth/providers')) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              brand: CONFIG.brand,
+              mode,
+              setupRequired: false,
+              providers: mode === 'oidc' ? [{ id: 'oidc', name: 'Single Sign-On' }] : [],
+            }),
+          ),
+        )
+      }
+
+      return Promise.resolve(
+        new Response(JSON.stringify({ error: 'authentication required' }), { status: 401 }),
+      )
+    })
+  }
+
+  // This is a new tab page: last visit's tiles stay, and the line above them says why they may be
+  // stale and how to fix it, rather than the page going quiet or throwing the user at a login.
+  it('keeps painting the cached portal and says it is signed out', async () => {
+    seedCache()
+    vi.stubGlobal('fetch', stubLapsed())
+
+    const wrapper = await open()
+
+    await vi.waitFor(() =>
+      expect(wrapper.findComponent(SignedOutBanner).text()).toContain('Signed out'),
+    )
+    expect(wrapper.findComponent(ServiceCard).exists()).toBe(true)
+    expect(wrapper.findComponent(LoginGate).exists()).toBe(false)
+  })
+
+  it('says nothing while the session holds', async () => {
+    const wrapper = await open()
+    await vi.waitFor(() => expect(wrapper.findComponent(EntryRow).exists()).toBe(true))
+
+    expect(wrapper.findComponent(SignedOutBanner).find('button').exists()).toBe(false)
+  })
+
+  // A cold start has nothing to keep painting, so it still opens on the gate.
+  it('opens on the gate when nothing was cached', async () => {
+    vi.stubGlobal('fetch', stubLapsed())
+
+    const wrapper = mount(App, { attachTo: document.body })
+
+    await vi.waitFor(() => expect(wrapper.findComponent(LoginGate).exists()).toBe(true))
+    expect(wrapper.findComponent(SignedOutBanner).exists()).toBe(false)
+
+    // ended on the gate, which the reset after each test would swap for a portal fetching
+    // against a fetch already unstubbed
+    wrapper.unmount()
+  })
+
+  // A password cannot be had by redirecting, so the gate's form comes up, over the cache rather
+  // than by dropping it.
+  it('opens the gate from the banner in local mode', async () => {
+    seedCache()
+    vi.stubGlobal('fetch', stubLapsed('local'))
+
+    const wrapper = await open()
+    await vi.waitFor(() =>
+      expect(wrapper.findComponent(SignedOutBanner).find('button').exists()).toBe(true),
+    )
+
+    await wrapper.findComponent(SignedOutBanner).find('button').trigger('click')
+
+    expect(wrapper.findComponent(LoginGate).exists()).toBe(true)
+    expect(localStorage.getItem(CONFIG_CACHE_KEY)).not.toBeNull()
+
+    wrapper.unmount()
+  })
+
+  // The issuer still holds its own session, so its redirect answers at once.
+  it('goes straight to the issuer from the banner in oidc mode', async () => {
+    const realLocation = window.location
+    const assign = vi.fn()
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: { assign, pathname: '/', search: '', hash: '' },
+    })
+
+    try {
+      seedCache()
+      vi.stubGlobal('fetch', stubLapsed('oidc'))
+
+      const wrapper = await open()
+      await vi.waitFor(() =>
+        expect(wrapper.findComponent(SignedOutBanner).find('button').exists()).toBe(true),
+      )
+      // The mode is what picks the path, so it has to have answered before the press. Joins the
+      // read App already started rather than sending another.
+      await useSession().loadProviders()
+
+      await wrapper.findComponent(SignedOutBanner).find('button').trigger('click')
+
+      expect(assign).toHaveBeenCalledWith(expect.stringContaining('/api/auth/login?redirect='))
+      expect(wrapper.findComponent(LoginGate).exists()).toBe(false)
+    } finally {
+      Object.defineProperty(window, 'location', { configurable: true, value: realLocation })
+    }
+  })
+
+  // Left in the background while the session ended, the tab says so the moment it is looked at
+  // rather than whenever a poll next happens to answer.
+  it('notices a lapse when the tab comes back to the front', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+
+    try {
+      const wrapper = await open()
+      await vi.waitFor(() => expect(wrapper.findComponent(EntryRow).exists()).toBe(true))
+      expect(wrapper.findComponent(SignedOutBanner).find('button').exists()).toBe(false)
+
+      vi.stubGlobal('fetch', stubLapsed())
+      vi.setSystemTime(Date.now() + 60_000)
+      document.dispatchEvent(new Event('visibilitychange'))
+      window.dispatchEvent(new Event('focus'))
+
+      await vi.waitFor(() =>
+        expect(wrapper.findComponent(SignedOutBanner).find('button').exists()).toBe(true),
+      )
+      expect(wrapper.findComponent(ServiceCard).exists()).toBe(true)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

@@ -1,4 +1,5 @@
 import { onBeforeUnmount, onMounted, shallowRef, watch, type ShallowRef } from 'vue'
+import { reportLapse } from '@/composables/sessionLapse'
 import { useVisibilityChange } from '@/composables/useVisibilityChange'
 
 /** What to come back at before the server has said, and the floor on whatever it does say. */
@@ -61,6 +62,8 @@ export function polledJson<T, P extends Paced>(options: PolledJsonOptions<T, P>)
    *
    * A failure keeps the last answer rather than clearing it: the API holds its own cache and
    * drops whatever is genuinely stale, so what is on screen is either current or already gone.
+   * A 401 keeps it as well, but is reported as the lapse it is rather than logged as a failure:
+   * the readings did not break, the session ended, and the portal says that once for all of them.
    * @param {number} stamp - Generation the calling chain was started under
    * @returns {Promise<void>}
    */
@@ -75,6 +78,10 @@ export function polledJson<T, P extends Paced>(options: PolledJsonOptions<T, P>)
       })
 
       if (!response.ok) {
+        if (reportLapse(response.status)) {
+          return
+        }
+
         throw new Error(`${options.url} responded ${response.status}`)
       }
 

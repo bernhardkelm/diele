@@ -132,8 +132,10 @@ export const config = {
     // are how long the portal may go untouched before it asks again. The portal is a new tab
     // page, so anything short would interrupt someone who uses it every day.
     maxAgeMs: positiveInt('SESSION_MAX_AGE_MS', process.env.SESSION_MAX_AGE_MS, 24 * 60 * 60_000),
-    // Chosen at login by the `remember me` box, for the case where typing a password again is
-    // the cost, rather than a redirect the issuer answers silently.
+    // Every issuer login gets this one, and a password login gets it when the `remember me` box
+    // is ticked. The issuer stays the authority over who may sign in and the row stays revocable
+    // here, so a shorter window would only send a tab left in the background through the
+    // redirect again, for no gain in control.
     rememberMaxAgeMs: positiveInt(
       'SESSION_REMEMBER_MAX_AGE_MS',
       process.env.SESSION_REMEMBER_MAX_AGE_MS,

@@ -16,6 +16,7 @@ import { refreshConnectorEntries, resetConnectorEntries } from '@/composables/us
 import { resetHealth } from '@/composables/useHealth'
 import { refreshPortalConfig, resetPortalConfig } from '@/composables/usePortalConfig'
 import { resetSignals } from '@/composables/useSignals'
+import { clearLapse, reportLapse, sessionLapsed } from '@/composables/sessionLapse'
 import { applyBrandAccent } from '@/helpers/brandAccent'
 import { clearConfigCache } from '@/helpers/configCache'
 import { clearEntriesCache } from '@/helpers/entriesCache'
@@ -51,8 +52,18 @@ export interface SessionSource {
    * is not a case it would otherwise recognise.
    */
   reauth: Ref<boolean>
+  /**
+   * True once any read of the api answered 401, until `/api/auth/me` reads the session back as
+   * live. The portal stays painted either way; this is what lets it say so.
+   */
+  lapsed: Readonly<Ref<boolean>>
   /** Sends the browser to the issuer, or surfaces the password form, depending on the mode */
   signIn: (remember?: boolean) => void
+  /**
+   * Signs back in after a lapse without dropping what is painted: straight to the issuer where
+   * one can answer from its own session, the gate's form where a password is needed.
+   */
+  resume: () => void
   signInWithPassword: (credentials: Credentials) => Promise<void>
   completeSetup: (details: SetupDetails) => Promise<void>
   signOut: () => Promise<void>
@@ -73,6 +84,12 @@ const mode = ref<ApiProviders['mode'] | undefined>()
 const setupRequired = ref(false)
 const reauth = ref(false)
 
+// Coming back to the tab fires visibilitychange and focus together, and alt-tabbing fires them
+// over and over. One read of who is signed in answers all of those, so a re-check inside this
+// window of the last read is skipped rather than sent.
+const RECHECK_MS = 10_000
+let lastRead = Number.NEGATIVE_INFINITY
+
 if (injectedBrand) {
   applyBrandAccent(injectedBrand)
 }
@@ -90,21 +107,59 @@ export function resetSession(): void {
   mode.value = undefined
   setupRequired.value = false
   reauth.value = false
+  lastRead = Number.NEGATIVE_INFINITY
+  clearLapse()
   loadProviders.reset()
 }
 
 /**
- * Reads who is signed in, if anyone.
+ * Reads who is signed in, if anyone. The one read whose answer settles a lapse either way: a
+ * 401 records one, and a session read back as live lets go of it.
  * @returns {Promise<void>}
  */
 async function loadUser(): Promise<void> {
+  lastRead = Date.now()
+
   try {
     const response = await fetch(AUTH_ME_URL, { headers: { accept: 'application/json' } })
-    user.value = response.ok ? ((await response.json()) as ApiUser) : undefined
+    if (!response.ok) {
+      reportLapse(response.status)
+      user.value = undefined
+      return
+    }
+
+    user.value = (await response.json()) as ApiUser
+    clearLapse()
   } catch {
     // an unreachable API is indistinguishable from being signed out, and the cached config
     // stays on screen either way
     user.value = undefined
+  }
+}
+
+/** Reads who is signed in once, however many listeners ask at the same moment. */
+const readUser = singleFlight(loadUser)
+
+/**
+ * Reads who is signed in again, for a tab that has just come back into view: a session that
+ * ended while it sat in the background is noticed the moment someone looks at it, rather than
+ * at the next poll that happens to answer 401.
+ *
+ * A session found live again after a lapse, signed back into from another tab, also refetches
+ * the config and the entries, since the reads that answered 401 meanwhile are not retried by
+ * anything else.
+ * @returns {Promise<void>}
+ */
+export async function recheckSession(): Promise<void> {
+  if (Date.now() - lastRead < RECHECK_MS) {
+    return
+  }
+
+  const wasLapsed = sessionLapsed.value
+  await readUser()
+
+  if (wasLapsed && !sessionLapsed.value) {
+    await Promise.all([refreshPortalConfig(), refreshConnectorEntries()])
   }
 }
 
@@ -207,6 +262,24 @@ export function useSession(): SessionSource {
 
     const here = window.location.pathname + window.location.search + window.location.hash
     window.location.assign(authLoginUrl(here, remember))
+  }
+
+  /**
+   * Signs back in after a lapse, keeping the cached portal rather than clearing it the way the
+   * local branch of `signIn` does.
+   *
+   * An issuer that still holds the browser's own session answers the redirect at once, so the
+   * redirecting modes go straight there. A password cannot be had that way, so local mode, and a
+   * mode not known yet, hand the screen to the gate instead.
+   * @returns {void}
+   */
+  function resume(): void {
+    if (mode.value === 'oidc' || mode.value === 'dev') {
+      signIn()
+      return
+    }
+
+    reauth.value = true
   }
 
   /**
@@ -318,7 +391,9 @@ export function useSession(): SessionSource {
     mode,
     setupRequired,
     reauth,
+    lapsed: sessionLapsed,
     signIn,
+    resume,
     signInWithPassword,
     completeSetup,
     signOut,

@@ -1,6 +1,7 @@
 import { computed, type ComputedRef } from 'vue'
 import { ENTRIES_HIDDEN_URL } from '@/config/api'
 import { hiddenRefs, refreshConnectorEntries } from '@/composables/useConnectorEntries'
+import { reportLapse } from '@/composables/sessionLapse'
 
 /**
  * Who an entry is hidden for. `all` is the portal's own choice and only an admin may make it;
@@ -70,6 +71,7 @@ export function useHiddenEntries(): HiddenEntries {
     })
 
     if (!response.ok) {
+      reportLapse(response.status)
       // Nothing to show it on: this is a switch in a list, and the list re-reads the truth
       // below anyway, so a failed write shows as the switch staying where it was.
       console.warn(`[diele] hiding ${entryRef} answered ${response.status}`)

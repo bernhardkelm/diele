@@ -8,6 +8,7 @@ import {
   readSessionIdToken,
   touchSession,
 } from '#auth/session.js'
+import { config } from '#config.js'
 import { getDb } from '#db/index.js'
 
 /**
@@ -88,6 +89,114 @@ test('ending a session stops its token working', () => {
 
   assert.equal(readSession(token), undefined)
   assert.deepEqual(storedIds(id), [])
+})
+
+/**
+ * Reads how long a user's session has left, as sqlite itself counts it.
+ * @param {number} userId - Account whose single session to read
+ * @returns {number} - Seconds until the row expires, rounded
+ */
+function secondsLeft(userId: number): number {
+  const row = getDb()
+    .prepare(
+      `SELECT (julianday(expires_at) - julianday('now')) * 86400 AS seconds
+       FROM sessions WHERE user_id = ?`,
+    )
+    .get(userId) as { seconds: number }
+
+  return Math.round(row.seconds)
+}
+
+/**
+ * Moves a user's session through time by shifting its stored timestamps back, which is what the
+ * clock running forward would do to the comparison against `now`.
+ * @param {number} userId - Account whose sessions to age
+ * @param {number} seconds - How far to move them into the past
+ * @returns {void}
+ */
+function age(userId: number, seconds: number): void {
+  getDb()
+    .prepare(
+      `UPDATE sessions
+       SET expires_at = datetime(expires_at, @shift), last_seen_at = datetime(last_seen_at, @shift)
+       WHERE user_id = @userId`,
+    )
+    .run({ userId, shift: `-${seconds} seconds` })
+}
+
+/**
+ * Returns a window from the config in whole seconds, the unit sqlite stores it in.
+ * @param {number} ms - Window in milliseconds
+ * @returns {number} - The same window in seconds
+ */
+function seconds(ms: number): number {
+  return Math.floor(ms / 1000)
+}
+
+// Asserted to the second the clock may tick between the insert and the read.
+const SLACK = 2
+
+test('a session opened without remember lasts the default window and no longer', () => {
+  const id = user('session-default-window')
+  const token = createSession(id, [])
+  const window = seconds(config.session.maxAgeMs)
+
+  assert.ok(Math.abs(secondsLeft(id) - window) <= SLACK, `${secondsLeft(id)} of ${window}`)
+
+  age(id, window - 60)
+  assert.equal(readSession(token)?.id, id, 'expired before its window was up')
+
+  age(id, 61)
+  assert.equal(readSession(token), undefined)
+})
+
+test('a remembered session lasts the long window and no longer', () => {
+  const id = user('session-remembered-window')
+  const token = createSession(id, [], undefined, true)
+  const window = seconds(config.session.rememberMaxAgeMs)
+
+  assert.ok(Math.abs(secondsLeft(id) - window) <= SLACK, `${secondsLeft(id)} of ${window}`)
+
+  // Past the default window, which is the one a remembered session must not fall back to.
+  age(id, seconds(config.session.maxAgeMs) + 60)
+  assert.equal(readSession(token)?.id, id, 'cut short to the default window')
+
+  age(id, secondsLeft(id) + 1)
+  assert.equal(readSession(token), undefined)
+})
+
+test('a touch past the throttle rolls the window forward from now', () => {
+  const id = user('session-rolled')
+  const token = createSession(id, [])
+  const window = seconds(config.session.maxAgeMs)
+
+  age(id, window - 600)
+  touchSession(token)
+
+  assert.ok(Math.abs(secondsLeft(id) - window) <= SLACK, `${secondsLeft(id)} of ${window}`)
+})
+
+// Rolled by its own window, or the first request after the throttle would cut it to a day.
+test('a touch rolls a remembered session by the long window', () => {
+  const id = user('session-remembered-rolled')
+  const token = createSession(id, [], undefined, true)
+  const window = seconds(config.session.rememberMaxAgeMs)
+
+  age(id, 2 * 60 * 60)
+  touchSession(token)
+
+  assert.ok(Math.abs(secondsLeft(id) - window) <= SLACK, `${secondsLeft(id)} of ${window}`)
+})
+
+test('a touch inside the throttle leaves the window where it was', () => {
+  const id = user('session-throttled')
+  const token = createSession(id, [])
+
+  age(id, 30 * 60)
+  const before = secondsLeft(id)
+  touchSession(token)
+
+  assert.equal(secondsLeft(id), before)
 })
 
 test('touching a session keeps it readable', () => {

@@ -30,7 +30,7 @@ whole set.
 | `OIDC_SCOPES`, `OIDC_DISPLAY_NAME` | scopes requested, and what the sign-in button says |
 | `LOCAL_SETUP_TOKEN` | local mode: gates creating the first account; generated and printed when unset |
 | `DIELE_SECRET_KEYS` | `id:base64` pairs sealing connector credentials, first one active |
-| `SESSION_MAX_AGE_MS`, `SESSION_REMEMBER_MAX_AGE_MS` | idle windows, not lifetimes; they roll forward on use |
+| `SESSION_MAX_AGE_MS`, `SESSION_REMEMBER_MAX_AGE_MS` | idle windows, not lifetimes; they roll forward on use. The second is what an issuer login and `remember me` get |
 | `SESSION_COOKIE_SECURE` | `auto` (default) derives it from the `PUBLIC_ORIGIN` scheme, which is almost always right; `true` or `false` override |
 | `SESSION_COOKIE_NAME` | name of the session cookie, default `diele_session`; only worth changing to run two instances on one host |
 | `TRUST_PROXY` | off by default; set to the number of proxies in front (`1` behind nginx) so `req.ip` is the caller and not a header |
@@ -85,9 +85,13 @@ Sessions are **server-side and opaque**: a 256-bit random id in an httpOnly cook
 `sessions`. That buys revocation, which a JWT would not, and it lets the session be long without
 being unrevokable. The two windows are **idle time, not lifetime** - 24 hours, or 90 days when
 `remember me` was ticked - and roll forward on use, throttled to once an hour so opening tabs does
-not mean writing to sqlite. An instance opened daily is therefore never asked again. The cookie
-itself always carries the longer window: the row decides when the session ends, and a cookie
-expiring on its own schedule would cut a live session short.
+not mean writing to sqlite. An instance opened daily is therefore never asked again. A login
+through the issuer always gets the 90 days, decided at the callback rather than asked for by the
+client: the issuer stays the authority over who may sign in, the row stays revocable here, and a
+tab left in the background for a day is not sent through the redirect again. `remember me` is a
+choice for password logins only. The cookie itself always carries the longer window: the row
+decides when the session ends, and a cookie expiring on its own schedule would cut a live session
+short.
 
 The cookie is `SameSite=Lax` rather than `Strict`, because the browser comes back from the issuer
 as a top-level navigation and `Strict` would withhold the cookie on exactly that request.
@@ -288,7 +292,7 @@ turns it back on.
 | --- | --- | --- |
 | `GET` | `/status` | health and the running build, public |
 | `GET` | `/api/auth/providers` | what the login screen offers, and whether setup is pending; public |
-| `GET` | `/api/auth/login` | 302 to the issuer, `?redirect=` to come back to, `?remember=1` for the long window |
+| `GET` | `/api/auth/login` | 302 to the issuer, `?redirect=` to come back to; dev mode takes `?remember=1` for the long window |
 | `POST` | `/api/auth/login` | local mode: username and password, opens a session |
 | `POST` | `/api/auth/setup` | local mode: creates the first account, needs the setup token |
 | `GET` | `/api/auth/callback` | exchange, open session, 302 back |

@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { defineComponent, h } from 'vue'
 import { mount } from '@vue/test-utils'
 import { resetSignals, useSignals, type SignalSource } from '@/composables/useSignals'
+import { clearLapse, sessionLapsed } from '@/composables/sessionLapse'
 
 const PAYLOAD = {
   signals: [
@@ -60,6 +61,7 @@ async function open(admin: boolean): Promise<SignalSource> {
 beforeEach(() => {
   writes.length = 0
   resetSignals()
+  clearLapse()
   vi.stubGlobal('fetch', stubApi())
 })
 
@@ -153,6 +155,34 @@ describe('useSignals', () => {
     await source.silence('1:bbbb')
 
     expect(source.total.value).toBe(1)
+  })
+
+  // A silence refused because the session ended is the same lapse the polls report, and is said
+  // the same way rather than only warned about.
+  it('reports a lapse when a silence answers 401', async () => {
+    const { silence } = await open(false)
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.resolve(new Response(null, { status: 401 }))),
+    )
+
+    await silence('1:aaaa')
+
+    expect(sessionLapsed.value).toBe(true)
+  })
+
+  it('does not take a refused silence for a lapse', async () => {
+    const { silence } = await open(false)
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.resolve(new Response(null, { status: 403 }))),
+    )
+
+    await silence('1:aaaa')
+
+    expect(sessionLapsed.value).toBe(false)
   })
 
   it('survives a payload that carries no silences at all', async () => {

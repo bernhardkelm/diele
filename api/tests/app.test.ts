@@ -110,6 +110,7 @@ test('api responses are private and revalidated rather than heuristically cached
   assert.match(response.headers.get('vary') ?? '', /Cookie/i)
 })
 
+// A 403 and not a 401, because the session is valid and the client reads 401 as one that lapsed.
 test('a write from another origin is refused even with a valid session', async () => {
   const response = await api.request('/api/admin/links/card', {
     method: 'POST',
@@ -117,8 +118,9 @@ test('a write from another origin is refused even with a valid session', async (
     body: JSON.stringify({ label: 'x', url: 'https://x.test' }),
   })
 
-  assert.equal(response.status, 401)
+  assert.equal(response.status, 403)
   assert.deepEqual(await response.json(), { error: 'cross-origin request rejected' })
+  assert.equal((await api.request('/api/auth/me')).status, 200, 'the session did not survive')
 })
 
 test('a body the schema rejects answers 400 with the issues, not 500', async () => {

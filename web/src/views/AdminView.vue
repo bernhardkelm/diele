@@ -37,7 +37,7 @@ import { searchFeatures } from '@/features/admin/featureSearch'
 
 const { brand } = usePortalConfig()
 const { section: routeFeature, go, replace } = useHashRoute()
-const { reauth } = useSession()
+const { reauth, lapsed } = useSession()
 const {
   features,
   rows,
@@ -478,8 +478,11 @@ function onFocusin(event: FocusEvent): void {
 // panel that has nothing left to show. Which sign-in that is stays the gate's own business, so
 // nothing here reads the mode or clears a cache. The hash is left alone, so signing in lands
 // back on this view.
-watch(needsAuth, (lapsed) => {
-  reauth.value = lapsed
+//
+// A lapse found anywhere else counts too, a re-check on coming back to the tab most of all: the
+// panel would otherwise stay up until its next write came back refused.
+watch([needsAuth, lapsed], ([own, shared]) => {
+  reauth.value = own || shared
 })
 
 onMounted(() => void loadFeatures())
