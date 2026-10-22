@@ -282,7 +282,8 @@ percentage, so the dot has a state and no figure beside it.
 | --- | --- |
 | **Instance** | origin only; the query api is found under it |
 | **Bearer token** | optional, only where the instance asks for one; stored encrypted |
-| **Alertmanager** | optional; where [Alerts](#alerts) are read from when set. The token is reused, for the common case of both sitting behind one ingress |
+| **Alertmanager** | optional; where [Alerts](#alerts) are read from when set |
+| **Alertmanager token** | optional, only where the Alertmanager wants one of its own; stored encrypted. Left blank, the bearer token is reused when both sit on the same origin and nothing is sent otherwise, so a Prometheus credential never reaches another host |
 | **Alerts from** | the least severe level that reaches the portal |
 | **Hide Watchdog** | on by default; turn it off to keep the heartbeat alert on the page as proof the pipeline is up |
 
@@ -339,7 +340,8 @@ feature has a switch of its own, inside **Cards** in the panel.
 What a connected source reports as firing, on one line between the title and the search field. A
 single alert is that line; several collapse into a count that opens onto the list. Worst first,
 and longest-firing first within a severity, because a condition that has held for hours is the one
-that is not fixing itself.
+that is not fixing itself. At most 200 are sent to the page; the count still says how many are
+firing, and the list ends on how many more there are.
 
 One request per configured source, whatever else is bound.
 
@@ -383,6 +385,12 @@ far it reaches: an admin takes the line off the portal for everyone, anyone else
 their own. Either way it lasts only as long as the alert does - once the condition stops firing
 the silence is forgotten, so the same alert next week is news again. Nothing about it reaches
 Alertmanager, and it silences no notification.
+
+Silenced lines stay reachable under their own **silenced** count below the firing ones, and
+**restore** brings one back. Only the scope that silenced a line can lift it: an admin restores
+what the portal silenced, anyone else what they silenced themselves, so to everyone but an admin
+a line the portal silenced is marked **portal** instead of offering a button that would do nothing.
+Deleting a connector forgets its silences, and so does an import.
 
 The alert's own annotations are an **admin's**, the same as a reading's `detail`: they quote the
 instance that fired and how it is addressed. Everyone signed in sees what is firing, how badly and
