@@ -6,8 +6,9 @@ import type { DB } from '#db/index.js'
 import { migrate } from '#db/migrate.js'
 import { init } from './migrations/001_init.js'
 import { randomIds } from './migrations/002_randomIds.js'
+import { meta } from './migrations/003_meta.js'
 
-const MIGRATIONS = [init, randomIds]
+const MIGRATIONS = [init, randomIds, meta]
 
 let db: DB | null = null
 

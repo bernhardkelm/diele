@@ -106,3 +106,13 @@ test('a budget takes several units at once, all of them or none', () => {
   assert.equal(budget.take('poster', now, 2), true)
   assert.equal(budget.take('poster', now), false)
 })
+
+test('asking a budget what is left takes nothing', () => {
+  const budget = createBudget(2, 60_000)
+  const now = Date.now()
+
+  assert.equal(budget.has('asker', now, 2), true)
+  assert.equal(budget.has('asker', now, 3), false)
+  assert.equal(budget.take('asker', now, 2), true)
+  assert.equal(budget.has('asker', now), false)
+})

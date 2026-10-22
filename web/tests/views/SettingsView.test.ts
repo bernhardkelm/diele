@@ -11,6 +11,19 @@ import { resetPortalConfig } from '@/composables/usePortalConfig'
 import { resetConnectorEntries } from '@/composables/useConnectorEntries'
 import { resetHistory } from '@/composables/useHistory'
 import { useTheme } from '@/composables/useTheme'
+import { toHistoryTarget } from '@/features/portal/historyTargets'
+import { formatRelativeTime } from '@/helpers/relativeTime'
+
+// passed through and counted, so a test can tell how often the kept pages are built and dated
+vi.mock('@/helpers/relativeTime', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/helpers/relativeTime')>()
+  return { ...actual, formatRelativeTime: vi.fn(actual.formatRelativeTime) }
+})
+
+vi.mock('@/features/portal/historyTargets', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/features/portal/historyTargets')>()
+  return { ...actual, toHistoryTarget: vi.fn(actual.toHistoryTarget) }
+})
 
 const entries = {
   entries: [
@@ -815,6 +828,49 @@ describe('the history section', () => {
 
       const items = wrapper.findAllComponents(SettingsItemRow).map((row) => row.props('item').id)
       expect(items).toEqual(['page:140'])
+    })
+
+    // A keystroke matches every kept page, so their rows are built once per list, matched over
+    // fields built with them, and dated only where one is listed.
+    it('builds and dates five thousand pages once, not on every keystroke', async () => {
+      const thousands: ApiHistoryEntry[] = Array.from({ length: 5000 }, (_, index) => ({
+        ...PAGE,
+        id: index + 1,
+        url: `https://site${index + 1}.example/`,
+        title: `page ${index + 1}`,
+      }))
+      stubHistory({ ...STATE, kept: 5000 }, { kept: thousands })
+      vi.mocked(toHistoryTarget).mockClear()
+      vi.mocked(formatRelativeTime).mockClear()
+
+      const wrapper = await openHistory(undefined, 101)
+
+      // built once for the list, and dated once for each of the hundred listed
+      expect(vi.mocked(toHistoryTarget).mock.calls.length).toBe(5000)
+      expect(vi.mocked(formatRelativeTime).mock.calls.length).toBeLessThanOrEqual(100)
+
+      vi.mocked(toHistoryTarget).mockClear()
+      vi.mocked(formatRelativeTime).mockClear()
+
+      for (const term of ['s', 'si', 'site', 'site4', 'site49', 'site4999']) {
+        await wrapper.find('.launcher__input').setValue(term)
+        await nextTick()
+      }
+
+      const items = wrapper.findAllComponents(SettingsItemRow).map((row) => row.props('item').id)
+      expect(items).toEqual(['page:4999'])
+      expect(toHistoryTarget).not.toHaveBeenCalled()
+      // at most the hundred each term lists, never the five thousand it searched
+      expect(vi.mocked(formatRelativeTime).mock.calls.length).toBeLessThanOrEqual(6 * 100)
+
+      // listing the next hundred rebuilds the section, though not the rows it already had
+      await wrapper.find('.launcher__input').setValue('')
+      await nextTick()
+      await focus(wrapper, 'action:history:more-pages')
+      await press(wrapper, 'Enter')
+
+      await vi.waitFor(() => expect(wrapper.findAllComponents(SettingsItemRow)).toHaveLength(201))
+      expect(toHistoryTarget).not.toHaveBeenCalled()
     })
 
     it('puts the caret on the next page after forgetting one', async () => {

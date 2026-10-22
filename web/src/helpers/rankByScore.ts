@@ -1,6 +1,5 @@
-import { dropGuesses } from '@/helpers/dropGuesses'
+import { matchItems } from '@/helpers/matchItems'
 import type { MatchTier } from '@/helpers/matchTiers'
-import { matchFields } from '@/helpers/scoreFields'
 import type { SearchField } from '@/helpers/searchFields'
 import { tokenize } from '@/helpers/searchTokens'
 
@@ -41,24 +40,19 @@ export function scoreItems<T>(
     return undefined
   }
 
-  const scored: ScoredItem<T>[] = []
-
-  items.forEach((item, order) => {
-    const match = matchFields(fieldsOf(item), tokens)
-    if (!match) {
-      return
-    }
-
-    scored.push({
-      item,
-      score: match.score,
-      rank: match.score + (options?.boostFor?.(item) ?? 0),
-      tier: match.tier,
-      order,
-    })
-  })
-
-  return dropGuesses(scored)
+  return matchItems(items, fieldsOf, tokens).flatMap(({ item, match, order }) =>
+    match
+      ? [
+          {
+            item,
+            score: match.score,
+            rank: match.score + (options?.boostFor?.(item) ?? 0),
+            tier: match.tier,
+            order,
+          },
+        ]
+      : [],
+  )
 }
 
 /**

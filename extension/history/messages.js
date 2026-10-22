@@ -8,6 +8,7 @@ const RELAY_MESSAGES = [
   'history:report',
   'history:settled',
   'history:release',
+  'history:renew',
   'history:unrecognised',
   'history:refused',
 ]
@@ -100,12 +101,17 @@ async function answerRelay(message, sender) {
     return { visits: [] }
   }
 
+  if (message.kind === 'history:renew') {
+    await renewHistoryBatch(message.lease)
+    return { visits: [] }
+  }
+
   if (message.kind === 'history:unrecognised') {
     await markHistoryUnrecognised(scope.url)
     return { visits: [] }
   }
 
-  await refuseHistory(scope.url)
+  await refuseHistory(scope.url, message.lease)
   return { visits: [] }
 }
 

@@ -25,7 +25,8 @@ export interface AdmissionChecks {
 
 /**
  * Finds the address a host may be probed at, if any. A literal needs no lookup. A name is
- * resolved only while the account and the instance have lookups left, and counts as public only
+ * resolved only while the account and the instance both have lookups left, and neither is charged
+ * unless both have, so other accounts' traffic cannot spend this one's. It counts as public only
  * when every address it has is. Running out of budget, a full queue, a timeout, a name that does
  * not resolve and one that leads anywhere but the public internet all end the same way: no address.
  * @param {string} owner - The account's history key
@@ -43,9 +44,14 @@ async function vettedAddress(
     return publicAddress([literal])
   }
 
-  if (!resolveBudget.take(owner) || !instanceResolveBudget.take(INSTANCE)) {
+  // Both asked before either is charged, so a refusal by the instance costs the account nothing.
+  const now = Date.now()
+  if (!instanceResolveBudget.has(INSTANCE, now) || !resolveBudget.has(owner, now)) {
     return undefined
   }
+
+  instanceResolveBudget.take(INSTANCE, now)
+  resolveBudget.take(owner, now)
 
   return publicAddress(await resolveLimiter.run(() => resolve(hostname), RESOLVE_TIMEOUT_MS))
 }

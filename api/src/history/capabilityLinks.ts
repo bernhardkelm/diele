@@ -1,10 +1,9 @@
-import { decodeSegment, isUnpronounceable } from './tokens.js'
+import { decodeSegment, isTokenSegment, isUnpronounceable } from './tokens.js'
 
 /**
  * Words that introduce a link which is itself the key: a reset, an invitation, a share, a
  * confirmation. Matched against the parts of a segment too, so `reset-password` and `magic-link`
- * count. The segment right after one is an id that grants access, however short it is, unless it
- * reads as a slug.
+ * count. An opaque id anywhere after one grants access, however tidy the route around it looks.
  */
 const KEYWORDS: ReadonlySet<string> = new Set([
   'reset',
@@ -50,8 +49,12 @@ const SHORT_WORD = 4
 /** Longer than a year, a version or an issue number, a run of digits reads as an id. */
 const MAX_NUMBER = 8
 
-/** Shorter than this, what follows a keyword is a word or a route, not a key. */
+/** Shorter than this, a part after a keyword is a word, a route or a short id such as a uidb64. */
 const MIN_OPAQUE = 10
+
+/** A UUID, a 32-hex page id or a hex digest of 40 characters and up, such as a sha1. */
+const HEX_ID =
+  /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{32}|[0-9a-f]{40,})$/i
 
 /**
  * Returns whether one word of a slug reads as written: a number no longer than a year or a
@@ -95,24 +98,29 @@ function isSlug(segment: string): boolean {
 }
 
 /**
- * Returns whether a segment is an opaque id rather than a word or a slug: only url-safe token
- * characters, carrying a digit, a lowercase letter followed by a capital, or too few vowels, and
- * not made of written words. UUIDs and hex page ids count here, unlike in the general token check.
+ * Returns whether one part of a segment, between `-`, `_` and `.`, is an opaque id: long, made of
+ * url-safe token characters only, and not a written word or a run of camelCase words.
+ * @param {string} part - Text between separators
+ * @returns {boolean} - True when it reads as an id
+ */
+function isOpaquePart(part: string): boolean {
+  return part.length >= MIN_OPAQUE && /^[\w~=+]+$/.test(part) && !isSlug(part)
+}
+
+/**
+ * Returns whether a segment is an opaque id rather than a word, a slug or a short route: token-like
+ * by the general entropy rule, a UUID or hex id, or holding a part that is opaque on its own, so
+ * `c5v8pt-<32 hex>` counts through its hex part. UUIDs and hex page ids count here, unlike in the
+ * general token check; `oauth2-setup-guide`, `release-2024` and `oauth2Client.ts` never do.
  * @param {string} segment - One path segment, decoded
  * @returns {boolean} - True when it reads as an id
  */
 function isOpaque(segment: string): boolean {
-  if (segment.length < MIN_OPAQUE || !/^[\w.~=+-]+$/.test(segment) || isSlug(segment)) {
-    return false
-  }
-
-  if (/\d/.test(segment) || /[a-z][A-Z]/.test(segment)) {
+  if (isTokenSegment(segment) || HEX_ID.test(segment)) {
     return true
   }
 
-  const letters = segment.replace(/[^a-z]/gi, '')
-
-  return letters.length >= MIN_OPAQUE && isUnpronounceable(letters)
+  return segment.split(WORD_SEPARATORS).some(isOpaquePart)
 }
 
 /**
@@ -143,20 +151,18 @@ function segmentsOf(pathname: string): string[] {
 }
 
 /**
- * Returns whether a path is a capability link: a segment holding one of the keywords, followed
- * directly by an opaque id. Storing such a link would keep a working key in a list the search
- * offers back. Only that next segment is judged, so a repository named `auth-service` does not
- * take every file in it along, and a docs page or a post about the same thing, such as
- * `/docs/login-flow` or `/auth/oauth2-setup-guide`, is kept.
+ * Returns whether a path is a capability link: a segment holding one of the keywords, with an
+ * opaque id in any segment after it. Storing such a link would keep a working key in a list the
+ * search offers back. Every later segment is judged, since a link often carries a short id before
+ * its token (Django's `/reset/<uidb64>/<token>/`); a short segment is skipped, not counted. A docs
+ * page or a repository file about the same thing, such as `/docs/login-flow`,
+ * `/auth/oauth2-setup-guide` or `/auth-service/blob/main/src/oauth2Client.ts`, has no id and is kept.
  * @param {string} pathname - Path, matrix parameters already removed
  * @returns {boolean} - True when the path carries a key behind a keyword
  */
 export function isCapabilityLink(pathname: string): boolean {
   const segments = segmentsOf(pathname)
+  const at = segments.findIndex(isKeyword)
 
-  return segments.some((segment, at) => {
-    const next = segments[at + 1]
-
-    return next !== undefined && isKeyword(segment) && isOpaque(next)
-  })
+  return at >= 0 && segments.slice(at + 1).some(isOpaque)
 }

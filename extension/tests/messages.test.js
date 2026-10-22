@@ -18,6 +18,7 @@ const RELAY_MESSAGES = {
   },
   'history:settled': { visits: VISITS, lease: 'held', more: true },
   'history:release': { lease: 'held' },
+  'history:renew': { lease: 'held' },
   'history:unrecognised': {},
   'history:refused': {},
 }

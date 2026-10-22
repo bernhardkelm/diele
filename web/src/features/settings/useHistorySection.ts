@@ -114,6 +114,16 @@ export function useHistorySection(expanded: () => string | undefined): HistorySe
     )
   }
 
+  /**
+   * Forgets one kept page. Declared once rather than inside the section, so the rows of the kept
+   * pages, built per list and per this function, are not rebuilt each time the section is.
+   * @param {number} id - Page to forget
+   * @returns {Promise<void>}
+   */
+  async function forget(id: number): Promise<void> {
+    await attempt(() => remove(id), 'the portal did not forget that page, try again')
+  }
+
   const section = computed(() => {
     if (!listed.value) {
       return undefined
@@ -134,9 +144,7 @@ export function useHistorySection(expanded: () => string | undefined): HistorySe
         ),
       exclude,
       include,
-      remove: async (id) => {
-        await attempt(() => remove(id), 'the portal did not forget that page, try again')
-      },
+      remove: forget,
       clear: async () => {
         await attempt(clear, 'the portal did not forget every page, try again')
       },

@@ -164,10 +164,12 @@ rarer suffix like `ne.jp` is taken one label short. Either only changes whose vi
 On each load of your instance, a content script running on its pages only asks it what it
 accepts from whoever is signed in, `GET /api/history/state`, which answers 401 when nobody is,
 and posts what is waiting, 200 at a time, with that page's own session. Each batch goes out under a
-lease of 30 seconds: a second diele tab loading meanwhile, which is ordinary with diele as the new
-tab page, is handed nothing rather than the same visits. The lease is given back once the post is
-answered, delivered or not, and one whose relay never answered, a tab closed mid-post, runs out on
-its own. Nothing is handed to the page: the script runs in the browser's isolated world and talks
+lease: a second diele tab loading meanwhile, which is ordinary with diele as the new tab page, is
+handed nothing rather than the same visits. The relay renews the lease every 10 seconds while its
+post is in flight, and the lease lasts 120 seconds, since a background tab's timers may run only
+once a minute. It is given back once the post is answered, delivered or not; one whose relay never
+answered, a tab closed mid-post, runs out on its own after at most 120 seconds, and only the next
+batch waits for it meanwhile. Recording, reports and the toolbar panel never do. Nothing is handed to the page: the script runs in the browser's isolated world and talks
 to the extension alone. The one exception is a signal, not data: once the server took at least one
 batch, the script dispatches a plain `diele:history-delivered` event on the page, after the last
 batch, so the diele tab whose load delivered the visits reads its history again rather than

@@ -177,13 +177,44 @@ function acronymMatch(text: string, haystack: string, needle: string): FuzzyMatc
 }
 
 /**
- * Matches a token that is a word of the text, or the start of one, typed with a slip.
+ * Matches one token against one text by everything short of a typo: literally, ranked by where
+ * it sits, or by the initials of the text's words. A quoted token is only ever read literally,
+ * since asking for one is asking for the guessing to stop.
  * @param {string} text - Text to search, in its original casing
- * @param {string} needle - Lowercased token
+ * @param {SearchToken} token - Token to look for, and whether it was quoted
+ * @returns {FuzzyMatch | undefined} - Score, tier and matched spans, or undefined when it does not match
+ */
+export function matchAsTyped(text: string, token: SearchToken): FuzzyMatch | undefined {
+  const needle = token.text
+  if (!text || !needle) {
+    return undefined
+  }
+
+  const haystack = text.toLowerCase()
+  const literal = literalMatch(text, haystack, needle)
+
+  // past a literal hit everything is a guess at what was meant, which a quoted token refuses
+  if (literal || token.exact || needle.length < MIN_ACRONYM_LENGTH) {
+    return literal
+  }
+
+  return acronymMatch(text, haystack, needle)
+}
+
+/**
+ * Matches a token that is a word of the text, or the start of one, typed with a slip. It never
+ * scores 300 or more, under every match `matchAsTyped` finds, which is what lets a caller skip it
+ * wherever a hit as typed already scores higher.
+ * @param {string} text - Text to search, in its original casing
+ * @param {SearchToken} token - Token to look for, and whether it was quoted
  * @returns {FuzzyMatch | undefined} - The match, marking the word, or undefined when no word is close
  */
-function typoTierMatch(text: string, needle: string): FuzzyMatch | undefined {
-  const typo = typoMatch(text, needle)
+export function matchAsTypo(text: string, token: SearchToken): FuzzyMatch | undefined {
+  if (!text || token.exact) {
+    return undefined
+  }
+
+  const typo = typoMatch(text, token.text)
   if (!typo) {
     return undefined
   }
@@ -203,27 +234,10 @@ function typoTierMatch(text: string, needle: string): FuzzyMatch | undefined {
  * where it sits, the initials of the text's words come next, and a token one or two edits away
  * from one of its words still matches but lands below everything else, so `prometeus` finds
  * `prometheus` without `heise` finding every repo that happens to hold those letters in order.
- *
- * A quoted token is the exception and is only ever read literally, since asking for one is
- * asking for the guessing to stop.
  * @param {string} text - Text to search, in its original casing
  * @param {SearchToken} token - Token to look for, and whether it was quoted
  * @returns {FuzzyMatch | undefined} - Score, tier and matched spans, or undefined when it does not match
  */
 export function fuzzyMatch(text: string, token: SearchToken): FuzzyMatch | undefined {
-  const needle = token.text
-  if (!text || !needle) {
-    return undefined
-  }
-
-  const haystack = text.toLowerCase()
-  const literal = literalMatch(text, haystack, needle)
-
-  // Everything past a literal hit is a guess at what was meant. A quoted token has said it means
-  // itself, so a text it does not literally appear in is a miss.
-  if (literal || token.exact || needle.length < MIN_ACRONYM_LENGTH) {
-    return literal
-  }
-
-  return acronymMatch(text, haystack, needle) ?? typoTierMatch(text, needle)
+  return matchAsTyped(text, token) ?? matchAsTypo(text, token)
 }

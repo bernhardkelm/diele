@@ -63,11 +63,14 @@ test('an encoded slash inside a segment is a boundary', () => {
   assert.equal(isCapabilityLink('/docs%2Freset'), false)
 })
 
-// Only the segment right after the keyword is judged, and a slug is never an id.
+// A slug, a camelCase file name and a short route are never an id, wherever they stand.
 test('ordinary pages that merely mention a keyword are kept', () => {
   for (const path of [
     '/acme/auth-service/blob/main/src/oauth2Client.ts',
-    '/acme/auth-service/commit/3f9a1c7e2b4d6f8a0c1e3b5d7f9a2c4e6b8d0f1a',
+    '/acme/auth-service/tree/main/docs/kubernetesIntegration.md',
+    '/reset/MQ/set-password',
+    '/share/Team Roadmap 2024',
+    '/auth/realms/master/account',
     '/auth/oauth2-setup-guide',
     '/what-s-new/release-2024',
     '/share/quarterly_report.2024',
@@ -80,4 +83,16 @@ test('ordinary pages that merely mention a keyword are kept', () => {
 test('a one-letter keyword counts as a whole segment only', () => {
   assert.equal(isCapabilityLink('/s/AbCdEf1234'), true)
   assert.equal(isCapabilityLink('/what-s/AbCdEf1234'), false)
+})
+
+// A short id between the keyword and the token is skipped, not taken for the end of the link.
+test('an opaque id anywhere after the keyword is refused, a short one in between skipped', () => {
+  for (const path of [
+    '/reset/MQ/c5v8pt-0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b/',
+    '/email/verify/42/9f86d081884c7d659a2feaa0c55ad015',
+    '/invite/team/42/deadbeef-cafe-babe-face-feedfacecafe',
+    '/acme/auth-service/commit/3f9a1c7e2b4d6f8a0c1e3b5d7f9a2c4e6b8d0f1a',
+  ]) {
+    assert.equal(isCapabilityLink(path), true, path)
+  }
 })

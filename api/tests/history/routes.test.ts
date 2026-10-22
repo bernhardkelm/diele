@@ -431,12 +431,35 @@ test('deleting an origin entry forgets the shells folded into it, and only those
   }
 
   assert.deepEqual(shells(), ['https://other-tube.example/watch', 'https://tube.example/watch'])
+
+  // Lookalikes of the origin, and the same origin under someone else, are not its shells.
+  const insert = getHistoryDb().prepare('INSERT INTO history_shells (owner, url) VALUES (?, ?)')
+  for (const url of [
+    'https://tube.example/Clip',
+    'https://tube.example:8443/watch',
+    'https://tube.example.evil/watch',
+    'http://tube.example/watch',
+  ]) {
+    insert.run(owner, url)
+  }
+  insert.run('someone-else', 'https://tube.example/watch')
+
   const origin = (await allEntries()).find((entry) => entry.url === 'https://tube.example/')
   assert.ok(origin)
 
   const removed = await api.request(`/api/history/entries/${origin.id}`, { method: 'DELETE' })
   assert.equal(removed.status, 200)
-  assert.deepEqual(shells(), ['https://other-tube.example/watch'])
+  assert.deepEqual(shells(), [
+    'http://tube.example/watch',
+    'https://other-tube.example/watch',
+    'https://tube.example.evil/watch',
+    'https://tube.example:8443/watch',
+  ])
+  assert.ok(
+    getHistoryDb()
+      .prepare('SELECT 1 FROM history_shells WHERE owner = ? AND url = ?')
+      .get('someone-else', 'https://tube.example/watch'),
+  )
 
   // No longer a shell, the page is an entry of its own again.
   await postVisits({ source: 'extension', visits: [{ url: 'https://tube.example/watch?v=9' }] })

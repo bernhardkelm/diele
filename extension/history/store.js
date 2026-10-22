@@ -144,9 +144,9 @@ function takeHistoryReport(report, instance) {
 }
 
 /**
- * Removes what the relay delivered and gives its lease back. While the relay still holds the
- * lease and means to post again, it is answered with the next batch under a new one; a relay
- * whose lease ran out and went to another gets nothing more.
+ * Removes what the relay delivered and gives its lease back. The visits go even when the lease
+ * ran out and went to another relay, since the server took them; only a relay that still holds
+ * the lease and means to post again is answered with the next batch, under a new one.
  * @param {Array<{url: string, at: string}>} sent - The visits the delivered batch carried
  * @param {unknown} id - The lease the batch went under
  * @param {boolean} more - Whether the relay posts another batch after this one
@@ -175,6 +175,22 @@ function settleHistoryBatch(sent, id, more, instance) {
     return own && more
       ? leaseHistoryBatch(kept, target.titles === true, undefined, now)
       : { visits: [] }
+  })
+}
+
+/**
+ * Extends a lease while its relay's post is still in flight, so a slow post is not handed to a
+ * second relay as well. Only the id that still holds the lease extends it; one that ran out and
+ * went to another relay extends nothing.
+ * @param {unknown} id - The lease the post goes under
+ * @returns {Promise<unknown>} - Settles once it is written, or was not the relay's to extend
+ */
+function renewHistoryBatch(id) {
+  return serialiseHistory(async () => {
+    const { lease } = await readHistoryStorage()
+    if (isOwnHistoryLease(lease, id)) {
+      await chrome.storage.local.set({ [HISTORY_LEASE_KEY]: newHistoryLease(id, Date.now()) })
+    }
   })
 }
 
@@ -245,18 +261,22 @@ function markHistoryUnrecognised(instance) {
 
 /**
  * Discards the buffer after the instance refused it, and remembers the refusal until the next
- * report says otherwise.
+ * report says otherwise. The lease goes only when it is the refusing relay's own, since another
+ * relay may hold it for a post still in flight.
  * @param {string} instance - The target scope's url the relay ran inside
+ * @param {unknown} id - The lease the refused batch went under
  * @returns {Promise<unknown>} - Settles once it is written
  */
-function refuseHistory(instance) {
+function refuseHistory(instance, id) {
   return serialiseHistory(async () => {
-    const { target, cached } = await readHistoryStorage()
+    const { target, cached, lease } = await readHistoryStorage()
     if (!target || target.url !== instance) {
       return
     }
 
-    await chrome.storage.local.remove([HISTORY_BUFFER_KEY, HISTORY_LEASE_KEY])
+    await chrome.storage.local.remove(
+      isOwnHistoryLease(lease, id) ? [HISTORY_BUFFER_KEY, HISTORY_LEASE_KEY] : HISTORY_BUFFER_KEY,
+    )
 
     if (cached && typeof cached === 'object' && cached.instance === instance) {
       await chrome.storage.local.set({ [HISTORY_STATE_KEY]: { ...cached, refused: true } })

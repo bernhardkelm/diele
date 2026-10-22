@@ -96,15 +96,13 @@ export function deleteEntry(owner: string | undefined, id: number): boolean {
     }
 
     if (originOf(row.url) === row.url) {
-      const shells = db
-        .prepare('SELECT url FROM history_shells WHERE owner = ?')
-        .pluck()
-        .all(owner) as string[]
-      const remove = db.prepare('DELETE FROM history_shells WHERE owner = ? AND url = ?')
-
-      for (const shell of shells.filter((url) => originOf(url) === row.url)) {
-        remove.run(owner, shell)
-      }
+      // Every url that starts with the origin and its slash sorts between it and the same string
+      // with the slash raised to `0`: exact, case-sensitive, nothing to escape, and on the key.
+      db.prepare('DELETE FROM history_shells WHERE owner = ? AND url >= ? AND url < ?').run(
+        owner,
+        row.url,
+        `${row.url.slice(0, -1)}0`,
+      )
     }
 
     return 1

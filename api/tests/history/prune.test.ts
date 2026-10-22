@@ -266,3 +266,65 @@ test('the sweep is skipped when it would remove every owner there is', async (t)
   assert.deepEqual(urls('key-of-a-deleted-account'), [])
   assert.deepEqual(urls(), ['https://mine.example/'])
 })
+
+/**
+ * Reads since when the file has found every owner unheld, as stored.
+ * @returns {Promise<number | undefined>} - Ms since the epoch, or undefined when no wait is running
+ */
+async function unheldSince(): Promise<number | undefined> {
+  const { getHistoryDb } = await import('#history/db.js')
+  const value = getHistoryDb()
+    .prepare("SELECT value FROM history_meta WHERE key = 'orphans.unheldSince'")
+    .pluck()
+    .get() as string | undefined
+
+  return value === undefined ? undefined : Number(value)
+}
+
+// The last account that used history may really be gone, so the wait ends.
+test('the wait survives a restart, and after thirty days the sweep runs, said first', async (t) => {
+  const warn = t.mock.method(console, 'warn', () => undefined)
+  const { closeHistoryDb } = await import('#history/db.js')
+  visit('https://mine.example/', 2, 1)
+  const saved = await setAllKeys('a-key-the-file-has-never-seen')
+  const start = Date.now()
+
+  pruneHistory(start)
+  assert.equal(await unheldSince(), start)
+
+  closeHistoryDb()
+  pruneHistory(start + 29 * DAY)
+  assert.deepEqual(urls(), ['https://mine.example/'])
+  assert.equal(await unheldSince(), start)
+
+  pruneHistory(start + 31 * DAY)
+  await restoreKeys(saved)
+
+  assert.deepEqual(urls(), [])
+  assert.equal(await unheldSince(), undefined)
+  const said = warn.mock.calls.map((call) => String(call.arguments[0]))
+  assert.ok(said.some((line) => line.includes('sweeping')))
+  assert.ok(said.every((line) => !line.includes(owner)))
+})
+
+test('an owner held again in the meantime starts the wait over', async () => {
+  visit('https://mine.example/', 2, 1)
+  const start = Date.now()
+
+  let saved = await setAllKeys('a-key-the-file-has-never-seen')
+  pruneHistory(start)
+  await restoreKeys(saved)
+
+  pruneHistory(start + 20 * DAY)
+  assert.equal(await unheldSince(), undefined)
+
+  saved = await setAllKeys('a-key-the-file-has-never-seen')
+  pruneHistory(start + 35 * DAY)
+  await restoreKeys(saved)
+
+  assert.deepEqual(urls(), ['https://mine.example/'])
+  assert.equal(await unheldSince(), start + 35 * DAY)
+
+  pruneHistory()
+  assert.equal(await unheldSince(), undefined)
+})

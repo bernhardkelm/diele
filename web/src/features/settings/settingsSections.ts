@@ -1,9 +1,11 @@
 import type { ListAction } from '@/helpers/listActions'
-import { dropGuesses } from '@/helpers/dropGuesses'
-import { MATCH_TIERS, type MatchTier } from '@/helpers/matchTiers'
-import { matchFields } from '@/helpers/scoreFields'
+import { matchItems } from '@/helpers/matchItems'
 import type { SearchField } from '@/helpers/searchFields'
 import { tokenize, type SearchToken } from '@/helpers/searchTokens'
+
+/** Weights an item is searched with, for a row that builds its fields itself */
+export const ITEM_LABEL_WEIGHT = 1
+export const ITEM_DETAIL_WEIGHT = 0.5
 
 /**
  * One nested row of a section. A row says which way it is set and running it is all it does:
@@ -36,6 +38,8 @@ export interface SettingsItem {
   readonly detail: string
   /** Shown in the trail at rest, ahead of the word that removes it */
   readonly note?: string
+  /** What a term is matched against, built with the row for a list long enough to need it */
+  readonly searchFields?: ReadonlyArray<SearchField>
   /** What removing it does, for assistive technology, since the trail word alone reads as loose text */
   readonly removeTitle: string
   /** Asks for a second press first, for a removal nothing undoes */
@@ -135,10 +139,12 @@ function optionFields(option: SettingsOption): ReadonlyArray<SearchField> {
  * @returns {ReadonlyArray<SearchField>} - Weighted fields, the label first
  */
 function itemFields(item: SettingsItem): ReadonlyArray<SearchField> {
-  return [
-    { text: item.label, weight: 1 },
-    { text: item.detail, weight: 0.5 },
-  ]
+  return (
+    item.searchFields ?? [
+      { text: item.label, weight: ITEM_LABEL_WEIGHT },
+      { text: item.detail, weight: ITEM_DETAIL_WEIGHT },
+    ]
+  )
 }
 
 /**
@@ -154,12 +160,7 @@ function matching<T>(
   fieldsOf: (row: T) => ReadonlyArray<SearchField>,
   tokens: ReadonlyArray<SearchToken>,
 ): ReadonlyArray<T> {
-  const matched = rows.flatMap((row) => {
-    const match = matchFields(fieldsOf(row), tokens)
-    return match ? [{ row, tier: match.tier }] : []
-  })
-
-  return dropGuesses(matched).map((entry) => entry.row)
+  return matchItems(rows, fieldsOf, tokens).map((entry) => entry.item)
 }
 
 /**
@@ -238,33 +239,21 @@ export function searchSections(
     return sections
   }
 
-  const ranked: Array<{
-    section: SettingsSection
-    score: number
-    tier: MatchTier | undefined
-    order: number
-  }> = []
+  /**
+   * Returns whether a section is the open one, which is listed whatever the term matches.
+   * @param {SettingsSection} section - Section to test
+   * @returns {boolean} - True for the open section
+   */
+  const isOpen = (section: SettingsSection): boolean => section.id === expanded
 
-  sections.forEach((section, order) => {
-    const open = section.id === expanded
-    const match = matchFields(sectionFields(section), tokens)
-
-    if (!match && !open) {
-      return
-    }
-
-    ranked.push({
-      section: open ? narrow(section, tokens) : section,
+  return matchItems(sections, sectionFields, tokens, isOpen)
+    .map(({ item, match, order }) => ({
+      section: isOpen(item) ? narrow(item, tokens) : item,
       // an open section that the term missed still leads, since what it holds is what the
       // term is narrowing
       score: match?.score ?? Number.POSITIVE_INFINITY,
-      // an open section is never dropped, though a literal hit on it still sets guesses aside
-      tier: open && match?.tier === MATCH_TIERS.TYPO ? undefined : match?.tier,
       order,
-    })
-  })
-
-  return [...dropGuesses(ranked)]
+    }))
     .sort((a, b) => b.score - a.score || a.order - b.order)
     .map((entry) => entry.section)
 }

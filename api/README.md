@@ -231,10 +231,13 @@ Rows are filed under `users.history_key`, a random 128-bit key created the first
 sets its preferences, never under `users.id`. The history file can outlive a reset or a restore of
 the configuration, and an id handed out again would otherwise give a new account someone else's
 history. Foreign keys cannot cross files, so the prune deletes every owner whose key no account
-holds; with no account deletion in the code today, that sweep is what covers it. It is skipped, with
-one log line that names nobody, when the file holds rows and no account holds any of their keys:
-that is what a main database restored from before history, or a wrong `DB_PATH`, looks like, and
-sweeping then would delete everyone's history. The state served to the portal and the extension
+holds; with no account deletion in the code today, that sweep is what covers it. When the file
+holds rows and no account holds any of their keys, the sweep waits: that is what a main database
+restored from before history, or a wrong `DB_PATH`, looks like, and sweeping then would delete
+everyone's history. The wait runs thirty days from the first prune that found it so, a time kept in
+the file's `history_meta` table so a restart does not start it over, with one log line that names
+nobody. An owner held again in the meantime ends the wait. Past thirty days the owners are taken as
+deleted, the sweep runs, and one more line says so first. The state served to the portal and the extension
 carries `account`, a 22-character sha256 digest of a fixed label and the key, so a source can tell
 whose history it buffered without ever seeing the key or the user id. Entry ids are random positive
 integers below 2^53, so an id says nothing about how many entries the instance has created.
@@ -266,10 +269,13 @@ entirely when it:
 - carries a token-like path segment, long, random and not word-like (UUIDs and 32-hex page ids
   pass);
 - is a capability link: a segment holding a word such as `reset`, `password`, `invite`, `join`,
-  `login`, `email`, `share` or `token`, directly followed by an opaque id, page ids included, an
-  encoded `/` counting as a boundary. Only that next segment is judged, a one-letter keyword (`s`)
-  counts only as a whole segment, and a slug (words joined by `-`, `_` or `.`, camelCase words
-  included) is never an id, so `/auth-service/blob/main/...` and `/auth/oauth2-setup-guide` are kept;
+  `login`, `email`, `share` or `token`, with an opaque id in any segment after it, an encoded `/`
+  counting as a boundary. Opaque is token-like by the rule above, a UUID, a 32-hex or 40-plus-hex
+  id, or a segment with a part between `-`, `_` and `.` of ten or more characters that is not a
+  written word, so Django's `/reset/<uidb64>/<token>/` is caught through its token while the short
+  id before it is skipped. A one-letter keyword (`s`) counts only as a whole segment, and a slug
+  (words joined by `-`, `_` or `.`, camelCase words included) is never an id, so
+  `/auth-service/blob/main/src/oauth2Client.ts` and `/auth/oauth2-setup-guide` are kept;
 - falls on a domain the account excluded.
 
 Segments are percent-decoded twice before they are judged. The same rules, run without DNS, are

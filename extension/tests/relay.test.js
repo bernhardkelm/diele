@@ -667,6 +667,8 @@ async function announced(local, routes) {
     Event,
     location: { origin: 'https://diele.example.com' },
     fetch,
+    setInterval: () => 'renewal',
+    clearInterval: () => undefined,
     dispatchEvent: (event) => {
       order.push('event')
       events.push(event)
@@ -739,4 +741,131 @@ test('a run that delivered a batch before one was kept still tells the page once
 
   assert.equal(outcome, 'kept')
   assert.equal(events.length, 1)
+})
+
+// A server slower than the lease must not have the same batch posted by a second tab meanwhile
+test('a slow post renews its lease, so no second relay gets that batch', async () => {
+  const { scripts, local } = setup(recordingStorage(3))
+  const send = channel(scripts)
+  let release
+  const held = new Promise((resolve) => (release = resolve))
+  const { fetch, calls } = stubFetch(instanceRoutes([{ status: 200 }]))
+  const timers = { renew: undefined, cleared: [] }
+  const deps = {
+    origin: 'https://diele.example.com',
+    send,
+    fetch: async (url, init) => {
+      if (init?.method === 'POST') {
+        await held
+      }
+
+      return fetch(url, init)
+    },
+    setInterval: (callback, ms) => {
+      timers.renew = callback
+      timers.every = ms
+      return 'renewal'
+    },
+    clearInterval: (timer) => timers.cleared.push(timer),
+  }
+  const report = { kind: 'history:report', signedIn: true, state: ON, engineTemplates: [] }
+
+  const first = scripts.runHistoryRelay(deps)
+  for (let turn = 0; turn < 20 && !timers.renew; turn += 1) {
+    await new Promise((resolve) => setImmediate(resolve))
+  }
+
+  assert.equal(timers.every, 10_000)
+  const id = local.dieleHistoryLease.id
+
+  // Nearly run out, the way 25 s of waiting would leave it, then renewed
+  local.dieleHistoryLease = { id, until: Date.now() + 1000 }
+  timers.renew()
+  await send({ kind: 'history:ready' })
+
+  assert.equal(local.dieleHistoryLease.id, id)
+  assert.ok(local.dieleHistoryLease.until > Date.now() + 115_000)
+  assert.equal((await send(report)).visits.length, 0)
+
+  release()
+  assert.equal(await first, 'delivered')
+  assert.deepEqual(timers.cleared, ['renewal'])
+  assert.equal(calls.filter((call) => call.init.method === 'POST').length, 1)
+  assert.equal(local.dieleHistoryBuffer.visits.length, 0)
+  assert.equal(local.dieleHistoryLease, undefined)
+})
+
+test('a renewal from a relay that no longer holds the lease extends nothing', async () => {
+  const { scripts, local } = setup(recordingStorage(3))
+  const send = channel(scripts)
+  const report = { kind: 'history:report', signedIn: true, state: ON, engineTemplates: [] }
+
+  const first = await send(report)
+  local.dieleHistoryLease = { ...local.dieleHistoryLease, until: Date.now() - 1 }
+  const second = await send(report)
+  const taken = structuredClone(local.dieleHistoryLease)
+
+  await send({ kind: 'history:renew', lease: first.lease })
+
+  assert.equal(second.visits.length, 3)
+  assert.deepEqual(local.dieleHistoryLease, taken)
+})
+
+test('a refusal from one relay leaves the lease another holds', async () => {
+  const { scripts, local } = setup(recordingStorage(3))
+  const send = channel(scripts)
+  const report = { kind: 'history:report', signedIn: true, state: ON, engineTemplates: [] }
+
+  const holder = await send(report)
+  await send(report)
+  await send({ kind: 'history:refused' })
+
+  assert.equal(local.dieleHistoryLease.id, holder.lease)
+  assert.equal(local.dieleHistoryBuffer, undefined)
+  assert.equal(local.dieleHistoryState.refused, true)
+
+  await send({ kind: 'history:refused', lease: holder.lease })
+  assert.equal(local.dieleHistoryLease, undefined)
+})
+
+// A background tab's timers may run only once a minute, so its renewals arrive that far apart
+test('renewals a minute apart still keep the batch from any second relay', async () => {
+  const { scripts, local } = setup(recordingStorage(3))
+  const send = channel(scripts)
+  const report = { kind: 'history:report', signedIn: true, state: ON, engineTemplates: [] }
+
+  const holder = await send(report)
+  const minuteAfter = (lease) => ({ id: lease.id, until: lease.until - 60_000 })
+
+  for (let renewal = 0; renewal < 3; renewal += 1) {
+    local.dieleHistoryLease = minuteAfter(local.dieleHistoryLease)
+    assert.equal((await send(report)).visits.length, 0, String(renewal))
+
+    await send({ kind: 'history:renew', lease: holder.lease })
+    assert.equal(local.dieleHistoryLease.id, holder.lease, String(renewal))
+  }
+
+  const sent = holder.visits.map((visit) => ({ url: visit.url, at: visit.at }))
+  await send({ kind: 'history:settled', visits: sent, lease: holder.lease, more: false })
+
+  assert.equal(local.dieleHistoryLease, undefined)
+  assert.equal(local.dieleHistoryBuffer.visits.length, 0)
+})
+
+test('a relay that died mid-post holds back only its batch, until its lease ends', async () => {
+  const { scripts, local } = setup(recordingStorage(3))
+  const send = channel(scripts)
+  const report = { kind: 'history:report', signedIn: true, state: ON, engineTemplates: [] }
+
+  const dead = await send(report)
+  await scripts.recordHistoryVisit('https://docs.example.com/new', undefined, Date.now())
+  const checked = local.dieleHistoryState.checkedAt
+  const meanwhile = await send(report)
+
+  assert.equal(meanwhile.visits.length, 0)
+  assert.equal(local.dieleHistoryBuffer.visits.length, 4)
+  assert.ok(local.dieleHistoryState.checkedAt >= checked)
+
+  local.dieleHistoryLease = { id: dead.lease, until: Date.now() - 1 }
+  assert.equal((await send(report)).visits.length, 4)
 })

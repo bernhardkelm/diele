@@ -48,8 +48,9 @@ test('the pages people revisit are kept, stripped to origin and path', () => {
       'https://docs.example.com/auth/oauth2-setup-guide',
     'https://blog.example.com/what-s-new/release-2024':
       'https://blog.example.com/what-s-new/release-2024',
-    'https://docs.example.com/login/troubleshooting-guide/a1b2c3d4e5f6':
-      'https://docs.example.com/login/troubleshooting-guide/a1b2c3d4e5f6',
+    'https://app.example/reset/MQ/set-password': 'https://app.example/reset/MQ/set-password',
+    'https://app.example/docs/login-flow/kubernetes-integration':
+      'https://app.example/docs/login-flow/kubernetes-integration',
     'https://shop.example/cart%3Bjsessionid%3D0123456789ABCDEF/items':
       'https://shop.example/cart/items',
     'https://shop.example/a%20b;v=1/c': 'https://shop.example/a%20b/c',
@@ -71,6 +72,11 @@ test('links that carry a key are dropped', () => {
     'https://app.example/s/8f14e45fceea167a5a36dedd4bea2543c7f3a9b1',
     'https://app.example/login/eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c',
     'https://app.example/reset;token=Xk9fQ2mZ7pL4wR8tY1vB6nC3hJ5sD0gA/Xk9fQ2mZ7pL4wR8tY1vB6nC3hJ5sD0gA',
+    'https://app.example/reset/MQ/c5v8pt-0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b/',
+    'https://app.example/email/verify/42/9f86d081884c7d659a2feaa0c55ad015',
+    'https://docs.example.com/login/troubleshooting-guide/a1b2c3d4e5f6',
+    'https://app.example/share/abc/def/a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d',
+    'https://app.example/invite/x/3f9a1c7e2b4d6f8a0c1e3b5d7f9a2c4e6b8d0f1a',
   ]) {
     assert.equal(accept(raw), undefined, raw)
   }

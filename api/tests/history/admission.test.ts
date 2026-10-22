@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { admitted } from '#history/admission.js'
+import { resolveBudget } from '#history/limits.js'
 
 // Each account within its own budget, together they would still make the resolver a scanner.
 test('lookups are capped across the instance as well as per account', async () => {
@@ -19,4 +20,8 @@ test('lookups are capped across the instance as well as per account', async () =
   }
 
   assert.equal(lookups, 600)
+
+  // The account the instance turned away made no lookup, and was charged for none.
+  assert.equal(resolveBudget.has('account-10', Date.now(), 60), true)
+  assert.equal(resolveBudget.has('account-9', Date.now(), 1), false)
 })

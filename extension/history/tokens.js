@@ -52,8 +52,14 @@ const CAPABILITY_KEYWORDS = new Set([
 
 const CAPABILITY_WORD_SEPARATORS = /[-_.]/
 
-// Shorter than this, what follows a keyword is a word or a route, not a key
+// Shorter than this, a part of what follows a keyword is a word, a route or a short id such as a
+// user's number, not a key
 const CAPABILITY_MIN_OPAQUE = 10
+
+// Ids that are a key after a keyword however they are written: a UUID, a 32-hex page id or a hash
+// of 40 hex digits or more
+const CAPABILITY_ID =
+  /^(?:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}|[0-9a-f]{32}|[0-9a-f]{40,})$/i
 
 // Keywords this short only count as a whole segment: as a part of a slug, a single letter is an
 // ordinary fragment of English (`what-s-new`), not a share route
@@ -190,44 +196,38 @@ function isWrittenWord(word, camel) {
 }
 
 /**
- * Returns whether a segment reads as a slug: words joined by `-`, `_` or `.`, each of them a
- * written word or a run of camelCase words, such as `oauth2-setup-guide`, `release-2024` or
- * `oauth2Client.ts`. A run like `AbCdEf1234` splits into words too short to be any.
- * @param {string} segment - One path segment, decoded
- * @returns {boolean} - True when every part reads as written
+ * Returns whether one part of a slug, between `-`, `_` and `.`, reads as written: a written word
+ * or a run of camelCase words, such as `oauth2`, `release` or `oauth2Client`. A run like
+ * `AbCdEf1234` splits into words too short to be any.
+ * @param {string} part - Text between separators
+ * @returns {boolean} - True when the part reads as written
  */
-function isSlugSegment(segment) {
-  const parts = segment.split(CAPABILITY_WORD_SEPARATORS).filter((part) => part.length > 0)
+function isSlugPart(part) {
+  const words = part.split(/(?<=[a-z\d])(?=[A-Z])/)
 
-  return (
-    parts.length > 0 &&
-    parts.every((part) => {
-      const words = part.split(/(?<=[a-z\d])(?=[A-Z])/)
-
-      return words.every((word) => isWrittenWord(word, words.length > 1))
-    })
-  )
+  return words.every((word) => isWrittenWord(word, words.length > 1))
 }
 
 /**
- * Returns whether a segment is an opaque id rather than a word or a slug: only url-safe token
- * characters, carrying a digit, a lowercase letter followed by a capital, or too few vowels, and
- * not made of written words. UUIDs and hex page ids count here, unlike in the general token check.
+ * Returns whether a segment after a keyword is the key itself: url-safe token characters only,
+ * and token-like by the entropy rule, a UUID or hex id, or holding a part of ten characters or
+ * more that is not written. A short id such as a user's number or Django's `MQ` is not, and
+ * neither is a slug, so `oauth2-setup-guide` and `release-2024` are kept.
  * @param {string} segment - One path segment, decoded
- * @returns {boolean} - True when it reads as an id
+ * @returns {boolean} - True when it reads as a key
  */
-function isOpaqueSegment(segment) {
-  const shape = /^[\w.~=+-]+$/.test(segment)
-  if (segment.length < CAPABILITY_MIN_OPAQUE || !shape || isSlugSegment(segment)) {
+function isCapabilityId(segment) {
+  if (!/^[\w.~=+-]+$/.test(segment)) {
     return false
   }
 
-  if (/\d/.test(segment) || /[a-z][A-Z]/.test(segment)) {
+  if (CAPABILITY_ID.test(segment) || isTokenSegment(segment)) {
     return true
   }
 
-  const letters = segment.replace(/[^a-z]/gi, '')
-  return letters.length >= CAPABILITY_MIN_OPAQUE && isUnpronounceable(letters)
+  return segment
+    .split(CAPABILITY_WORD_SEPARATORS)
+    .some((part) => part.length >= CAPABILITY_MIN_OPAQUE && !isSlugPart(part))
 }
 
 /**
@@ -249,10 +249,11 @@ function isCapabilityKeyword(segment) {
 }
 
 /**
- * Returns whether a path is a capability link: an opaque id in the segment right after one
- * holding a keyword. Only that segment is judged, so a repository path or a docs page below an
- * `auth` segment is kept. An encoded slash is a boundary like any other, since it is one to
- * whatever routes the request.
+ * Returns whether a path is a capability link: a key in any segment after one holding a keyword,
+ * since a short id can stand between them, as in Django's `/reset/MQ/<token>/` or
+ * `/email/verify/42/<hash>`. Only a key counts there, so a repository path or a docs page below
+ * an `auth` segment, all slugs and file names, is kept. An encoded slash is a boundary like any
+ * other, since it is one to whatever routes the request.
  * @param {string} pathname - Path, matrix parameters already removed
  * @returns {boolean} - True when the path carries a key behind a keyword
  */
@@ -260,10 +261,7 @@ function isCapabilityLink(pathname) {
   const segments = pathname
     .split('/')
     .flatMap((segment) => decodePathSegment(segment).split(/\/|%2f/i))
+  const at = segments.findIndex(isCapabilityKeyword)
 
-  return segments.some((segment, at) => {
-    const next = segments[at + 1]
-
-    return next !== undefined && isCapabilityKeyword(segment) && isOpaqueSegment(next)
-  })
+  return at >= 0 && segments.slice(at + 1).some(isCapabilityId)
 }

@@ -17,6 +17,10 @@ const HISTORY_DELIVERED_EVENT = 'diele:history-delivered'
 // A tab returned to or nudged by the worker runs at most this often; a page load always runs
 const RELAY_MIN_INTERVAL_MS = 10_000
 
+// How often a post still in flight renews its lease, well inside the 120 s the lease lasts even
+// when a background tab's throttled timers stretch it to once a minute
+const RELAY_RENEW_MS = 10_000
+
 /**
  * Fetches one of the instance's endpoints as the page would.
  * @param {{fetch: Function, origin: string}} deps - The fetch to use and the instance's origin
@@ -234,10 +238,10 @@ async function deliverRelayBatches(deps, reply) {
     }
 
     const lease = next.lease
-    const result = await postRelayBatch(deps, visits)
+    const result = await whileRenewing(deps, lease, () => postRelayBatch(deps, visits))
 
     if (result === 'refused') {
-      await relaySend(deps, { kind: 'history:refused' })
+      await relaySend(deps, { kind: 'history:refused', lease })
       return { outcome: 'refused', accepted }
     }
 
@@ -254,6 +258,28 @@ async function deliverRelayBatches(deps, reply) {
   }
 
   return { outcome, accepted }
+}
+
+/**
+ * Runs a post while renewing the lease it goes under, so a slow server does not let the lease run
+ * out and a second relay send the same batch.
+ * @param {{send: Function, setInterval?: Function, clearInterval?: Function}} deps - The channel
+ *   to the worker and the timers to renew by
+ * @param {unknown} lease - The lease the post goes under
+ * @param {() => Promise<string>} post - The post
+ * @returns {Promise<string>} - What the post resolved to
+ */
+async function whileRenewing(deps, lease, post) {
+  const renew = () => void relaySend(deps, { kind: 'history:renew', lease })
+  const timer = deps.setInterval ? deps.setInterval(renew, RELAY_RENEW_MS) : undefined
+
+  try {
+    return await post()
+  } finally {
+    if (timer !== undefined) {
+      deps.clearInterval(timer)
+    }
+  }
 }
 
 /**
@@ -349,14 +375,16 @@ function listenForRelayTriggers(world, trigger) {
  * named, so it is never consulted.
  * @param {{location: Location, fetch: Function, chrome: object}} world - The content script's
  *   global scope
- * @returns {{fetch: Function, origin: string, send: Function, announce: Function}} - What
- *   runHistoryRelay needs
+ * @returns {{fetch: Function, origin: string, send: Function, setInterval: Function, clearInterval: Function, announce: Function}} -
+ *   What runHistoryRelay needs
  */
 function relayDepsOf(world) {
   return {
     origin: world.location.origin,
     fetch: (input, init) => world.fetch(input, init),
     send: (message) => world.chrome.runtime.sendMessage(message),
+    setInterval: (callback, ms) => world.setInterval(callback, ms),
+    clearInterval: (timer) => world.clearInterval(timer),
     // The one thing the page ever receives: a plain Event, no detail, so a page script firing
     // the same name can only make diele read its own history again
     announce: () => world.dispatchEvent(new world.Event(HISTORY_DELIVERED_EVENT)),

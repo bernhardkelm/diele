@@ -17,8 +17,11 @@ const HISTORY_BUFFER_MAX_PER_SITE = 25
 // `example.co.uk`; a stand-in for the public suffix list, which is too large to ship
 const HISTORY_SECOND_LEVEL_LABELS = new Set(['ac', 'co', 'com', 'edu', 'gov', 'net', 'org'])
 
-// How long a relay may take to post a batch before another relay may be handed the same one
-const HISTORY_LEASE_MS = 30_000
+// How long a relay's batch stays its own without a renewal. The relay renews every 10 s, but a
+// background tab's timers run as rarely as once a minute, so the lease outlasts two of those;
+// a relay that died mid-post holds its batch this long at most, and only the handing out of
+// batches waits on it, a settle or a release frees it at once
+const HISTORY_LEASE_MS = 120_000
 
 // What the server accepts from the extension in one batch
 const HISTORY_BATCH_MAX = 200

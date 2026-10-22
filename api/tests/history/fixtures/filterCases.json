@@ -419,6 +419,62 @@
       }
     },
     {
+      "url": "https://app.example/reset/MQ/c5v8pt-0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b/",
+      "expect": {
+        "stored": null,
+        "title": null
+      }
+    },
+    {
+      "url": "https://app.example/email/verify/42/9f86d081884c7d659a2feaa0c55ad015",
+      "expect": {
+        "stored": null,
+        "title": null
+      }
+    },
+    {
+      "url": "https://app.example/invite/team/42/a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
+      "expect": {
+        "stored": null,
+        "title": null
+      }
+    },
+    {
+      "url": "https://app.example/reset/MQ/set-password",
+      "expect": {
+        "stored": "https://app.example/reset/MQ/set-password",
+        "title": null
+      }
+    },
+    {
+      "url": "https://app.example/share/Team%20Roadmap%202024",
+      "expect": {
+        "stored": "https://app.example/share/Team%20Roadmap%202024",
+        "title": null
+      }
+    },
+    {
+      "url": "https://sso.example.com/auth/realms/master/account",
+      "expect": {
+        "stored": "https://sso.example.com/auth/realms/master/account",
+        "title": null
+      }
+    },
+    {
+      "url": "https://docs.example.com/reset/how-it-works/troubleshooting-guide",
+      "expect": {
+        "stored": "https://docs.example.com/reset/how-it-works/troubleshooting-guide",
+        "title": null
+      }
+    },
+    {
+      "url": "https://github.com/acme/auth-service/tree/main/docs/kubernetesIntegration.md",
+      "expect": {
+        "stored": "https://github.com/acme/auth-service/tree/main/docs/kubernetesIntegration.md",
+        "title": null
+      }
+    },
+    {
       "url": "https://app.example/share/team-roadmap",
       "expect": {
         "stored": "https://app.example/share/team-roadmap",
