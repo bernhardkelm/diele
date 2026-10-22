@@ -1,7 +1,11 @@
 import type { ListAction } from '@/helpers/listActions'
-import { scoreFields } from '@/helpers/scoreFields'
+import { matchItems } from '@/helpers/matchItems'
 import type { SearchField } from '@/helpers/searchFields'
 import { tokenize, type SearchToken } from '@/helpers/searchTokens'
+
+/** Weights an item is searched with, for a row that builds its fields itself */
+export const ITEM_LABEL_WEIGHT = 1
+export const ITEM_DETAIL_WEIGHT = 0.5
 
 /**
  * One nested row of a section. A row says which way it is set and running it is all it does:
@@ -23,9 +27,70 @@ export interface SettingsOption {
 }
 
 /**
- * One group of preferences, which expands in place the way an admin feature does. A section
- * owns its rows outright: they are read from and written to this browser, so opening one costs
- * no request and shows nothing that has to be waited for.
+ * A row that can be taken out of its section on its own, the way an admin entry is deleted: a
+ * kept page, an excluded domain.
+ */
+export interface SettingsItem {
+  readonly kind: 'item'
+  readonly id: string
+  readonly label: string
+  /** One line under the name, saying what the row stands for */
+  readonly detail: string
+  /** Shown in the trail at rest, ahead of the word that removes it */
+  readonly note?: string
+  /** What a term is matched against, built with the row for a list long enough to need it */
+  readonly searchFields?: ReadonlyArray<SearchField>
+  /** What removing it does, for assistive technology, since the trail word alone reads as loose text */
+  readonly removeTitle: string
+  /** Asks for a second press first, for a removal nothing undoes */
+  readonly confirm?: boolean
+  readonly remove: () => Promise<void>
+}
+
+/**
+ * A row holding a text field that adds to its section, opened in place the way an admin add row
+ * opens its form.
+ */
+export interface SettingsField {
+  readonly kind: 'field'
+  readonly id: string
+  readonly label: string
+  /** One line under the name, saying what adding one does */
+  readonly detail: string
+  /** Names the field for assistive technology, where the row's label names the whole row */
+  readonly inputLabel: string
+  readonly placeholder: string
+  /** Word on the button that submits it */
+  readonly submitLabel: string
+  /** Takes what was typed; answers with why it was refused, or undefined once it is added */
+  readonly submit: (value: string) => Promise<string | undefined>
+}
+
+/**
+ * Items listed a page at a time behind a row that lists the next page, for a list that can run to
+ * thousands. A term searches every item, not only the listed ones, and pages what it found.
+ */
+export interface SettingsPagedItems {
+  readonly kind: 'paged'
+  readonly id: string
+  readonly items: ReadonlyArray<SettingsItem>
+  /** How many of the items are listed, the rest waiting behind the row `more` builds */
+  readonly shown: number
+  /** Builds the row listing the next page, from how many items are not listed yet */
+  readonly more: (hidden: number) => ListAction
+}
+
+/**
+ * A row after a section's options: one that adds, one that is removed on its own, one that acts,
+ * or a long run of removable ones listed a page at a time.
+ */
+export type SettingsRow = SettingsField | SettingsItem | ListAction | SettingsPagedItems
+
+/**
+ * One group of preferences, which expands in place the way an admin feature does. Most sections
+ * own their rows outright: they are read from and written to this browser, so opening one costs
+ * no request and shows nothing that has to be waited for. One whose rows live on the api reads
+ * them when it opens instead.
  */
 export interface SettingsSection {
   readonly id: string
@@ -38,6 +103,8 @@ export interface SettingsSection {
   readonly options: ReadonlyArray<SettingsOption>
   /** Row that acts rather than switching, ahead of the options the way `Add entry` is */
   readonly action?: ListAction
+  /** Rows after the options, in the order they are listed */
+  readonly rows?: ReadonlyArray<SettingsRow>
 }
 
 /**
@@ -67,6 +134,62 @@ function optionFields(option: SettingsOption): ReadonlyArray<SearchField> {
 }
 
 /**
+ * Returns the texts an item is searched over.
+ * @param {SettingsItem} item - Item to describe
+ * @returns {ReadonlyArray<SearchField>} - Weighted fields, the label first
+ */
+function itemFields(item: SettingsItem): ReadonlyArray<SearchField> {
+  return (
+    item.searchFields ?? [
+      { text: item.label, weight: ITEM_LABEL_WEIGHT },
+      { text: item.detail, weight: ITEM_DETAIL_WEIGHT },
+    ]
+  )
+}
+
+/**
+ * Filters rows down to the ones a term addresses, in their declared order, leaving out the ones
+ * only a typo found once another matched literally.
+ * @param {ReadonlyArray<T>} rows - Rows to filter
+ * @param {(row: T) => ReadonlyArray<SearchField>} fieldsOf - Weighted texts a row is searched over
+ * @param {ReadonlyArray<SearchToken>} tokens - Tokens the query split into
+ * @returns {ReadonlyArray<T>} - Matching rows, in declared order
+ */
+function matching<T>(
+  rows: ReadonlyArray<T>,
+  fieldsOf: (row: T) => ReadonlyArray<SearchField>,
+  tokens: ReadonlyArray<SearchToken>,
+): ReadonlyArray<T> {
+  return matchItems(rows, fieldsOf, tokens).map((entry) => entry.item)
+}
+
+/**
+ * Filters the rows a term addresses, in their declared order. Only the items are narrowed, paged
+ * ones included: the field and the actions act on the section as a whole, the way its restore
+ * row does, so a term looking for one item must not take away the row that adds another.
+ * @param {ReadonlyArray<SettingsRow>} rows - Rows after a section's options
+ * @param {ReadonlyArray<SearchToken>} tokens - Tokens the query split into
+ * @returns {ReadonlyArray<SettingsRow>} - Rows left standing, in section order
+ */
+function filterRows(
+  rows: ReadonlyArray<SettingsRow>,
+  tokens: ReadonlyArray<SearchToken>,
+): ReadonlyArray<SettingsRow> {
+  // every item of the section at once, so a literal hit on a loose row sets aside the guesses
+  // among the paged ones as well
+  const items = rows.flatMap((row) =>
+    row.kind === 'paged' ? row.items : row.kind === 'item' ? [row] : [],
+  )
+  const kept = new Set(matching(items, itemFields, tokens))
+
+  return rows
+    .map((row) =>
+      row.kind === 'paged' ? { ...row, items: row.items.filter((item) => kept.has(item)) } : row,
+    )
+    .filter((row) => row.kind !== 'item' || kept.has(row))
+}
+
+/**
  * Filters and ranks the options a term addresses, in their declared order: a section's rows
  * are a fixed set someone reads down, not a result list to be reordered under them.
  * @param {ReadonlyArray<SettingsOption>} options - Rows of one section
@@ -77,7 +200,21 @@ function filterOptions(
   options: ReadonlyArray<SettingsOption>,
   tokens: ReadonlyArray<SearchToken>,
 ): ReadonlyArray<SettingsOption> {
-  return options.filter((option) => scoreFields(optionFields(option), tokens) !== undefined)
+  return matching(options, optionFields, tokens)
+}
+
+/**
+ * Narrows an open section to what a term addresses inside it.
+ * @param {SettingsSection} section - Section whose rows are on screen
+ * @param {ReadonlyArray<SearchToken>} tokens - Tokens the query split into
+ * @returns {SettingsSection} - The same section, holding only the rows the term left
+ */
+function narrow(section: SettingsSection, tokens: ReadonlyArray<SearchToken>): SettingsSection {
+  return {
+    ...section,
+    options: filterOptions(section.options, tokens),
+    ...(section.rows ? { rows: filterRows(section.rows, tokens) } : {}),
+  }
 }
 
 /**
@@ -102,26 +239,21 @@ export function searchSections(
     return sections
   }
 
-  const ranked: Array<{ section: SettingsSection; score: number; order: number }> = []
+  /**
+   * Returns whether a section is the open one, which is listed whatever the term matches.
+   * @param {SettingsSection} section - Section to test
+   * @returns {boolean} - True for the open section
+   */
+  const isOpen = (section: SettingsSection): boolean => section.id === expanded
 
-  sections.forEach((section, order) => {
-    const open = section.id === expanded
-    const score = scoreFields(sectionFields(section), tokens)
-
-    if (score === undefined && !open) {
-      return
-    }
-
-    ranked.push({
-      section: open ? { ...section, options: filterOptions(section.options, tokens) } : section,
+  return matchItems(sections, sectionFields, tokens, isOpen)
+    .map(({ item, match, order }) => ({
+      section: isOpen(item) ? narrow(item, tokens) : item,
       // an open section that the term missed still leads, since what it holds is what the
       // term is narrowing
-      score: score ?? Number.POSITIVE_INFINITY,
+      score: match?.score ?? Number.POSITIVE_INFINITY,
       order,
-    })
-  })
-
-  ranked.sort((a, b) => b.score - a.score || a.order - b.order)
-
-  return ranked.map((entry) => entry.section)
+    }))
+    .sort((a, b) => b.score - a.score || a.order - b.order)
+    .map((entry) => entry.section)
 }

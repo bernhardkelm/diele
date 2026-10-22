@@ -15,6 +15,9 @@ const KEYS: Readonly<Record<string, string>> = {
   reddit: 'reddit.enabled',
   health: 'health.enabled',
   alerts: 'alerts.enabled',
+  history: 'history.enabled',
+  historyDiele: 'history.diele.enabled',
+  historyExtension: 'history.extension.enabled',
 }
 
 /**
@@ -24,10 +27,18 @@ const KEYS: Readonly<Record<string, string>> = {
  *
  * Features that stay off until someone asks for them. Probing local ports costs a request per
  * port on every load, so a portal that is not a development machine should not do it unasked.
+ * History keeps a record of where people went, which is not something a portal should start doing
+ * because nobody said otherwise, and its sources are off with it so turning the feature on
+ * records nothing until an admin also says from where.
  * Everything else defaults on: it costs nothing until it matches, and defaulting it off would
  * mean a fresh portal quietly missing behaviour it never said it had turned off.
  */
-const DEFAULT_OFF: ReadonlySet<string> = new Set(['localhost'])
+const DEFAULT_OFF: ReadonlySet<string> = new Set([
+  'localhost',
+  'history',
+  'historyDiele',
+  'historyExtension',
+])
 
 /**
  * Resolves the setting a feature's switch is held in. Connector types are not listed in `KEYS`

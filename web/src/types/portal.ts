@@ -3,7 +3,7 @@
 // second forge needs no case of its own anywhere in here.
 
 /** What the launcher draws a target as. */
-export type TargetKind = 'card' | 'row' | 'suggestion' | 'command'
+export type TargetKind = 'card' | 'row' | 'suggestion' | 'command' | 'history'
 
 export interface LaunchAction {
   /** Short label shown in a row; empty for the default action, which is the row itself */
@@ -55,8 +55,22 @@ export interface SuggestionTarget extends BaseTarget {
   readonly kind: 'suggestion'
   /** Second column text; falls back to the url's host when absent */
   readonly display?: string
-  /** Built from the typed term rather than saved here, so opening it is worth recording */
+  /**
+   * An address typed into the field rather than one saved here, so opening it is a visit. Only
+   * the Go to entry carries it: a slash command or a subreddit jump puts the term in its url, and
+   * a search is no page to offer back.
+   */
   readonly adHoc?: true
+}
+
+export interface HistoryTarget extends BaseTarget {
+  readonly kind: 'history'
+  /** Second column text, the host and path the page sits at */
+  readonly display: string
+  /** The page's own title, kept apart from `name`, which falls back to the address without one */
+  readonly title?: string
+  /** Never on the resting page: a visited page is only worth offering for a term it matches */
+  readonly searchOnly: true
 }
 
 export interface CommandTarget extends BaseTarget {
@@ -71,7 +85,7 @@ export interface CommandTarget extends BaseTarget {
 }
 
 /** Everything the launcher searches over. */
-export type PortalTarget = CardTarget | RowTarget | SuggestionTarget | CommandTarget
+export type PortalTarget = CardTarget | RowTarget | SuggestionTarget | CommandTarget | HistoryTarget
 
 export interface SearchEngine {
   readonly id: string

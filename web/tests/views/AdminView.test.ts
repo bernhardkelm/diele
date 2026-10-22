@@ -11,6 +11,7 @@ import ActionRow from '@/components/ActionRow.vue'
 import AdminHiddenRow from '@/features/admin/AdminHiddenRow.vue'
 import { resetConnectorEntries } from '@/composables/useConnectorEntries'
 import { resetPortalConfig } from '@/composables/usePortalConfig'
+import { resetAdmin } from '@/features/admin/useAdmin'
 
 const FEATURES = [
   {
@@ -236,6 +237,135 @@ describe('the feature list', () => {
   })
 })
 
+describe('a switch with switches inside it', () => {
+  const SWITCHES = [
+    {
+      id: 'history',
+      label: 'History',
+      description: 'pages people visited, offered back in their search',
+      kind: 'builtin',
+      produces: [],
+      fields: [],
+      count: 0,
+      enabledCount: 0,
+      toggleable: true,
+      switchOnly: true,
+      enabled: false,
+      toggleHint: 'off for everyone, and nothing is kept',
+    },
+    {
+      id: 'historyDiele',
+      label: 'From diele',
+      description: 'pages opened from the portal itself',
+      kind: 'builtin',
+      produces: [],
+      fields: [],
+      count: 0,
+      enabledCount: 0,
+      toggleable: true,
+      switchOnly: true,
+      enabled: true,
+      parent: 'history',
+    },
+    {
+      id: 'historyExtension',
+      label: 'From the extension',
+      description: 'pages loaded in a browser with the extension',
+      kind: 'builtin',
+      produces: [],
+      fields: [],
+      count: 0,
+      enabledCount: 0,
+      toggleable: true,
+      switchOnly: true,
+      enabled: false,
+      parent: 'history',
+      toggleHint: 'the extension is not listened to',
+    },
+  ]
+
+  // The panel's state outlives the component, so the list the other tests read is put aside here
+  // and dropped again afterwards rather than left for them to paint.
+  beforeEach(() => {
+    resetAdmin()
+    const api = stubApi()
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+        if (String(input) === '/api/admin/features') {
+          return Promise.resolve(new Response(JSON.stringify({ features: SWITCHES })))
+        }
+
+        return api(input, init)
+      }),
+    )
+  })
+
+  afterEach(() => {
+    resetAdmin()
+  })
+
+  /**
+   * Mounts the panel and waits for the switches rather than for any feature at all.
+   * @returns {Promise<VueWrapper>} - The mounted panel
+   */
+  async function openSwitches(): Promise<VueWrapper> {
+    const wrapper = mount(AdminView, { attachTo: document.body })
+    await vi.waitFor(() => expect(wrapper.findAllComponents(AdminFeatureRow)).toHaveLength(3))
+
+    return wrapper
+  }
+
+  /**
+   * Returns the rendered feature rows by id.
+   * @param {VueWrapper} wrapper - The mounted panel
+   * @returns {ReadonlyArray<{ id: string; nested: boolean }>} - Each row, in list order
+   */
+  function rowsOf(wrapper: VueWrapper): ReadonlyArray<{ id: string; nested: boolean }> {
+    return wrapper.findAllComponents(AdminFeatureRow).map((row) => ({
+      id: row.props('feature').id,
+      nested: Boolean(row.props('nested')),
+    }))
+  }
+
+  // It has nothing to open, so the switches beneath it would otherwise be unreachable.
+  it('lists the inner switches beneath it without being opened', async () => {
+    const wrapper = await openSwitches()
+
+    expect(rowsOf(wrapper)).toEqual([
+      { id: 'history', nested: false },
+      { id: 'historyDiele', nested: true },
+      { id: 'historyExtension', nested: true },
+    ])
+  })
+
+  it('says why a switch is off in the hint the api sent, where its neighbours do', async () => {
+    const wrapper = await openSwitches()
+    const [parent, , extension] = wrapper.findAllComponents(AdminFeatureRow)
+
+    expect(parent!.text()).toContain('off for everyone, and nothing is kept')
+    expect(extension!.text()).toContain('the extension is not listened to')
+    expect(extension!.text()).toContain('off')
+  })
+
+  it('turns an inner switch over on its own, without opening anything', async () => {
+    const wrapper = await openSwitches()
+    const inner = wrapper
+      .findAllComponents(AdminFeatureRow)
+      .find((row) => row.props('feature').id === 'historyExtension')!
+
+    await inner.trigger('click')
+    await vi.waitFor(() =>
+      expect(
+        calls.some((call) => call.url === '/api/admin/features/historyExtension/enabled'),
+      ).toBe(true),
+    )
+
+    expect(window.location.hash).toBe('')
+  })
+})
+
 describe('opening a feature', () => {
   it('fetches its rows and renders them', async () => {
     const wrapper = await open()
@@ -299,6 +429,70 @@ describe('what the panel writes', () => {
     const writes = calls.filter((call) => call.method !== 'GET')
     expect(writes.length).toBeGreaterThan(0)
     expect(writes[0]!.url).toContain('/api/admin/links/card')
+  })
+})
+
+// A pointer focuses the button it presses, so the button has to survive arming for the second
+// press to land on it.
+describe('deleting a row with the pointer', () => {
+  /**
+   * Presses the first card's delete button the way a pointer does: the press focuses the button,
+   * then clicks it. Looked up afresh each time, the way a second click lands on whatever is drawn
+   * there by then.
+   * @param {VueWrapper} wrapper - The mounted panel
+   * @returns {Promise<void>}
+   */
+  async function clickDelete(wrapper: VueWrapper): Promise<void> {
+    const button = wrapper
+      .findAllComponents(AdminEntryRow)[0]!
+      .find<HTMLButtonElement>('.actions__item--danger')
+    expect(button.exists()).toBe(true)
+
+    button.element.focus()
+    await button.trigger('click')
+    await nextTick()
+  }
+
+  const deletes = (): ReadonlyArray<string> =>
+    calls.filter((call) => call.method === 'DELETE').map((call) => call.url)
+
+  it('arms on the first click, asking again on the button it pressed', async () => {
+    const wrapper = await open()
+    await expand(wrapper, 'cards')
+
+    await clickDelete(wrapper)
+
+    const button = wrapper.findAllComponents(AdminEntryRow)[0]!.find('.actions__item--danger')
+    expect(button.text()).toBe('press again to delete')
+    expect(button.attributes('aria-label')).toBe('Press again to delete Grafana')
+    expect(document.activeElement).toBe(button.element)
+    expect(wrapper.find('.entry__confirm').attributes('role')).toBe('status')
+    expect(deletes()).toEqual([])
+  })
+
+  it('deletes on the second click, once', async () => {
+    const wrapper = await open()
+    await expand(wrapper, 'cards')
+
+    await clickDelete(wrapper)
+    await clickDelete(wrapper)
+
+    await vi.waitFor(() => expect(deletes()).toEqual(['/api/admin/links/card/1']))
+  })
+
+  it('disarms once focus moves somewhere else', async () => {
+    const wrapper = await open()
+    await expand(wrapper, 'cards')
+
+    await clickDelete(wrapper)
+    wrapper.find<HTMLInputElement>('.launcher__input').element.focus()
+    await nextTick()
+
+    expect(wrapper.find('.entry__confirm').exists()).toBe(false)
+
+    await clickDelete(wrapper)
+
+    expect(deletes()).toEqual([])
   })
 })
 

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { fuzzyMatch, type FuzzyMatch } from '@/helpers/fuzzyMatch'
+import { MATCH_TIERS } from '@/helpers/matchTiers'
 
 /**
  * Matches an ordinary, unquoted token, which is what all but the last block here is about.
@@ -40,9 +41,20 @@ describe('what does not match', () => {
     expect(match('Grafana', '')).toBeUndefined()
   })
 
-  it('refuses a token whose characters are not all there', () => {
+  it('refuses a token no word of the text comes close to', () => {
     expect(match('Grafana', 'xyz')).toBeUndefined()
-    expect(match('Grafana', 'grafanas')).toBeUndefined()
+    expect(match('Grafana', 'grafanasxyz')).toBeUndefined()
+  })
+
+  // Letters that merely appear in order somewhere are no match: this is what listed ten repos
+  // above the page `heise` meant.
+  it('refuses a token whose letters are only scattered across the text', () => {
+    expect(match('Klickmeister/freiheit-und-gleichheit-in-der-bildungsgeschichte', 'heise')).toBe(
+      undefined,
+    )
+    expect(match('bernhardkelm/undisclosed', 'heise')).toBeUndefined()
+    expect(match('bernhardkelm/miwo_datasets', 'heise')).toBeUndefined()
+    expect(match('prometheus', 'pmts')).toBeUndefined()
   })
 
   // Letting a one or two character token scatter would match nearly everything, which is
@@ -66,8 +78,20 @@ describe('how matches rank', () => {
     expect(wordStart).toBeGreaterThan(substring)
   })
 
-  it('ranks any literal hit above a scattered one', () => {
-    expect(score('prometheus', 'prom')).toBeGreaterThan(score('prometheus', 'pmts'))
+  it('ranks any literal hit above an acronym, and an acronym above a typo', () => {
+    expect(score('akumal', 'kuma')).toBeGreaterThan(
+      score('Kubernetes Uptime Monitor Agent', 'kuma'),
+    )
+    expect(score('Uptime Kuma Metrics Agent', 'ukma')).toBeGreaterThan(score('ukmo', 'ukma'))
+  })
+
+  it('reports the tier each match needed', () => {
+    expect(match('kuma', 'kuma')!.tier).toBe(MATCH_TIERS.EXACT)
+    expect(match('kuma dashboard', 'kuma')!.tier).toBe(MATCH_TIERS.PREFIX)
+    expect(match('uptime kuma', 'kuma')!.tier).toBe(MATCH_TIERS.WORD_START)
+    expect(match('akumal', 'kuma')!.tier).toBe(MATCH_TIERS.SUBSTRING)
+    expect(match('Uptime Kuma', 'uk')!.tier).toBe(MATCH_TIERS.ACRONYM)
+    expect(match('Prometheus', 'prometeus')!.tier).toBe(MATCH_TIERS.TYPO)
   })
 
   // A hump opens a word the way a separator does, so a camel-cased name is searchable by
@@ -81,7 +105,7 @@ describe('how matches rank', () => {
   })
 })
 
-describe('acronyms and subsequences', () => {
+describe('acronyms', () => {
   // Landing every character on a word start is specific enough to stay useful two characters
   // down, which is what makes `uk` find `Uptime Kuma`.
   it('finds a name by the initials of its words', () => {
@@ -94,9 +118,56 @@ describe('acronyms and subsequences', () => {
     ])
   })
 
-  it('tolerates a typo without matching everything', () => {
-    expect(match('prometheus', 'prometeus')).toBeDefined()
-    expect(match('prometheus', 'abc')).toBeUndefined()
+  // Only the initials count, so a letter that also ends a word cannot stand in for one.
+  it('lands every character on a word start even where a letter repeats inside a word', () => {
+    expect(match('Home Assistant Media', 'ham')!.ranges).toEqual([
+      { start: 0, end: 1 },
+      { start: 5, end: 6 },
+      { start: 15, end: 16 },
+    ])
+  })
+})
+
+describe('typos', () => {
+  it('finds a word with a letter missing, swapped or wrong', () => {
+    expect(match('Prometheus', 'prometeus')).toBeDefined()
+    expect(match('Grafana', 'grafna')).toBeDefined()
+    expect(match('Grafana', 'garfana')).toBeDefined()
+    expect(match('Grafana', 'grafama')).toBeDefined()
+  })
+
+  // Below four characters a single edit turns one word into another.
+  it('guesses nothing for a token under four characters', () => {
+    expect(match('Grafana', 'gra')).toBeDefined()
+    expect(match('Grafana', 'gfa')).toBeUndefined()
+    expect(match('Loki', 'lko')).toBeUndefined()
+  })
+
+  it('allows one edit up to seven characters and two from eight', () => {
+    expect(match('Grafana', 'grfnaa')).toBeUndefined()
+    expect(match('Prometheus', 'promteheu')).toBeDefined()
+    expect(match('Prometheus', 'prmtheus')).toBeDefined()
+    expect(match('Prometheus', 'prmthues')).toBeUndefined()
+  })
+
+  // A word still being typed is compared by its start, so a slip in it does not lose the target.
+  it('finds a word by a mistyped start of it', () => {
+    expect(match('Prometheus', 'promr')).toBeDefined()
+    expect(match('Prometheus', 'promr')!.ranges).toEqual([{ start: 0, end: 5 }])
+  })
+
+  it('reads the words of a path, a name and a camel-cased one apart', () => {
+    expect(match('example-group/uptime_kuma', 'kuam')).toBeDefined()
+    expect(match('example.org', 'exampel')).toBeDefined()
+    expect(match('UptimeKuma', 'uptmie')).toBeDefined()
+  })
+
+  it('marks the word it matched', () => {
+    expect(match('my Grafana board', 'grafna')!.ranges).toEqual([{ start: 3, end: 10 }])
+  })
+
+  it('ranks one edit above two on the same word', () => {
+    expect(score('Prometheus', 'prometeus')).toBeGreaterThan(score('Prometheus', 'prmetheis'))
   })
 })
 
@@ -106,7 +177,7 @@ describe('the ranges a renderer marks up', () => {
   })
 
   it('reports ranges ascending and non-overlapping', () => {
-    const { ranges } = match('example-group/web', 'egw')!
+    const { ranges } = match('example-group/uptime-web', 'eguw')!
 
     for (const [index, range] of ranges.entries()) {
       expect(range.end).toBeGreaterThan(range.start)
@@ -118,12 +189,14 @@ describe('the ranges a renderer marks up', () => {
     }
   })
 
-  // A forward pass alone misses this whenever an early character of the token repeats.
-  it('picks the tightest window when a character repeats', () => {
-    const { ranges } = match('aabac', 'abc')!
+  // A forward pass alone misses this whenever an early letter of the token opens several words.
+  it('picks the tightest run of initials when a letter opens more than one word', () => {
+    const { ranges } = match('Alpha Alpha Beta', 'ab')!
 
-    expect(ranges.at(-1)!.end).toBe(5)
-    expect(ranges[0]!.start).toBeGreaterThan(0)
+    expect(ranges).toEqual([
+      { start: 6, end: 7 },
+      { start: 12, end: 13 },
+    ])
   })
 
   it('matches case-insensitively but reports positions in the original text', () => {
@@ -166,8 +239,9 @@ it('keeps every score inside the documented range', () => {
   for (const [text, token] of [
     ['kuma', 'kuma'],
     ['uptime kuma', 'kuma'],
-    ['prometheus', 'pmts'],
     ['Uptime Kuma', 'uk'],
+    ['prometheus', 'prometeus'],
+    ['prometheus', 'prmetheis'],
   ] as const) {
     const value = score(text, token)
 

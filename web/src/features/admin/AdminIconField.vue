@@ -3,6 +3,7 @@ import { computed, onMounted, useTemplateRef, watch } from 'vue'
 import AdminSelectField from '@/features/admin/AdminSelectField.vue'
 import { useArmedAction } from '@/composables/useArmedAction'
 import { useIcons } from '@/composables/useIcons'
+import { vSvg } from '@/directives/trustedSvg'
 
 interface AdminIconFieldProps {
   /** Stored icon id, or anything else when the field has never been set */
@@ -97,7 +98,7 @@ async function onDelete(): Promise<void> {
         class="icon__preview"
         aria-hidden="true"
         :style="tint ? { color: tint } : undefined"
-        v-html="preview"
+        v-svg="preview"
       />
 
       <AdminSelectField

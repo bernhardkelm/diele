@@ -30,6 +30,17 @@
       <ul id="list" class="rows"></ul>
     </fieldset>
 
+    <!-- Said once for every row; everything else about history is in the README it links to -->
+    <p id="history-note" class="note note--block" hidden>
+      Sends the pages you load to one instance, origin and path only.
+      <a
+        href="https://github.com/bernhardkelm/diele/blob/main/extension/README.md#history"
+        target="_blank"
+        rel="noopener noreferrer"
+        >How it works</a
+      >
+    </p>
+
     <form id="add">
       <div class="field">
         <label class="label" for="name">Name (optional)</label>
@@ -71,12 +82,42 @@
           <span class="row__detail truncate"></span>
         </label>
         <button class="row__remove" type="button">&times;</button>
+        <!-- diele's bracket checkbox: a real checkbox laid over its glyph, the label around both
+             the hover and click target. A few words of status follow on the same line, and the
+             hidden phrase after them says the rest to assistive technology. -->
+        <span class="row__history">
+          <label class="check">
+            <span class="check__control">
+              <input class="check__input row__toggle" type="checkbox" />
+              <span class="check__box" aria-hidden="true"></span>
+            </span>
+            <span class="check__text">history</span>
+          </label>
+          <span class="row__status truncate" aria-live="polite"></span>
+          <span class="row__status-more visually-hidden"></span>
+        </span>
+        <!-- Only while history is on for the row; hidden rather than absent, so painting it is
+             the same on every row -->
+        <span class="row__history row__history--titles" hidden>
+          <label class="check">
+            <span class="check__control">
+              <input class="check__input row__titles" type="checkbox" />
+              <span class="check__box" aria-hidden="true"></span>
+            </span>
+            <span class="check__text">titles</span>
+          </label>
+          <span class="row__status row__titles-status truncate" aria-live="polite"></span>
+        </span>
       </li>
     </template>
 
     <!-- External files, not inline: the manifest v3 CSP blocks inline scripts on extension
-         pages. storage.js first, it defines what popup.js calls. -->
+         pages. popup.js last, it calls what the others define. -->
     <script src="storage.js"></script>
+    <script src="history/keys.js"></script>
+    <script src="history/scope.js"></script>
+    <script src="history/state.js"></script>
+    <script src="popupHistory.js"></script>
     <script src="popup.js"></script>
   </body>
 </html>

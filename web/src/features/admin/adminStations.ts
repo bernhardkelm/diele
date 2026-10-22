@@ -98,6 +98,27 @@ function hiddenKey(featureId: string, entryRef: string): string {
   return `hidden:${featureId}:${entryRef}`
 }
 
+/**
+ * Builds the stations of the features configured inside another one, at the depth of its rows.
+ * @param {ReadonlyArray<ApiFeature>} features - Features left after filtering
+ * @param {string} parentId - Feature they belong to
+ * @returns {ReadonlyArray<AdminStation>} - One nested station per child, in list order
+ */
+function childStations(
+  features: ReadonlyArray<ApiFeature>,
+  parentId: string,
+): ReadonlyArray<AdminStation> {
+  return features
+    .filter((child) => child.parent === parentId)
+    .map((child): AdminStation => ({
+      kind: 'feature',
+      key: featureKey(child.id),
+      label: child.label,
+      feature: child,
+      nested: true,
+    }))
+}
+
 export interface HiddenEntries {
   /** Connector instance whose produced entries are on screen, or undefined while none is open */
   readonly openRow: number | undefined
@@ -150,25 +171,24 @@ export function buildStations(
       feature,
     })
 
-    if (feature.id !== expanded || feature.unavailable || feature.switchOnly) {
+    if (feature.unavailable) {
+      continue
+    }
+
+    // A switch has nothing to open, so the switches configured inside it are listed beneath it
+    // outright. Waiting for it to expand would leave them nowhere at all.
+    if (feature.switchOnly) {
+      stations.push(...childStations(features, feature.id))
+      continue
+    }
+
+    if (feature.id !== expanded) {
       continue
     }
 
     // Ahead of the add row and the entries alike: these are settings for the whole section, and
     // a switch found below the rows it governs reads as belonging to the last of them.
-    for (const child of features) {
-      if (child.parent !== feature.id) {
-        continue
-      }
-
-      stations.push({
-        kind: 'feature',
-        key: featureKey(child.id),
-        label: child.label,
-        feature: child,
-        nested: true,
-      })
-    }
+    stations.push(...childStations(features, feature.id))
 
     // Ahead of the rows rather than after them: adding is what a feature is opened for as often
     // as not, and behind a long list it is a scroll away from the row that was just opened.

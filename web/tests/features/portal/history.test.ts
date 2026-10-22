@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { ref } from 'vue'
 import { useLaunchHistory } from '@/features/portal/useLaunchHistory'
 import { useSearchEngine } from '@/features/portal/useSearchEngine'
-import { useVisitedUrls } from '@/features/portal/useVisitedUrls'
 import type { SearchEngine } from '@/types/portal'
 
 beforeEach(() => {
@@ -57,6 +56,41 @@ describe('useLaunchHistory', () => {
     expect(useLaunchHistory().boostFor('card:1')).toBeGreaterThan(0)
   })
 
+  // A made-up target's ref is the url typed, query and fragment included, and it only exists while
+  // that exact url is typed: keeping it would buy no ranking and leave the address behind.
+  it('keeps nothing for a target made up from the term', () => {
+    const history = useLaunchHistory()
+
+    history.remember('adhoc:https://typed.example/reset?token=secret#frag')
+
+    expect(localStorage.getItem('diele:launch-history:v2')).toBeNull()
+    expect(history.boostFor('adhoc:https://typed.example/reset?token=secret#frag')).toBe(0)
+  })
+
+  it('drops a made-up ref an older build stored, from storage as well', () => {
+    localStorage.setItem(
+      'diele:launch-history:v2',
+      JSON.stringify(['adhoc:https://typed.example/?q=1', 'card:1']),
+    )
+
+    const history = useLaunchHistory()
+
+    expect(history.boostFor('card:1')).toBeGreaterThan(0)
+    expect(JSON.parse(localStorage.getItem('diele:launch-history:v2')!)).toEqual(['card:1'])
+  })
+
+  // Signing out removes the key while the portal is still mounted; the next launch must start
+  // from that, not write the previous account's list back out of memory.
+  it('builds on what is stored rather than on what it loaded', () => {
+    const history = useLaunchHistory()
+    history.remember('card:1')
+
+    localStorage.removeItem('diele:launch-history:v2')
+    history.remember('card:2')
+
+    expect(JSON.parse(localStorage.getItem('diele:launch-history:v2')!)).toEqual(['card:2'])
+  })
+
   // Keyed by ref rather than url: renaming a repo changes its url, and a history keyed on
   // that would quietly forget everything ever opened from it.
   it('drops the oldest past its cap', () => {
@@ -68,44 +102,6 @@ describe('useLaunchHistory', () => {
 
     expect(history.boostFor('card:0')).toBe(0)
     expect(history.boostFor('card:34')).toBeGreaterThan(0)
-  })
-})
-
-describe('useVisitedUrls', () => {
-  // Only the base is kept, so the same host reached through two paths is one entry.
-  it('keeps the origin rather than the path it was reached through', () => {
-    const visited = useVisitedUrls()
-
-    visited.remember('https://example.com/some/deep/path?q=1')
-
-    expect(localStorage.getItem('diele:visited-urls')).toBe(JSON.stringify(['https://example.com']))
-  })
-
-  it('moves a host already in the list rather than adding it twice', () => {
-    const visited = useVisitedUrls()
-
-    visited.remember('https://a.example/one')
-    visited.remember('https://b.example/two')
-    visited.remember('https://a.example/three')
-
-    expect(JSON.parse(localStorage.getItem('diele:visited-urls')!)).toEqual([
-      'https://a.example',
-      'https://b.example',
-    ])
-  })
-
-  it('ignores a url it cannot parse', () => {
-    useVisitedUrls().remember('not a url')
-
-    expect(localStorage.getItem('diele:visited-urls')).toBeNull()
-  })
-
-  it('keeps the port, since a dev server is only reachable with it', () => {
-    useVisitedUrls().remember('http://localhost:5173/x')
-
-    expect(JSON.parse(localStorage.getItem('diele:visited-urls')!)).toEqual([
-      'http://localhost:5173',
-    ])
   })
 })
 

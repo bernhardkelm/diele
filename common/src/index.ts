@@ -39,5 +39,14 @@ export type {
   InputMode,
 } from './features.js'
 export type { ApiHealth, ApiHealthReading, HealthState } from './health.js'
+export type {
+  ApiHistory,
+  ApiHistoryEntry,
+  ApiHistoryPreferences,
+  ApiHistoryState,
+  ApiHistoryVisit,
+  ApiHistoryVisits,
+  HistorySource,
+} from './history.js'
 export type { ApiSignal, ApiSignals, SignalSeverity, SilencedIds } from './signals.js'
 export type { ApiStatus } from './status.js'

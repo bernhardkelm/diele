@@ -184,18 +184,20 @@ function run(id: RowActionId): void {
     <span class="entry__trail row-trail">
       <span v-if="row.readonly" class="entry__builtin">built in</span>
 
-      <span v-else-if="confirming" class="entry__confirm" role="status">
-        press again to delete
-      </span>
-
+      <!-- The actions stay mounted while the delete is armed, and its button asks again in place:
+           see AdminRowActions for why swapping it out would disarm a pointer's press. -->
       <span v-else class="entry__actions">
         <AdminRowActions
           :actions="actions"
           :active-action="activeAction"
           :name="name"
           :busy="busy"
+          :armed="confirming"
           @run="run"
         />
+
+        <!-- see AdminIconField .icon__confirm: announced as well as drawn -->
+        <span v-if="confirming" class="entry__confirm" role="status">press again to delete</span>
       </span>
     </span>
 
@@ -264,8 +266,15 @@ function run(id: RowActionId): void {
   letter-spacing: 0.1em;
 }
 
+/* see StatusDot .status__label: carried for assistive technology only, the armed button beside
+   it already says the same thing on screen */
 .entry__confirm {
-  color: var(--diele-status-down);
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 .entry__actions {

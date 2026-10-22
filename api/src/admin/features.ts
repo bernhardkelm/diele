@@ -125,6 +125,58 @@ export async function listFeatures(): Promise<ReadonlyArray<ApiFeature>> {
       enabled: isEnabled('sites'),
       toggleHint: 'saved sites stop being suggested; the entries are kept',
     },
+    // One line for the feature and one inside it per source, the way liveness sits inside the
+    // cards: what is recorded and from where are separate decisions, and a deployment that only
+    // wants the portal's own visits should not have to accept the extension's.
+    {
+      id: 'history',
+      label: 'History',
+      description:
+        'Pages people opened, offered back as they type. Each account opts in for itself.',
+      kind: 'builtin',
+      produces: ['suggestion'],
+      fields: [],
+      count: 0,
+      enabledCount: 0,
+      toggleable: true,
+      switchOnly: true,
+      enabled: isEnabled('history'),
+      toggleHint:
+        'nothing is recorded or offered any more; what accounts already kept stays until they clear it',
+    },
+    {
+      id: 'historyDiele',
+      label: 'From the portal',
+      description:
+        'Addresses opened through Go to, kept once this server has checked a public one answers.',
+      kind: 'builtin',
+      produces: [],
+      fields: [],
+      count: 0,
+      enabledCount: 0,
+      toggleable: true,
+      switchOnly: true,
+      parent: 'history',
+      enabled: isEnabled('historyDiele'),
+      toggleHint:
+        'Go to stops adding pages; when on, this server requests each new public address once, never a private or local one',
+    },
+    {
+      id: 'historyExtension',
+      label: 'From the extension',
+      description:
+        'Pages the browser extension saw load, for accounts that switched history on in it.',
+      kind: 'builtin',
+      produces: [],
+      fields: [],
+      count: 0,
+      enabledCount: 0,
+      toggleable: true,
+      switchOnly: true,
+      parent: 'history',
+      enabled: isEnabled('historyExtension'),
+      toggleHint: 'the extension’s visits are refused; nothing it sent before is removed',
+    },
     {
       id: 'localhost',
       label: 'Local ports',

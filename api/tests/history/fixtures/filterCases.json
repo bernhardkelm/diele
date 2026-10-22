@@ -1,0 +1,768 @@
+{
+  "context": {
+    "ownOrigin": "https://diele.example.com",
+    "engineTemplates": [
+      "https://search.example.com/find?term={query}",
+      "https://wiki.example.com/w/search/{query}",
+      "https://www.reddit.com/r/{query}",
+      "https://github.com/{query}"
+    ],
+    "excludedDomains": [
+      "bank.example"
+    ]
+  },
+  "cases": [
+    {
+      "url": "https://grafana.example.com/d/abc/overview?orgId=1&from=now-6h#panel-2",
+      "expect": {
+        "stored": "https://grafana.example.com/d/abc/overview",
+        "title": null
+      }
+    },
+    {
+      "url": "https://alice:hunter2@nas.example.com/files",
+      "expect": {
+        "stored": "https://nas.example.com/files",
+        "title": null
+      }
+    },
+    {
+      "url": "HTTPS://Wiki.Example.COM:443/Page",
+      "expect": {
+        "stored": "https://wiki.example.com/Page",
+        "title": null
+      }
+    },
+    {
+      "url": "http://example.com:8080/x/",
+      "expect": {
+        "stored": "http://example.com:8080/x",
+        "title": null
+      }
+    },
+    {
+      "url": "https://example.com",
+      "expect": {
+        "stored": "https://example.com/",
+        "title": null
+      }
+    },
+    {
+      "url": "https://example.com./docs/",
+      "expect": {
+        "stored": "https://example.com/docs",
+        "title": null
+      }
+    },
+    {
+      "url": "https://example.com/docs#section",
+      "expect": {
+        "stored": "https://example.com/docs",
+        "title": null
+      }
+    },
+    {
+      "url": "https://example.com//double//slash",
+      "expect": {
+        "stored": "https://example.com/double/slash",
+        "title": null
+      }
+    },
+    {
+      "url": "https://shop.example/cart;jsessionid=0123456789ABCDEF",
+      "expect": {
+        "stored": "https://shop.example/cart",
+        "title": null
+      }
+    },
+    {
+      "url": "https://shop.example/cart;jsessionid=ABC123/item;token=xyz/view",
+      "expect": {
+        "stored": "https://shop.example/cart/item/view",
+        "title": null
+      }
+    },
+    {
+      "url": "https://shop.example/path%3Bjsessionid%3D0123456789abcdef0123456789abcdef",
+      "expect": {
+        "stored": "https://shop.example/path",
+        "title": null
+      }
+    },
+    {
+      "url": "https://shop.example/path%3bjsessionid%3d0123456789abcdef0123456789abcdef/next",
+      "expect": {
+        "stored": "https://shop.example/path/next",
+        "title": null
+      }
+    },
+    {
+      "url": "https://shop.example/a/;jsessionid=0123/b",
+      "expect": {
+        "stored": "https://shop.example/a/b",
+        "title": null
+      }
+    },
+    {
+      "url": "https://shop.example/a/%3Bjsessionid%3D0123/b",
+      "expect": {
+        "stored": "https://shop.example/a/b",
+        "title": null
+      }
+    },
+    {
+      "url": "https://shop.example/%253Bjsessionid%253D0123",
+      "expect": {
+        "stored": "https://shop.example/",
+        "title": null
+      }
+    },
+    {
+      "url": "https://shop.example/caf%C3%A9;v=1",
+      "expect": {
+        "stored": "https://shop.example/caf%C3%A9",
+        "title": null
+      }
+    },
+    {
+      "url": "https://shop.example/caf%C3%A9%3Bv%3D1",
+      "expect": {
+        "stored": "https://shop.example/caf%C3%A9",
+        "title": null
+      }
+    },
+    {
+      "url": "https://docs.example/Kubernetes%20Overview",
+      "expect": {
+        "stored": "https://docs.example/Kubernetes%20Overview",
+        "title": null
+      }
+    },
+    {
+      "url": "ftp://example.com/",
+      "expect": {
+        "stored": null,
+        "title": null
+      }
+    },
+    {
+      "url": "javascript:alert(1)",
+      "expect": {
+        "stored": null,
+        "title": null
+      }
+    },
+    {
+      "url": "not a url",
+      "expect": {
+        "stored": null,
+        "title": null
+      }
+    },
+    {
+      "url": "https://diele.example.com/settings",
+      "expect": {
+        "stored": null,
+        "title": null
+      }
+    },
+    {
+      "url": "https://diele.example.com./",
+      "expect": {
+        "stored": null,
+        "title": null
+      }
+    },
+    {
+      "url": "https://diele.example.com:8443/",
+      "expect": {
+        "stored": "https://diele.example.com:8443/",
+        "title": null
+      }
+    },
+    {
+      "url": "https://online.bank.example/accounts",
+      "expect": {
+        "stored": null,
+        "title": null
+      }
+    },
+    {
+      "url": "https://notbank.example/",
+      "expect": {
+        "stored": "https://notbank.example/",
+        "title": null
+      }
+    },
+    {
+      "url": "http://localhost:5173/",
+      "expect": {
+        "stored": null,
+        "title": null
+      }
+    },
+    {
+      "url": "http://app.localhost/",
+      "expect": {
+        "stored": null,
+        "title": null
+      }
+    },
+    {
+      "url": "http://localhost./",
+      "expect": {
+        "stored": null,
+        "title": null
+      }
+    },
+    {
+      "url": "http://127.0.0.1:3000/x",
+      "expect": {
+        "stored": null,
+        "title": null
+      }
+    },
+    {
+      "url": "http://127.1.2.3/",
+      "expect": {
+        "stored": null,
+        "title": null
+      }
+    },
+    {
+      "url": "http://0.0.0.0:8080/",
+      "expect": {
+        "stored": null,
+        "title": null
+      }
+    },
+    {
+      "url": "http://[::1]/",
+      "expect": {
+        "stored": null,
+        "title": null
+      }
+    },
+    {
+      "url": "http://[::ffff:7f00:1]/",
+      "expect": {
+        "stored": null,
+        "title": null
+      }
+    },
+    {
+      "url": "http://[64:ff9b::7f00:1]/",
+      "expect": {
+        "stored": null,
+        "title": null
+      }
+    },
+    {
+      "url": "http://169.254.169.254/latest/meta-data",
+      "expect": {
+        "stored": null,
+        "title": null
+      }
+    },
+    {
+      "url": "http://100.100.100.200/latest/meta-data",
+      "expect": {
+        "stored": null,
+        "title": null
+      }
+    },
+    {
+      "url": "http://[fe80::1]/",
+      "expect": {
+        "stored": null,
+        "title": null
+      }
+    },
+    {
+      "url": "http://metadata.google.internal/computeMetadata/v1/",
+      "expect": {
+        "stored": null,
+        "title": null
+      }
+    },
+    {
+      "url": "http://metadata/computeMetadata/v1/",
+      "expect": {
+        "stored": null,
+        "title": null
+      }
+    },
+    {
+      "url": "http://198.18.0.1/",
+      "expect": {
+        "stored": null,
+        "title": null
+      }
+    },
+    {
+      "url": "http://224.0.0.1/",
+      "expect": {
+        "stored": null,
+        "title": null
+      }
+    },
+    {
+      "url": "http://[2001:db8::1]/",
+      "expect": {
+        "stored": null,
+        "title": null
+      }
+    },
+    {
+      "url": "http://192.168.1.10/admin",
+      "expect": {
+        "stored": "http://192.168.1.10/admin",
+        "title": null
+      }
+    },
+    {
+      "url": "http://[fd12:3456::1]/",
+      "expect": {
+        "stored": "http://[fd12:3456::1]/",
+        "title": null
+      }
+    },
+    {
+      "url": "http://nas.lan/files",
+      "expect": {
+        "stored": "http://nas.lan/files",
+        "title": null
+      }
+    },
+    {
+      "url": "http://127.0.0.1.nip.io/",
+      "expect": {
+        "stored": "http://127.0.0.1.nip.io/",
+        "title": null
+      }
+    },
+    {
+      "url": "https://app.example.com/reset/Xk9fQ2mZ7pL4wR8tY1vB6nC3hJ5sD0gA",
+      "expect": {
+        "stored": null,
+        "title": null
+      }
+    },
+    {
+      "url": "https://app.example/reset;token=Xk9fQ2mZ7pL4wR8tY1vB6nC3hJ5sD0gA/Xk9fQ2mZ7pL4wR8tY1vB6nC3hJ5sD0gA",
+      "expect": {
+        "stored": null,
+        "title": null
+      }
+    },
+    {
+      "url": "https://app.example/invite/a1b2c3d4e5",
+      "expect": {
+        "stored": null,
+        "title": null
+      }
+    },
+    {
+      "url": "https://app.example/invitation/a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
+      "expect": {
+        "stored": null,
+        "title": null
+      }
+    },
+    {
+      "url": "https://app.example/reset-password/a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
+      "expect": {
+        "stored": null,
+        "title": null
+      }
+    },
+    {
+      "url": "https://app.example/login/magic-link/0123456789abcdef0123456789abcdef",
+      "expect": {
+        "stored": null,
+        "title": null
+      }
+    },
+    {
+      "url": "https://app.example/auth/magic/xkqzplmwbt",
+      "expect": {
+        "stored": null,
+        "title": null
+      }
+    },
+    {
+      "url": "https://app.example/verify/email/k3j4h5g6f7",
+      "expect": {
+        "stored": null,
+        "title": null
+      }
+    },
+    {
+      "url": "https://app.example/s/AbCdEf1234",
+      "expect": {
+        "stored": null,
+        "title": null
+      }
+    },
+    {
+      "url": "https://app.example/reset%2Fabc123def456",
+      "expect": {
+        "stored": null,
+        "title": null
+      }
+    },
+    {
+      "url": "https://app.example/reset%252Fabc123def456",
+      "expect": {
+        "stored": null,
+        "title": null
+      }
+    },
+    {
+      "url": "https://app.example/reset/MQ/c5v8pt-0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b/",
+      "expect": {
+        "stored": null,
+        "title": null
+      }
+    },
+    {
+      "url": "https://app.example/email/verify/42/9f86d081884c7d659a2feaa0c55ad015",
+      "expect": {
+        "stored": null,
+        "title": null
+      }
+    },
+    {
+      "url": "https://app.example/invite/team/42/a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
+      "expect": {
+        "stored": null,
+        "title": null
+      }
+    },
+    {
+      "url": "https://app.example/reset/MQ/set-password",
+      "expect": {
+        "stored": "https://app.example/reset/MQ/set-password",
+        "title": null
+      }
+    },
+    {
+      "url": "https://app.example/share/Team%20Roadmap%202024",
+      "expect": {
+        "stored": "https://app.example/share/Team%20Roadmap%202024",
+        "title": null
+      }
+    },
+    {
+      "url": "https://sso.example.com/auth/realms/master/account",
+      "expect": {
+        "stored": "https://sso.example.com/auth/realms/master/account",
+        "title": null
+      }
+    },
+    {
+      "url": "https://docs.example.com/reset/how-it-works/troubleshooting-guide",
+      "expect": {
+        "stored": "https://docs.example.com/reset/how-it-works/troubleshooting-guide",
+        "title": null
+      }
+    },
+    {
+      "url": "https://github.com/acme/auth-service/tree/main/docs/kubernetesIntegration.md",
+      "expect": {
+        "stored": "https://github.com/acme/auth-service/tree/main/docs/kubernetesIntegration.md",
+        "title": null
+      }
+    },
+    {
+      "url": "https://app.example/share/team-roadmap",
+      "expect": {
+        "stored": "https://app.example/share/team-roadmap",
+        "title": null
+      }
+    },
+    {
+      "url": "https://app.example/docs/login-flow/kubernetes-integration",
+      "expect": {
+        "stored": "https://app.example/docs/login-flow/kubernetes-integration",
+        "title": null
+      }
+    },
+    {
+      "url": "https://github.com/acme/auth-service/blob/main/src/oauth2Client.ts",
+      "expect": {
+        "stored": "https://github.com/acme/auth-service/blob/main/src/oauth2Client.ts",
+        "title": null
+      }
+    },
+    {
+      "url": "https://github.com/acme/auth-service/commit/3f9a1c7e2b4d6f8a0c1e3b5d7f9a2c4e6b8d0f1a",
+      "expect": {
+        "stored": null,
+        "title": null
+      }
+    },
+    {
+      "url": "https://docs.example.com/auth/oauth2-setup-guide",
+      "expect": {
+        "stored": "https://docs.example.com/auth/oauth2-setup-guide",
+        "title": null
+      }
+    },
+    {
+      "url": "https://blog.example.com/what-s-new/release-2024",
+      "expect": {
+        "stored": "https://blog.example.com/what-s-new/release-2024",
+        "title": null
+      }
+    },
+    {
+      "url": "https://grafana.example.com/d/a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d/node-exporter-full",
+      "expect": {
+        "stored": "https://grafana.example.com/d/a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d/node-exporter-full",
+        "title": null
+      }
+    },
+    {
+      "url": "https://notion.example/acme/Quarterly-Planning-Notes-0123456789abcdef0123456789abcdef",
+      "expect": {
+        "stored": "https://notion.example/acme/Quarterly-Planning-Notes-0123456789abcdef0123456789abcdef",
+        "title": null
+      }
+    },
+    {
+      "url": "https://www.google.com/search?q=secret+diagnosis",
+      "expect": {
+        "stored": null,
+        "title": null
+      }
+    },
+    {
+      "url": "https://duckduckgo.com/?q=diele",
+      "expect": {
+        "stored": null,
+        "title": null
+      }
+    },
+    {
+      "url": "https://www.youtube.com/results?search_query=diele",
+      "expect": {
+        "stored": null,
+        "title": null
+      }
+    },
+    {
+      "url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+      "expect": {
+        "stored": "https://www.youtube.com/watch",
+        "title": null
+      }
+    },
+    {
+      "url": "https://www.google.com/maps/search/pharmacy+near+me",
+      "expect": {
+        "stored": null,
+        "title": null
+      }
+    },
+    {
+      "url": "https://search.example.com/find?term=payroll",
+      "expect": {
+        "stored": null,
+        "title": null
+      }
+    },
+    {
+      "url": "https://search.example.com/find",
+      "expect": {
+        "stored": "https://search.example.com/find",
+        "title": null
+      }
+    },
+    {
+      "url": "https://wiki.example.com/w/search/kubernetes",
+      "expect": {
+        "stored": null,
+        "title": null
+      }
+    },
+    {
+      "url": "https://old.reddit.com/r/homelab",
+      "expect": {
+        "stored": null,
+        "title": null
+      }
+    },
+    {
+      "url": "https://github.com/bernhardkelm",
+      "expect": {
+        "stored": null,
+        "title": null
+      }
+    },
+    {
+      "url": "https://www.github.com/bernhardkelm/",
+      "expect": {
+        "stored": null,
+        "title": null
+      }
+    },
+    {
+      "url": "https://github.com/",
+      "expect": {
+        "stored": "https://github.com/",
+        "title": null
+      }
+    },
+    {
+      "url": "https://github.com/bernhardkelm/diele/pull/27",
+      "expect": {
+        "stored": "https://github.com/bernhardkelm/diele/pull/27",
+        "title": null
+      }
+    },
+    {
+      "url": "https://gist.github.com/bernhardkelm",
+      "expect": {
+        "stored": "https://gist.github.com/bernhardkelm",
+        "title": null
+      }
+    },
+    {
+      "url": "https://shop.example/find?q=embarrassing+thing",
+      "title": "Embarrassing Thing - Search",
+      "expect": {
+        "stored": "https://shop.example/find",
+        "title": null
+      }
+    },
+    {
+      "url": "https://docs.example/page?q=all-in-one",
+      "title": "All-in-one setup",
+      "expect": {
+        "stored": "https://docs.example/page",
+        "title": null
+      }
+    },
+    {
+      "url": "https://shop.example/find?q=caf%C3%A9",
+      "title": "Café Müller",
+      "expect": {
+        "stored": "https://shop.example/find",
+        "title": null
+      }
+    },
+    {
+      "url": "https://shop.example/find?q=caf%C3%A9",
+      "title": "Cafés nearby",
+      "expect": {
+        "stored": "https://shop.example/find",
+        "title": "Cafés nearby"
+      }
+    },
+    {
+      "url": "https://shop.example/find?q=thing",
+      "title": "Things to do",
+      "expect": {
+        "stored": "https://shop.example/find",
+        "title": "Things to do"
+      }
+    },
+    {
+      "url": "https://app.example/callback#token=abcdefgh12345",
+      "title": "abcdefgh12345",
+      "expect": {
+        "stored": "https://app.example/callback",
+        "title": null
+      }
+    },
+    {
+      "url": "https://intranet.example/#/search?term=PAYROLL",
+      "title": "Results for Payroll",
+      "expect": {
+        "stored": "https://intranet.example/",
+        "title": null
+      }
+    },
+    {
+      "url": "https://docs.example/guide?tab=all",
+      "title": "Install guide",
+      "expect": {
+        "stored": "https://docs.example/guide",
+        "title": "Install guide"
+      }
+    },
+    {
+      "url": "https://shop.example/?s=all",
+      "title": "Small business guide",
+      "expect": {
+        "stored": "https://shop.example/",
+        "title": "Small business guide"
+      }
+    },
+    {
+      "url": "https://docs.example/?lang=eng",
+      "title": "English docs",
+      "expect": {
+        "stored": "https://docs.example/",
+        "title": "English docs"
+      }
+    },
+    {
+      "url": "https://docs.example/guide?lang=en#setup",
+      "title": "Installation guide",
+      "expect": {
+        "stored": "https://docs.example/guide",
+        "title": "Installation guide"
+      }
+    },
+    {
+      "url": "https://wiki.example.com/start",
+      "title": "https://wiki.example.com/start",
+      "expect": {
+        "stored": "https://wiki.example.com/start",
+        "title": null
+      }
+    },
+    {
+      "url": "https://www.example.com/",
+      "title": "example.com",
+      "expect": {
+        "stored": "https://www.example.com/",
+        "title": null
+      }
+    },
+    {
+      "url": "http://nas/",
+      "title": "NAS dashboard",
+      "expect": {
+        "stored": "http://nas/",
+        "title": "NAS dashboard"
+      }
+    },
+    {
+      "url": "https://t.example/b",
+      "title": "Pay\u0000roll\n‮evil‬ report",
+      "expect": {
+        "stored": "https://t.example/b",
+        "title": "Pay roll evil report"
+      }
+    },
+    {
+      "url": "https://t.example/c",
+      "title": "   ",
+      "expect": {
+        "stored": "https://t.example/c",
+        "title": null
+      }
+    },
+    {
+      "url": "http://localhost:3000/",
+      "title": "Local app",
+      "expect": {
+        "stored": null,
+        "title": null
+      }
+    }
+  ]
+}

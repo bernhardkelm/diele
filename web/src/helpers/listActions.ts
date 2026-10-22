@@ -16,6 +16,8 @@ export interface ListAction {
   /** Shown at the end of the row, where a section shows its counts */
   readonly trail?: string
   readonly disabled?: boolean
+  /** Asked in the trail on a first press, which arms the row; only a second press runs it */
+  readonly confirm?: string
   readonly run: () => void
 }
 

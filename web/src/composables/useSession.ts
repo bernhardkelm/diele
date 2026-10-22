@@ -14,8 +14,10 @@ import { useHashRoute } from '@/composables/useHashRoute'
 import { apiMessage, readPayload } from '@/helpers/apiError'
 import { refreshConnectorEntries, resetConnectorEntries } from '@/composables/useConnectorEntries'
 import { resetHealth } from '@/composables/useHealth'
+import { refreshHistory, resetHistory } from '@/composables/useHistory'
 import { refreshPortalConfig, resetPortalConfig } from '@/composables/usePortalConfig'
 import { resetSignals } from '@/composables/useSignals'
+import { resetLaunchHistory } from '@/features/portal/useLaunchHistory'
 import { applyBrandAccent } from '@/helpers/brandAccent'
 import { clearConfigCache } from '@/helpers/configCache'
 import { clearEntriesCache } from '@/helpers/entriesCache'
@@ -174,7 +176,7 @@ async function adoptSession(): Promise<void> {
   reauth.value = false
   // Both, and in parallel: the session changed without the page reloading, so every request
   // that answered 401 a moment ago has to be retried, not only the config's.
-  await Promise.all([refreshPortalConfig(), refreshConnectorEntries()])
+  await Promise.all([refreshPortalConfig(), refreshConnectorEntries(), refreshHistory()])
 }
 
 /**
@@ -202,6 +204,9 @@ export function useSession(): SessionSource {
       resetConnectorEntries()
       resetHealth()
       resetSignals()
+      resetHistory()
+      // the ranking is this browser's, so what one account opened must not rank for the next
+      resetLaunchHistory()
       return
     }
 
@@ -303,6 +308,9 @@ export function useSession(): SessionSource {
       resetConnectorEntries()
       resetHealth()
       resetSignals()
+      resetHistory()
+      // the ranking is this browser's, so what one account opened must not rank for the next
+      resetLaunchHistory()
       user.value = undefined
 
       window.location.assign(payload.logoutUrl ?? '/')

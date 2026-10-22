@@ -48,10 +48,13 @@ data/
 *.db-shm
 *.db-wal
 
-# node:test database
+# node:test databases, the configuration and the history beside it
 .test.db
 .test.db-wal
 .test.db-shm
+.test-history.db
+.test-history.db-wal
+.test-history.db-shm
 
 # Packed browser extension builds
 *.zip

@@ -12,7 +12,38 @@ the login screen.
 The bar is always present and takes focus on load, so a new tab can be typed into straight away.
 It searches saved sites, the service cards and the connector rows together - by name, by url and
 by keyword, so `example-group/web` finds the repo, `graf` finds Grafana and `3000` finds that
-local port.
+local port. Where the account opted into history, the pages it visited are searched as well, by
+site name (`heise` for `www.heise.de`), title, host and path; one whose address something else
+already reaches is left out.
+
+A term matches exactly, as a prefix, at a word start, anywhere inside a text, or by the initials
+of its words, in that order of strength. Below all of those it matches a word one edit away, a
+swap of two letters counting as one, or two edits for a term of eight characters or more; a term
+under four characters is never guessed at, and a quoted one never at all. A typo only counts when
+nothing matched as typed: one literal hit anywhere drops every target only a typo found.
+
+The results render as blocks - commands, saved sites, the card grid, the repo list, visited pages -
+and while a term is typed each block is ranked by its best match plus a prior: commands and sites
+highest, cards next, repos after them, visited pages none. So on a tie what the portal was told
+about wins, and a visited page that matches far better still leads. A block is never split, and
+the page paints the blocks in the order the matches hold them, so the arrows walk what is on screen
+and `↵` opens the first entry of the first block.
+
+History is read once per load through `GET /api/history`, which serves the state whatever the
+switches say, held in memory only and dropped on sign out, never written to `localStorage`. It is
+not polled, but read again about 300 ms after the extension dispatches `diele:history-delivered` on
+the page, once per burst, while history is on for the account; the event carries nothing and can
+only cause that read.
+An answer sent before one of the account's own changes, or before a sign-out, is dropped rather
+than painted over what the change left. Opening a **Go to** address or a history result posts the
+visit with `keepalive`, since the page unloads straight after, and without a title, which the api
+keeps only from the extension; a slash command, a subreddit jump and the web search are searches
+rather than visits, and are never posted.
+
+What was opened also nudges the ranking, so the entries you reach for keep winning ties. That list
+is kept in `localStorage` by ref alone, never by url: an address typed into the field is not
+added to it at all, and signing out clears it, from storage and from the page still on screen,
+since it belongs to the browser rather than to the account.
 
 | key | does |
 | --- | --- |
@@ -88,7 +119,20 @@ than dropping it, so a repo is reached by opening the repos and typing its name.
 | --- | --- |
 | `Appearance` | the theme: follow the device, always light, always dark |
 | `Hidden entries` | one switch per connector row, and a row bringing them all back while any are hidden |
+| `History` | the opt-in, the excluded domains with a field to add one, a row forgetting every kept page, and the kept pages, a hundred at a time |
 | `Back to diele`, `Sign out` | the closing actions, rows in the same ring |
+
+The history section is listed where the instance offers history, and where it no longer does but
+still keeps pages for this account: then it holds only those pages and the row forgetting them,
+since there is nothing left to opt into or exclude. With neither it says nothing. Its kept pages
+live on the API, so they are read each time the section opens. The most recent hundred are listed,
+and a row after them lists the next hundred, moving the caret onto the first of them; the filter bar
+searches every kept page, listed or not. A kept page or an excluded domain is removed with `↵` or
+`x`, and the caret moves onto the row that took its place; forgetting a page, and forgetting all of
+them, asks for a second press first. Opting out deletes nothing. A change the API refuses is said
+above the list, the way the admin view says one; a lapsed session is said once for the whole page
+instead. Preference changes are sent one at a time, each built from what the one before it left, so
+excluding one domain while another is being taken off keeps both changes.
 
 The hidden-entries section is listed whenever a connector is configured, whether or not it has
 produced anything yet: one that is failing still has rows someone hid, and dropping the switch

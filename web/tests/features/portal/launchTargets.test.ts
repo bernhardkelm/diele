@@ -11,6 +11,7 @@ import {
 import type {
   CardTarget,
   CommandTarget,
+  HistoryTarget,
   PortalTarget,
   RowTarget,
   SuggestionTarget,
@@ -82,8 +83,52 @@ describe('partitionTargets', () => {
     expect(sections.cards.map((entry) => entry.item.ref)).toEqual(['card:1', 'card:2'])
   })
 
-  it('reads an empty list as four empty sections', () => {
-    expect(partitionTargets([])).toEqual({ commands: [], suggestions: [], cards: [], rows: [] })
+  it('reads an empty list as five empty sections, in their resting order', () => {
+    expect(partitionTargets([])).toEqual({
+      commands: [],
+      suggestions: [],
+      cards: [],
+      rows: [],
+      history: [],
+      order: ['commands', 'suggestions', 'cards', 'rows', 'history'],
+    })
+  })
+
+  // The page paints the blocks in this order, so it has to be the order the matches hold them in.
+  it('orders the blocks the way the matches do, the unmatched ones after', () => {
+    const page: HistoryTarget = {
+      ref: 'history:1',
+      kind: 'history',
+      name: 'Page',
+      url: 'https://page.example/',
+      display: 'page.example',
+      searchOnly: true,
+    }
+
+    expect(partitionTargets([page, row, card]).order).toEqual([
+      'history',
+      'rows',
+      'cards',
+      'commands',
+      'suggestions',
+    ])
+  })
+
+  // A visited page is its own section rather than a saved site, so the page can draw it last.
+  it('puts a visited page in a section of its own', () => {
+    const page: HistoryTarget = {
+      ref: 'history:1',
+      kind: 'history',
+      name: 'Pull requests',
+      url: 'https://github.com/example/diele/pulls',
+      display: 'github.com/example/diele/pulls',
+      searchOnly: true,
+    }
+
+    const sections = partitionTargets([card, page])
+
+    expect(sections.history).toEqual([{ index: 1, item: page }])
+    expect(sections.cards).toEqual([{ index: 0, item: card }])
   })
 })
 

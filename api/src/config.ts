@@ -1,7 +1,14 @@
-import { resolve } from 'node:path'
+import { basename, dirname, extname, join, resolve } from 'node:path'
 import type { AuthMode } from '@diele/common'
 import dotenv from 'dotenv'
-import { boolOr, cookieSecure, hexOr, parseTrustProxy, positiveInt } from './configValues.js'
+import {
+  boolOr,
+  cookieSecure,
+  hexOr,
+  parseTrustProxy,
+  positiveInt,
+  sameFile,
+} from './configValues.js'
 import { parseKeyring, type SecretKeyring } from './secrets/keys.js'
 
 // Every file is optional and none overrides a variable the environment already carries, so an
@@ -71,6 +78,21 @@ const publicOrigin = (process.env.PUBLIC_ORIGIN ?? 'http://localhost:5173').repl
 // stands, which is how a container points this at a mounted volume.
 const dbPath = resolve(repoRoot, process.env.DB_PATH ?? 'data/diele.db')
 
+// Beside the configuration rather than inside it, so it can be backed up, left out or wiped on
+// its own. Named after DB_PATH's own stem, so every database the test suite points DB_PATH at
+// gets a throwaway history file of its own instead of sharing one.
+const historyDbPath = process.env.HISTORY_DB_PATH
+  ? resolve(repoRoot, process.env.HISTORY_DB_PATH)
+  : join(dirname(dbPath), `${basename(dbPath, extname(dbPath))}-history.db`)
+
+// Both files keep their migration ledger in `user_version`, so one file opened as both would read
+// the other's version as its own and migrate nothing, or the wrong thing.
+if (sameFile(historyDbPath, dbPath)) {
+  throw new Error(
+    'HISTORY_DB_PATH points at the same file as DB_PATH. Give history a file of its own.',
+  )
+}
+
 // Where the built frontend is, deliberately not a setting: the image lays the two halves out the
 // same way the repo does, so one path is right in both places and nothing has to be told.
 const webRoot = resolve(repoRoot, 'web/dist')
@@ -125,6 +147,21 @@ export const config = {
     clientSecret: requiredForOidc('OIDC_CLIENT_SECRET'),
     scopes: process.env.OIDC_SCOPES ?? 'openid email profile',
     redirectUri: `${publicOrigin}/api/auth/callback`,
+  },
+  history: {
+    dbPath: historyDbPath,
+    // What the portal is sent per load. The search matches against it in the browser, so this is
+    // the ceiling on what one keystroke can surface, and on the payload every new tab carries.
+    served: positiveInt('HISTORY_SERVED', process.env.HISTORY_SERVED, 300),
+    // Kept per account, least recently visited going first beyond it.
+    maxEntries: positiveInt('HISTORY_MAX_ENTRIES', process.env.HISTORY_MAX_ENTRIES, 5000),
+    // A page opened once and never again is most likely a mistype or a one-off, and should not
+    // be offered back for months.
+    oneOffDays: positiveInt('HISTORY_ONE_OFF_DAYS', process.env.HISTORY_ONE_OFF_DAYS, 14),
+    // Whether a public address opened through Go to is requested from here before it is kept.
+    // Off stores it unchecked, for a deployment that would rather not have this server's address
+    // sent to every site its people open.
+    probe: boolOr('HISTORY_PROBE', process.env.HISTORY_PROBE, true),
   },
   session: {
     cookieName: process.env.SESSION_COOKIE_NAME ?? 'diele_session',
