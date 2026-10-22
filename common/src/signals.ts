@@ -32,9 +32,34 @@ export interface ApiSignal {
   readonly since?: string
 }
 
+/**
+ * Which signals are quietened, in the two scopes a silence can sit in. Shaped like the hidden
+ * entries' own sets, because it answers the same question about a different thing.
+ */
+export interface SilencedIds {
+  /** Quietened for the whole portal by an admin, which nobody else may lift */
+  readonly all: ReadonlyArray<string>
+  /** Quietened by the person asking, for themselves alone */
+  readonly mine: ReadonlyArray<string>
+}
+
 export interface ApiSignals {
-  /** Worst first, then longest-firing first; empty when nothing is firing or the feature is off */
+  /**
+   * Worst first, then longest-firing first; empty when nothing is firing or the feature is off.
+   *
+   * Carries the quietened ones too, the way the entries carry the hidden ones: a list that is
+   * managed has to show what it is holding back in order to bring it back, and a silence is a
+   * display preference rather than a permission. Anything that must not be seen at all belongs
+   * behind the source's own token.
+   */
   readonly signals: ReadonlyArray<ApiSignal>
+  /** Which of the above to keep out of the firing list, and which scope quietened each */
+  readonly silenced: SilencedIds
+  /**
+   * How many are firing in all, before the cap on how many are served. The count a summary line
+   * reads, so a portal holding more than it sends still says how much is wrong.
+   */
+  readonly total: number
   /** Seconds until the client should ask again */
   readonly pollSeconds: number
 }

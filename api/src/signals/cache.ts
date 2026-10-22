@@ -1,9 +1,10 @@
 import type { ApiSignal, ApiSignals } from '@diele/common'
 import type { Signal } from '#connectors/types.js'
+import { isHttpUrl } from '#fieldSchemas.js'
 import { messageOf } from '#connectors/redact.js'
 import { isEnabled } from '#settings/toggles.js'
 import { sortSignals } from './order.js'
-import { readSilenced, sweepSilences } from './silences.js'
+import { readSilencedScopes, sweepSilences } from './silences.js'
 import { listSignalTasks, type SignalTask } from './resolve.js'
 
 /** What the client comes back at once a source has answered at least once. */
@@ -14,6 +15,15 @@ const POLL_SECONDS = 60
  * is firing for a full minute after the first paint, which is most of the time a new tab is open.
  */
 const COLD_POLL_SECONDS = 5
+
+/**
+ * How many firing signals are served at once.
+ *
+ * The list is collapsed behind a count and nothing past the first is reachable without opening it,
+ * so a source holding thousands would send rows nobody can read on every poll. The true count goes
+ * out beside them, a cap that says nothing being indistinguishable from there being no more.
+ */
+const MAX_SERVED = 200
 
 /**
  * How far past its own interval an answer may be served. The same reasoning the readings use: a
@@ -95,6 +105,12 @@ function refreshIfDue(task: SignalTask): void {
  * is addressed, so it is an admin's the way a reading's is. The link is not: it points at the
  * source's own page, which is where anyone who can see that something is firing should be able to
  * go and read it.
+ *
+ * The link is checked here as well as where a module builds it, this being the one funnel every
+ * signal leaves by: a module composing an href out of what a remote source said would otherwise
+ * put whatever that source chose behind a click on the portal's own page. Dropped rather than
+ * replaced, since nothing here knows the connector's own origin to fall back to, and a signal
+ * carrying no link is drawn as plain text.
  * @param {Signal} signal - Signal as the source reported it
  * @param {boolean} detailed - Whether the reader may see the source's own description
  * @returns {ApiSignal} - What to serve
@@ -105,7 +121,7 @@ function toApiSignal(signal: Signal, detailed: boolean): ApiSignal {
     severity: signal.severity,
     label: signal.label,
     ...(detailed && signal.detail ? { detail: signal.detail } : {}),
-    ...(signal.href ? { href: signal.href } : {}),
+    ...(signal.href && isHttpUrl(signal.href) ? { href: signal.href } : {}),
     ...(signal.since ? { since: signal.since } : {}),
   }
 }
@@ -125,7 +141,7 @@ export function readSignals(detailed: boolean, userId: number): ApiSignals {
   // further down drops what no task owns any more, and letting it run here would throw away
   // every answer the moment the switch is flipped.
   if (!isEnabled('alerts')) {
-    return { signals: [], pollSeconds: POLL_SECONDS }
+    return { signals: [], silenced: { all: [], mine: [] }, total: 0, pollSeconds: POLL_SECONDS }
   }
 
   const tasks = listSignalTasks()
@@ -160,14 +176,50 @@ export function readSignals(detailed: boolean, userId: number): ApiSignals {
 
   // Read per request rather than held: a silence made in one tab is meant to take the line off
   // the next tab's poll, and holding a copy here would keep it up until something expired.
-  const silenced = readSilenced(userId)
+  const silenced = readSilencedScopes(userId)
+
+  // Served rather than filtered out, the way the entries serve what is hidden: a line nobody can
+  // see is a line nobody can bring back, and a silence lasts only as long as its alert, so there
+  // is nowhere else to go and manage one before it clears. Which of them to draw is the client's,
+  // and which scope quietened each is what says who may lift it.
+  const quiet = new Set([...silenced.all, ...silenced.mine])
+  const ordered = sortSignals(merged)
+  const firing = ordered.filter((signal) => !quiet.has(signal.id))
+
+  // The cap falls on the firing half alone. A quietened line that did not survive it would be one
+  // nobody could bring back, and there are only ever as many of those as somebody chose to make.
+  const served = [
+    ...firing.slice(0, MAX_SERVED),
+    ...ordered.filter((signal) => quiet.has(signal.id)),
+  ]
 
   return {
-    signals: sortSignals(merged)
-      .filter((signal) => !silenced.has(signal.id))
-      .map((signal) => toApiSignal(signal, detailed)),
+    signals: served.map((signal) => toApiSignal(signal, detailed)),
+    silenced,
+    total: firing.length,
     pollSeconds: cold ? COLD_POLL_SECONDS : POLL_SECONDS,
   }
+}
+
+/**
+ * Returns whether a signal is one a source is currently reporting.
+ *
+ * What bounds the silences: a silence is a row keyed by an id the caller supplies, so accepting
+ * one nothing is firing writes a row no sweep can ever reach, the sweep being per source and
+ * against the ids that source answered with. Anyone signed in could then grow the table without
+ * limit. Checked against what is held rather than against a shape, because a shape a caller can
+ * satisfy by counting is not a bound at all.
+ * @param {string} id - Signal id as the caller sent it
+ * @returns {boolean} - True while some source is reporting it
+ */
+export function isLiveSignal(id: string): boolean {
+  for (const entry of held.values()) {
+    if (entry.signals.some((signal) => signal.id === id)) {
+      return true
+    }
+  }
+
+  return false
 }
 
 /**

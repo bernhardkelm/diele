@@ -136,3 +136,77 @@ test('a value the instance returned is read as a state', async () => {
 
   assert.equal(readings.get('card:1')?.state, 'down')
 })
+
+/**
+ * Runs the module's signal read against a stubbed Alertmanager, recording what it was sent.
+ * @param {Record<string, unknown>} config - Connector config for this case
+ * @param {Record<string, string>} secrets - Whatever is stored for it
+ * @returns {Promise<Array<Headers>>} - Headers of every request it made
+ */
+async function readAlertmanager(
+  config: Record<string, unknown>,
+  secrets: Record<string, string>,
+): Promise<Array<Headers>> {
+  const seen: Array<Headers> = []
+
+  globalThis.fetch = ((_input: unknown, init?: RequestInit) => {
+    seen.push(new Headers(init?.headers))
+    return Promise.resolve(new Response(JSON.stringify([]), { status: 200 }))
+  }) as typeof fetch
+
+  await prometheusModule.readSignals!({
+    id: 1,
+    label: 'metrics',
+    config,
+    secrets,
+    signal: AbortSignal.timeout(1000),
+    cursor: null,
+  })
+
+  return seen
+}
+
+// A token is a secret shared with one origin. An Alertmanager somewhere else receiving the
+// instance's would be handed a credential for Prometheus by a portal nobody asked to do that.
+test('an Alertmanager on another host is sent no credential of the instance’s', async () => {
+  const [sent] = await readAlertmanager(
+    { baseUrl: 'https://prom.test', alertmanagerUrl: 'https://alerts.elsewhere.test' },
+    { token: 'prometheus-secret' },
+  )
+
+  assert.equal(sent?.get('authorization'), null)
+})
+
+// The common case: an Alertmanager beside the instance behind the same auth, where there is
+// nothing to leak and asking for the token twice would be busywork.
+test('an Alertmanager on the same origin reuses the instance’s token', async () => {
+  const [sent] = await readAlertmanager(
+    { baseUrl: 'https://prom.test', alertmanagerUrl: 'https://prom.test/alertmanager' },
+    { token: 'prometheus-secret' },
+  )
+
+  assert.equal(sent?.get('authorization'), 'Bearer prometheus-secret')
+})
+
+test('an Alertmanager with a token of its own is sent that one', async () => {
+  const [sent] = await readAlertmanager(
+    { baseUrl: 'https://prom.test', alertmanagerUrl: 'https://alerts.elsewhere.test' },
+    { token: 'prometheus-secret', alertmanagerToken: 'its-own' },
+  )
+
+  assert.equal(sent?.get('authorization'), 'Bearer its-own')
+})
+
+// Its own wins even beside the instance, since somebody who filled the field in meant it.
+test('a token of its own is preferred over the instance’s', async () => {
+  const [sent] = await readAlertmanager(
+    { baseUrl: 'https://prom.test', alertmanagerUrl: 'https://prom.test/am' },
+    { token: 'prometheus-secret', alertmanagerToken: 'its-own' },
+  )
+
+  assert.equal(sent?.get('authorization'), 'Bearer its-own')
+})
+
+test('both credentials are declared, so neither is stored in the clear', () => {
+  assert.deepEqual([...prometheusModule.secretKeys], ['token', 'alertmanagerToken'])
+})

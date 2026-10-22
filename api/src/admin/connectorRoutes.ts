@@ -22,6 +22,7 @@ import { runSync } from '#connectors/sync.js'
 import { verifyConnector } from '#connectors/verify.js'
 import { readSecrets, writeSecret } from '#secrets/repository.js'
 import { forgetSource } from '#signals/cache.js'
+import { dropSilencesFor } from '#signals/silences.js'
 
 export const connectorRouter: Router = Router()
 
@@ -160,6 +161,8 @@ connectorRouter.delete('/:type/:id', (req, res) => {
   deleteConnector(id)
   // Its answer would otherwise outlive it by up to an interval, reporting a source that is gone
   forgetSource(id)
+  // Its conditions can never fire again, so the sweep that clears these will never run for them
+  dropSilencesFor(id)
 
   res.json({ ok: true })
 })

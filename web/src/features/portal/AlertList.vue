@@ -2,24 +2,43 @@
 import { computed, ref, useTemplateRef, watch } from 'vue'
 import AlertDot from '@/components/AlertDot.vue'
 import AlertRow from '@/features/portal/AlertRow.vue'
+import type { SilencedSignal } from '@/composables/useSignals'
 import type { ApiSignal } from '@diele/common'
 
 interface AlertListProps {
-  /** What is firing, worst first, as the API ordered it */
+  /** What is firing and not quietened, worst first, as the API ordered it */
   signals: ReadonlyArray<ApiSignal>
+  /** How many are firing in all, which is more than `signals` holds once the server's cap bites */
+  total?: number
+  /** What is firing but quietened, with who may bring each one back */
+  silenced?: ReadonlyArray<SilencedSignal>
   /** Whether silencing takes a line off the whole portal rather than this account's */
   forEveryone?: boolean
 }
 
 const props = defineProps<AlertListProps>()
-const emit = defineEmits<{ silence: [id: string] }>()
+const emit = defineEmits<{ silence: [id: string]; restore: [id: string] }>()
 
 const expanded = ref(false)
+const quietShown = ref(false)
 const root = useTemplateRef<HTMLElement>('root')
 
 // The server orders these, so the worst is simply the first. Reading it rather than re-ranking
 // here keeps one place deciding what "worst" means.
 const worst = computed(() => props.signals[0]?.severity ?? 'warning')
+
+const quietened = computed(() => props.silenced ?? [])
+
+// The server's count rather than the array's: it caps how many it sends, and a summary reading
+// the length would quietly report the cap as the number of things wrong.
+const firingCount = computed(() => props.total ?? props.signals.length)
+
+// How many are firing but were not sent. A cap that says nothing reads as "this is all of it".
+const withheld = computed(() => Math.max(0, firingCount.value - props.signals.length))
+
+// The region stands while either half has something: a portal whose every alert is quietened
+// would otherwise draw nothing at all, and there would be no way back to what it is holding.
+const anything = computed(() => props.signals.length > 0 || quietened.value.length > 0)
 
 // A single alert is shown outright rather than collapsed behind a count of one
 const only = computed(() => (props.signals.length === 1 ? props.signals[0] : undefined))
@@ -31,6 +50,17 @@ watch(
   (count) => {
     if (count <= 1) {
       expanded.value = false
+    }
+  },
+)
+
+// Collapsed again once the last quietened line clears, so a portal that opens with nothing held
+// back does not inherit an expansion from an hour ago.
+watch(
+  () => quietened.value.length,
+  (count) => {
+    if (count === 0) {
+      quietShown.value = false
     }
   },
 )
@@ -74,7 +104,7 @@ function onKeydown(event: KeyboardEvent): void {
        anything is typed, so something starting to fire while it is open is worth saying and not
        worth interrupting for. -->
   <section
-    v-if="signals.length"
+    v-if="anything"
     ref="root"
     class="alerts"
     role="status"
@@ -82,10 +112,10 @@ function onKeydown(event: KeyboardEvent): void {
     @keydown="onKeydown"
   >
     <ul v-if="only" class="alerts__list">
-      <AlertRow :signal="only" :for-everyone="forEveryone" @silence="emit('silence', only.id)" />
+      <AlertRow :signal="only" :for-everyone="forEveryone" @toggle="emit('silence', only.id)" />
     </ul>
 
-    <template v-else>
+    <template v-else-if="signals.length">
       <button
         class="alerts__summary"
         data-alert-step
@@ -94,7 +124,7 @@ function onKeydown(event: KeyboardEvent): void {
         @click="expanded = !expanded"
       >
         <AlertDot :severity="worst" />
-        <span>{{ signals.length }} alerts firing</span>
+        <span>{{ firingCount }} alerts firing</span>
         <!-- Beside what it opens rather than pushed to the edge: the right edge is where the
              times line up, and this is the group's own control rather than one row's. -->
         <span class="alerts__caret" aria-hidden="true">{{ expanded ? '▾' : '▸' }}</span>
@@ -106,7 +136,39 @@ function onKeydown(event: KeyboardEvent): void {
           :key="signal.id"
           :signal="signal"
           :for-everyone="forEveryone"
-          @silence="emit('silence', signal.id)"
+          @toggle="emit('silence', signal.id)"
+        />
+
+        <li v-if="withheld" class="alerts__withheld">
+          and {{ withheld }} more, not sent to the page
+        </li>
+      </ul>
+    </template>
+
+    <!-- What the page is holding back, always collapsed to a count: it is quietened precisely
+         because nobody wanted to read it, so it says how much there is and nothing more until
+         it is asked. Below the firing half, since bringing one back is the rarer errand. -->
+    <template v-if="quietened.length">
+      <button
+        class="alerts__summary alerts__summary--quiet"
+        data-alert-step
+        :aria-expanded="quietShown"
+        aria-controls="alert-silenced"
+        @click="quietShown = !quietShown"
+      >
+        <span>{{ quietened.length }} silenced</span>
+        <span class="alerts__caret" aria-hidden="true">{{ quietShown ? '▾' : '▸' }}</span>
+      </button>
+
+      <ul v-show="quietShown" id="alert-silenced" class="alerts__list">
+        <AlertRow
+          v-for="entry in quietened"
+          :key="entry.signal.id"
+          :signal="entry.signal"
+          :for-everyone="forEveryone"
+          silenced
+          :restorable="entry.restorable"
+          @toggle="emit('restore', entry.signal.id)"
         />
       </ul>
     </template>
@@ -144,6 +206,21 @@ function onKeydown(event: KeyboardEvent): void {
 
 .alerts__summary :deep(.alert-dot) {
   transform: translateY(-1px);
+}
+
+/* Reads as a note about the list rather than another row in it, so it carries no dot and none of
+   the row grammar the alerts above it use. */
+.alerts__withheld {
+  padding: var(--diele-space-2) 0;
+  color: var(--diele-fg-muted);
+  font-family: var(--diele-font-mono);
+  font-size: var(--diele-text-sm);
+}
+
+/* The held-back half is not news, so its summary sits at the muted weight the rows below it use
+   rather than competing with the firing count above. */
+.alerts__summary--quiet {
+  color: var(--diele-fg-muted);
 }
 
 .alerts__caret {

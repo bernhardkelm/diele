@@ -65,3 +65,43 @@ test('the feature is one the panel can switch off, and defaults on', async () =>
 
   await setAlerts(true)
 })
+
+// Anyone signed in may silence a line, so the id they send is the bound on what this table can
+// grow to. Nothing is firing on a portal with no source, so nothing may be silenced.
+test('a silence for a signal nothing is reporting is refused', async () => {
+  await api.signIn()
+
+  const response = await api.request('/api/signals/silence', {
+    method: 'PUT',
+    body: JSON.stringify({ id: 'made-up', silenced: true }),
+  })
+
+  assert.equal(response.status, 400)
+})
+
+// The shape is not the check: an id that looks exactly like one a source builds is still refused
+// while no source is reporting it, since a caller can satisfy a shape by counting.
+test('an id shaped like a real one is refused just the same', async () => {
+  await api.signIn()
+
+  const response = await api.request('/api/signals/silence', {
+    method: 'PUT',
+    body: JSON.stringify({ id: '1:deadbeef', silenced: true }),
+  })
+
+  assert.equal(response.status, 400)
+
+  const rows = await api.get<ApiSignals>('/api/signals')
+  assert.deepEqual(rows.signals, [])
+})
+
+test('a silence still needs a session', async () => {
+  api.forgetCookies()
+
+  const response = await api.request('/api/signals/silence', {
+    method: 'PUT',
+    body: JSON.stringify({ id: '1:deadbeef', silenced: true }),
+  })
+
+  assert.equal(response.status, 401)
+})

@@ -79,6 +79,49 @@ test('an alert naming no rule of its own falls back to the Alertmanager', () => 
   assert.equal(managedSignalsOf([alert()], MAPPING)[0]?.href, `${BASE}/#/alerts`)
 })
 
+// An Alertmanager holds whatever was sent to it rather than only what its own Prometheus
+// evaluates, so this field is a remote sender's word and it is rendered as a link on the portal's
+// own page. A scheme a browser would execute must never survive into that href.
+test('a javascript: generatorURL never becomes the link', () => {
+  const [signal] = managedSignalsOf(
+    [alert({ generatorURL: 'javascript:alert(document.cookie)' })],
+    MAPPING,
+  )
+
+  assert.equal(signal?.href, `${BASE}/#/alerts`)
+})
+
+test('a data: generatorURL never becomes the link', () => {
+  const [signal] = managedSignalsOf(
+    [alert({ generatorURL: 'data:text/html,<script>alert(1)</script>' })],
+    MAPPING,
+  )
+
+  assert.equal(signal?.href, `${BASE}/#/alerts`)
+})
+
+// Relative to whom is the question it cannot answer: the portal is not the source's origin, so a
+// path resolves against the wrong host even where it is harmless.
+test('a relative generatorURL falls back rather than resolving against the portal', () => {
+  assert.equal(
+    managedSignalsOf([alert({ generatorURL: '/graph?g0.expr=up' })], MAPPING)[0]?.href,
+    `${BASE}/#/alerts`,
+  )
+})
+
+test('a generatorURL of nothing but whitespace falls back', () => {
+  assert.equal(managedSignalsOf([alert({ generatorURL: '   ' })], MAPPING)[0]?.href, `${BASE}/#/alerts`)
+})
+
+// The alert still reaches the portal: something firing must never be hidden because a link it
+// carried was unusable.
+test('an alert whose link was refused is still shown', () => {
+  const [signal] = managedSignalsOf([alert({ generatorURL: 'javascript:alert(1)' })], MAPPING)
+
+  assert.equal(signal?.label, 'PostgresDown')
+  assert.equal(signal?.severity, 'critical')
+})
+
 // An alert pushed straight into the Alertmanager carries no generatorURL and no instance, which
 // is exactly the shape a hand-triggered test alert arrives in.
 test('an injected alert with only a name and a severity still shows', () => {
@@ -116,3 +159,35 @@ test('the id matches what the rule alerts would have produced', async () => {
 
   assert.equal(managed?.id, rule?.id)
 })
+
+// A label set carries the instance and the job, so the id is hashed rather than joined: it is
+// rendered as a DOM key, and the topology is what the detail is kept from a non-admin for.
+test('the id is a wide digest rather than the labels themselves', () => {
+  const [signal] = managedSignalsOf([alert()], MAPPING)
+  const [, digest] = signal?.id.split(':') ?? []
+
+  assert.match(digest ?? '', /^[0-9a-f]{16}$/)
+  assert.ok(!signal?.id.includes('db-01'))
+})
+
+test('the same labels keep one id, and different ones do not share it', () => {
+  const [same] = managedSignalsOf([alert()], MAPPING)
+  const [again] = managedSignalsOf([alert()], MAPPING)
+  const [other] = managedSignalsOf(
+    [alert({ labels: { alertname: 'PostgresDown', severity: 'critical', instance: 'db-02:9187' } })],
+    MAPPING,
+  )
+
+  assert.equal(same?.id, again?.id)
+  assert.notEqual(same?.id, other?.id)
+})
+
+// The lookup is a Map rather than an object literal, the key being a remote source's word: a
+// plain literal answers for every name on the prototype.
+for (const evil of ['constructor', 'toString', '__proto__', 'valueOf', 'hasOwnProperty']) {
+  test(`a severity of ${evil} is not a severity`, () => {
+    const alerts = [alert({ labels: { alertname: 'Odd', severity: evil } })]
+
+    assert.deepEqual(managedSignalsOf(alerts, { ...MAPPING, floor: 'info' }), [])
+  })
+}

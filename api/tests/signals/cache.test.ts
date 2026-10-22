@@ -3,7 +3,7 @@ import { beforeEach, test } from 'node:test'
 import { createConnector } from '#connectors/repository.js'
 import type { ConnectorContext, Signal } from '#connectors/types.js'
 import { getDb } from '#db/index.js'
-import { readSignals, resetSignals } from '#signals/cache.js'
+import { isLiveSignal, readSignals, resetSignals } from '#signals/cache.js'
 import { listSignalTasks } from '#signals/resolve.js'
 
 // What the stubbed source answers, rewritten per test. Prometheus is the type it stands in for
@@ -67,6 +67,7 @@ function settle(): Promise<void> {
 
 beforeEach(async () => {
   getDb().prepare('DELETE FROM connectors').run()
+  getDb().prepare('DELETE FROM signal_silences').run()
 
   resetSignals()
   answer = []
@@ -107,6 +108,30 @@ test('the detail is an admin’s and the link is not', async () => {
   assert.equal(asAdmin?.detail, 'the primary is not answering')
   assert.equal(asAnyone?.detail, undefined)
   assert.equal(asAnyone?.href, 'https://prometheus.example.com/alerts')
+})
+
+// The funnel every signal leaves by, whichever module built it: a link composed out of what a
+// remote source said would otherwise put whatever that source chose behind a click here.
+test('a link a browser would execute is not served at all', async () => {
+  connector()
+  answer = [
+    { ...signal('Pwn', 'critical'), href: 'javascript:alert(document.cookie)' },
+    { ...signal('DiskFilling', 'warning'), href: 'https://prometheus.example.com/alerts' },
+  ]
+
+  readSignals(true, READER)
+  await settle()
+
+  const served = readSignals(true, READER).signals
+  const refused = served.find((entry) => entry.label === 'Pwn')
+  const kept = served.find((entry) => entry.label === 'DiskFilling')
+
+  // The line is still there, it simply carries no link
+  assert.equal(refused?.label, 'Pwn')
+  assert.equal(refused?.href, undefined)
+  assert.ok(refused !== undefined && !('href' in refused))
+
+  assert.equal(kept?.href, 'https://prometheus.example.com/alerts')
 })
 
 test('two sources are merged into one list, worst first', async () => {
@@ -234,4 +259,157 @@ test('a source that was just edited is read again rather than served from before
 
   assert.equal(asked, 2)
   assert.deepEqual(readSignals(true, READER).signals, [])
+})
+
+// What bounds the silences: the id a caller sends is a key, and one nothing is firing writes a
+// row the per-source sweep can never reach.
+test('only what a source is reporting counts as a live signal', async () => {
+  connector()
+  answer = [signal('PostgresDown', 'critical')]
+
+  // Nothing is held until a read has actually answered behind one
+  assert.equal(isLiveSignal('PostgresDown'), false)
+
+  readSignals(true, READER)
+  await settle()
+
+  assert.equal(isLiveSignal('PostgresDown'), true)
+  assert.equal(isLiveSignal('made-up'), false)
+  assert.equal(isLiveSignal('1:00000000'), false)
+})
+
+// A quietened line is still something the source is reporting, so it can still be brought back.
+test('a silenced signal is still live, so it can be un-silenced', async () => {
+  connector()
+  answer = [signal('PostgresDown', 'critical')]
+
+  readSignals(true, READER)
+  await settle()
+  readSignals(true, READER)
+
+  const { setSilenced } = await import('#signals/silences.js')
+  setSilenced('PostgresDown', READER, false, true)
+
+  assert.equal(isLiveSignal('PostgresDown'), true)
+})
+
+// Served rather than filtered out, the way the entries serve what is hidden: a line nobody can
+// see is a line nobody can bring back.
+test('a quietened line is still served, marked in the scope that quietened it', async () => {
+  connector()
+  answer = [signal('PostgresDown', 'critical'), signal('DiskFilling', 'warning')]
+
+  readSignals(true, READER)
+  await settle()
+
+  const { setSilenced } = await import('#signals/silences.js')
+  setSilenced('PostgresDown', READER, false, true)
+
+  const served = readSignals(true, READER)
+
+  // Both are still in the document, which is what lets the client offer a way back. The quietened
+  // one trails the firing half rather than holding its place, the cap falling on that half alone,
+  // and the client reads the two apart by the ids below rather than by position.
+  assert.deepEqual(
+    served.signals.map((entry) => entry.label).sort(),
+    ['DiskFilling', 'PostgresDown'],
+  )
+
+  assert.deepEqual(served.silenced.mine, ['PostgresDown'])
+  assert.deepEqual(served.silenced.all, [])
+})
+
+// Only an admin may lift what the portal quietened, so which scope holds a line is what the
+// client reads to decide whether to offer anyone a way back.
+test('the portal’s own silences are served apart from a reader’s', async () => {
+  connector()
+  answer = [signal('PostgresDown', 'critical'), signal('DiskFilling', 'warning')]
+
+  readSignals(true, READER)
+  await settle()
+
+  const { setSilenced } = await import('#signals/silences.js')
+  setSilenced('PostgresDown', READER, true, true)
+  setSilenced('DiskFilling', READER, false, true)
+
+  const served = readSignals(true, READER)
+
+  assert.deepEqual(served.silenced.all, ['PostgresDown'])
+  assert.deepEqual(served.silenced.mine, ['DiskFilling'])
+})
+
+// Switched off is switched off: neither half is served, and nothing is read to build them.
+test('the switch takes both halves of the document with it', async () => {
+  connector()
+  answer = [signal('PostgresDown', 'critical')]
+
+  readSignals(true, READER)
+  await settle()
+
+  const { setEnabled } = await import('#settings/toggles.js')
+  setEnabled('alerts', false)
+
+  const served = readSignals(true, READER)
+
+  assert.deepEqual(served.signals, [])
+  assert.deepEqual(served.silenced.all, [])
+  assert.deepEqual(served.silenced.mine, [])
+
+  setEnabled('alerts', true)
+})
+
+// The list is collapsed behind a count and nothing past the first is reachable without opening
+// it, so a source holding thousands would send rows nobody can read on every poll.
+test('a source holding more than the cap sends the cap, and says how many there are', async () => {
+  connector()
+  answer = Array.from({ length: 250 }, (_, index) =>
+    signal(`Alert${String(index).padStart(3, '0')}`, 'warning'),
+  )
+
+  readSignals(true, READER)
+  await settle()
+
+  const served = readSignals(true, READER)
+
+  assert.equal(served.signals.length, 200)
+  assert.equal(served.total, 250)
+})
+
+test('a source under the cap says exactly what it sent', async () => {
+  connector()
+  answer = [signal('PostgresDown', 'critical'), signal('DiskFilling', 'warning')]
+
+  readSignals(true, READER)
+  await settle()
+
+  const served = readSignals(true, READER)
+
+  assert.equal(served.signals.length, 2)
+  assert.equal(served.total, 2)
+})
+
+// A quietened line dropped by the cap is one nobody could bring back, which is the whole reason
+// the page is served them at all.
+test('the cap never takes a quietened line with it', async () => {
+  connector()
+  answer = Array.from({ length: 250 }, (_, index) =>
+    signal(`Alert${String(index).padStart(3, '0')}`, 'warning'),
+  )
+
+  readSignals(true, READER)
+  await settle()
+
+  const { setSilenced } = await import('#signals/silences.js')
+
+  // One that sorts last, so it is well past where the cap falls
+  setSilenced('Alert249', READER, false, true)
+
+  const served = readSignals(true, READER)
+  const labels = served.signals.map((entry) => entry.label)
+
+  assert.ok(labels.includes('Alert249'))
+  assert.deepEqual(served.silenced.mine, ['Alert249'])
+
+  // The quietened one is no longer counted among what is firing
+  assert.equal(served.total, 249)
 })

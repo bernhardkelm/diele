@@ -1,8 +1,8 @@
 import { Router } from 'express'
 import { z } from 'zod'
 import { canAdmin } from '#auth/permissions.js'
-import { unauthorized } from '#errors.js'
-import { readSignals } from './cache.js'
+import { badRequest, unauthorized } from '#errors.js'
+import { isLiveSignal, readSignals } from './cache.js'
 import { setSilenced } from './silences.js'
 
 export const signalsRouter: Router = Router()
@@ -36,6 +36,15 @@ signalsRouter.put('/silence', (req, res) => {
   }
 
   const { id, silenced } = silenceSchema.parse(req.body)
+
+  // Only what something is actually reporting. A silence is keyed by an id the caller supplies
+  // and is swept per source against the ids that source answered with, so one nothing is firing
+  // would sit there for good, and anyone signed in could write as many as they liked. A line that
+  // cleared between the poll and the click lands here too, which is the same answer: there is
+  // nothing left to quieten.
+  if (!isLiveSignal(id)) {
+    throw badRequest('that signal is not firing')
+  }
 
   setSilenced(id, req.user.id, canAdmin(req.user), silenced)
 

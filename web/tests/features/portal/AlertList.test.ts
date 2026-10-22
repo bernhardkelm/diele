@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { mount } from '@vue/test-utils'
 import AlertList from '@/features/portal/AlertList.vue'
+import type { SilencedSignal } from '@/composables/useSignals'
 import type { ApiSignal } from '@diele/common'
 
 /**
@@ -37,8 +38,27 @@ function assertStep(step: unknown): asserts step is {
  * @param {boolean} forEveryone - Whether silencing speaks for the whole portal
  * @returns {ReturnType<typeof mount>} - The mounted list
  */
-function list(signals: ReadonlyArray<ApiSignal>, forEveryone = false) {
-  return mount(AlertList, { props: { signals, forEveryone }, attachTo: document.body })
+function list(
+  signals: ReadonlyArray<ApiSignal>,
+  forEveryone = false,
+  silenced: ReadonlyArray<SilencedSignal> = [],
+  total?: number,
+) {
+  return mount(AlertList, {
+    props: { signals, forEveryone, silenced, total },
+    attachTo: document.body,
+  })
+}
+
+/**
+ * Builds one quietened line as the composable hands it over.
+ * @param {string} label - What is firing
+ * @param {boolean} byPortal - Whether the portal quietened it rather than this account
+ * @param {boolean} restorable - Whether whoever is looking may bring it back
+ * @returns {SilencedSignal} - The quietened line
+ */
+function quiet(label: string, byPortal: boolean, restorable: boolean): SilencedSignal {
+  return { signal: signal(label), byPortal, restorable }
 }
 
 describe('AlertList', () => {
@@ -126,6 +146,116 @@ describe('AlertList', () => {
 
       expect(mine.attributes('title')).toBe('Silence PostgresDown until it clears')
       expect(ours.attributes('title')).toBe('Silence PostgresDown for everyone until it clears')
+    })
+  })
+
+  describe('what the server did not send', () => {
+    // The server caps how many it serves, so a summary reading the array length would quietly
+    // report the cap as the number of things wrong.
+    it('counts what is firing rather than what arrived', () => {
+      const wrapper = list([signal('PostgresDown'), signal('DiskFilling', 'warning')], false, [], 250)
+
+      expect(wrapper.find('.alerts__summary').text()).toContain('250 alerts firing')
+    })
+
+    it('says how many were left out once the cap bites', async () => {
+      const wrapper = list([signal('PostgresDown'), signal('DiskFilling', 'warning')], false, [], 250)
+
+      await wrapper.find('.alerts__summary').trigger('click')
+
+      expect(wrapper.find('.alerts__withheld').text()).toContain('248 more')
+    })
+
+    // A note about a cap nobody hit would be noise on every ordinary portal.
+    it('says nothing about a cap that did not bite', async () => {
+      const wrapper = list([signal('PostgresDown'), signal('DiskFilling', 'warning')], false, [], 2)
+
+      await wrapper.find('.alerts__summary').trigger('click')
+
+      expect(wrapper.find('.alerts__withheld').exists()).toBe(false)
+    })
+
+    // An api older than the bundle serves no count at all, and a summary reading undefined would
+    // be worse than one reading the length.
+    it('falls back to what arrived when no count was served', () => {
+      const wrapper = list([signal('PostgresDown'), signal('DiskFilling', 'warning')])
+
+      expect(wrapper.find('.alerts__summary').text()).toContain('2 alerts firing')
+      expect(wrapper.find('.alerts__withheld').exists()).toBe(false)
+    })
+  })
+
+  describe('what is held back', () => {
+    // A silence lasts only as long as its alert, so there is nowhere else to go and lift one
+    // before it clears. A portal drawing nothing would be a portal with no way back.
+    it('stands even when every line is quietened', () => {
+      const wrapper = list([], false, [quiet('PostgresDown', false, true)])
+
+      expect(wrapper.find('section').exists()).toBe(true)
+      expect(wrapper.find('.alerts__summary--quiet').text()).toContain('1 silenced')
+    })
+
+    it('says nothing about a held-back half that is empty', () => {
+      expect(list([signal('PostgresDown')]).find('.alerts__summary--quiet').exists()).toBe(false)
+    })
+
+    // Quietened precisely because nobody wanted to read it, so it says how much there is and
+    // nothing more until it is asked.
+    it('keeps the quietened lines behind their count until opened', async () => {
+      const wrapper = list([], false, [quiet('CertExpiring', false, true)])
+      const summary = wrapper.find('.alerts__summary--quiet')
+
+      expect(summary.attributes('aria-expanded')).toBe('false')
+
+      await summary.trigger('click')
+
+      expect(wrapper.find('.alerts__summary--quiet').attributes('aria-expanded')).toBe('true')
+      expect(wrapper.text()).toContain('CertExpiring')
+    })
+
+    it('asks for the line under the button when one is brought back', async () => {
+      const wrapper = list([], false, [
+        quiet('CertExpiring', false, true),
+        quiet('NodeMemHigh', false, true),
+      ])
+
+      await wrapper.find('.alerts__summary--quiet').trigger('click')
+      await wrapper.findAll('.alert__silence')[1]?.trigger('click')
+
+      expect(wrapper.emitted('restore')).toEqual([['NodeMemHigh']])
+      expect(wrapper.emitted()).not.toHaveProperty('silence')
+    })
+
+    // Only the scope that owns a silence may lift it, so a control that would quietly do nothing
+    // is not drawn at all.
+    it('offers no way back on a line this account cannot lift', async () => {
+      const wrapper = list([], false, [quiet('Watchdog', true, false)])
+
+      await wrapper.find('.alerts__summary--quiet').trigger('click')
+
+      expect(wrapper.find('.alert__silence').exists()).toBe(false)
+      expect(wrapper.find('.alert__held').exists()).toBe(true)
+      expect(wrapper.text()).toContain('silenced for the whole portal')
+    })
+
+    it('offers an admin the way back on what the portal quietened', async () => {
+      const wrapper = list([], true, [quiet('Watchdog', true, true)])
+
+      await wrapper.find('.alerts__summary--quiet').trigger('click')
+
+      expect(wrapper.find('.alert__silence').attributes('title')).toBe(
+        'Bring Watchdog back for everyone',
+      )
+    })
+
+    it('collapses itself again once the last quietened line clears', async () => {
+      const wrapper = list([], false, [quiet('CertExpiring', false, true)])
+
+      await wrapper.find('.alerts__summary--quiet').trigger('click')
+      await wrapper.setProps({ silenced: [] })
+      await wrapper.setProps({ silenced: [quiet('CertExpiring', false, true)] })
+
+      expect(wrapper.find('.alerts__summary--quiet').attributes('aria-expanded')).toBe('false')
     })
   })
 
