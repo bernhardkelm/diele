@@ -11,6 +11,7 @@ import {
 import type {
   CardTarget,
   CommandTarget,
+  HistoryTarget,
   PortalTarget,
   RowTarget,
   SuggestionTarget,
@@ -82,8 +83,31 @@ describe('partitionTargets', () => {
     expect(sections.cards.map((entry) => entry.item.ref)).toEqual(['card:1', 'card:2'])
   })
 
-  it('reads an empty list as four empty sections', () => {
-    expect(partitionTargets([])).toEqual({ commands: [], suggestions: [], cards: [], rows: [] })
+  it('reads an empty list as five empty sections', () => {
+    expect(partitionTargets([])).toEqual({
+      commands: [],
+      suggestions: [],
+      cards: [],
+      rows: [],
+      history: [],
+    })
+  })
+
+  // A visited page is its own section rather than a saved site, so the page can draw it last.
+  it('puts a visited page in a section of its own', () => {
+    const page: HistoryTarget = {
+      ref: 'history:1',
+      kind: 'history',
+      name: 'Pull requests',
+      url: 'https://github.com/example/diele/pulls',
+      display: 'github.com/example/diele/pulls',
+      searchOnly: true,
+    }
+
+    const sections = partitionTargets([card, page])
+
+    expect(sections.history).toEqual([{ index: 1, item: page }])
+    expect(sections.cards).toEqual([{ index: 0, item: card }])
   })
 })
 

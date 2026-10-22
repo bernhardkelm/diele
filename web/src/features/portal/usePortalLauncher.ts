@@ -1,9 +1,15 @@
 import { computed, type ComputedRef, type Ref } from 'vue'
+import { useHistory } from '@/composables/useHistory'
 import { useLaunchHistory } from '@/features/portal/useLaunchHistory'
 import { useLauncher } from '@/features/portal/useLauncher'
-import { useVisitedUrls } from '@/features/portal/useVisitedUrls'
 import { actionsFor } from '@/features/portal/launchActions'
-import { isCard, isCommand, isSuggestion, partitionTargets } from '@/features/portal/launchTargets'
+import {
+  isCard,
+  isCommand,
+  isHistory,
+  isSuggestion,
+  partitionTargets,
+} from '@/features/portal/launchTargets'
 import { pasteTargetFor } from '@/features/portal/pasteTarget'
 import { searchTargets } from '@/features/portal/searchTargets'
 import { parseSlash } from '@/features/portal/slashCommands'
@@ -67,19 +73,26 @@ export interface PortalLauncher {
  */
 export function usePortalLauncher(options: PortalLauncherOptions): PortalLauncher {
   const { boostFor, remember: rememberLaunch } = useLaunchHistory()
-  const { remember: rememberVisit } = useVisitedUrls()
+  const { recordVisit } = useHistory()
 
   /**
-   * Records a target that was opened. Every launch feeds the ranking, and one that came from a
-   * url typed into the field also lands in the visited list, whose hosts can later be lifted
-   * into the saved sites.
+   * Records a target that was opened. Every launch feeds the ranking. An address typed into the
+   * field, and a page offered from the history, are also visits, which the history keeps where
+   * the account opted in. Nothing else is: a card, a site or a repo is already known, and a web
+   * search never comes through here.
    * @param {PortalTarget} target - Target that was opened
    * @returns {void}
    */
   function recordLaunch(target: PortalTarget): void {
     rememberLaunch(target.ref)
+
+    if (isHistory(target)) {
+      recordVisit(target.url, target.title)
+      return
+    }
+
     if (isSuggestion(target) && target.adHoc) {
-      rememberVisit(target.url)
+      recordVisit(target.url)
     }
   }
 

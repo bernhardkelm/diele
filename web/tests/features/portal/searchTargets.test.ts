@@ -3,6 +3,7 @@ import { searchTargets } from '@/features/portal/searchTargets'
 import type {
   CardTarget,
   CommandTarget,
+  HistoryTarget,
   PortalTarget,
   RowTarget,
   SuggestionTarget,
@@ -77,6 +78,38 @@ describe('sections', () => {
     const found = searchTargets([repo, group], 'deploy')
 
     expect(found[0]!.ref).toBe('gitlab:1:group-1')
+  })
+  // Something the portal was told about always wins over a page that was merely visited, however
+  // much better the visited page's title matches.
+  it('ranks a visited page below every other section, even on a better match', () => {
+    const page: HistoryTarget = {
+      ref: 'history:1',
+      kind: 'history',
+      name: 'deploy',
+      url: 'https://elsewhere.example/deploy',
+      display: 'elsewhere.example/deploy',
+      searchOnly: true,
+    }
+
+    const found = searchTargets([page, ...all], 'deploy')
+
+    expect(found.at(-1)!.ref).toBe('history:1')
+  })
+
+  it('finds a visited page by its host and by a segment of its path', () => {
+    const page: HistoryTarget = {
+      ref: 'history:2',
+      kind: 'history',
+      name: 'Untitled',
+      url: 'https://github.com/example/diele/pulls',
+      display: 'github.com/example/diele/pulls',
+      searchOnly: true,
+    }
+
+    expect(searchTargets([page], 'github')).toEqual([page])
+    expect(searchTargets([page], 'pulls')).toEqual([page])
+    expect(searchTargets([page], 'diele pulls')).toEqual([page])
+    expect(searchTargets([page], 'gitlab')).toEqual([])
   })
 })
 

@@ -12,7 +12,19 @@ the login screen.
 The bar is always present and takes focus on load, so a new tab can be typed into straight away.
 It searches saved sites, the service cards and the connector rows together - by name, by url and
 by keyword, so `example-group/web` finds the repo, `graf` finds Grafana and `3000` finds that
-local port.
+local port. Where the account opted into history, the pages it visited are searched as well, by
+title, host and path, and always rank below all of those: a visited page is the weakest claim on a
+term, and one whose address something else already reaches is left out.
+
+History is read once per load through `GET /api/history`, held in memory only and dropped on sign
+out, never written to `localStorage`. Opening a **Go to** address or a history result posts the
+visit with `keepalive`, since the page unloads straight after; a slash command, a subreddit jump and
+the web search are searches rather than visits, and are never posted.
+
+What was opened also nudges the ranking, so the entries you reach for keep winning ties. That list
+is kept in `localStorage` by ref alone, never by url: an address typed into the field is not
+added to it at all, and signing out clears it, since it belongs to the browser rather than to the
+account.
 
 | key | does |
 | --- | --- |
@@ -88,7 +100,13 @@ than dropping it, so a repo is reached by opening the repos and typing its name.
 | --- | --- |
 | `Appearance` | the theme: follow the device, always light, always dark |
 | `Hidden entries` | one switch per connector row, and a row bringing them all back while any are hidden |
+| `History` | the opt-in, the excluded domains with a field to add one, a row forgetting every kept page, and one row per kept page |
 | `Back to diele`, `Sign out` | the closing actions, rows in the same ring |
+
+The history section is listed only where the instance offers history, and says nothing otherwise.
+Its kept pages live on the API, so they are read each time the section opens. A kept page or an
+excluded domain is removed with `↵` or `x`; forgetting a page, and forgetting all of them, asks
+for a second press first. Opting out deletes nothing.
 
 The hidden-entries section is listed whenever a connector is configured, whether or not it has
 produced anything yet: one that is failing still has rows someone hid, and dropping the switch

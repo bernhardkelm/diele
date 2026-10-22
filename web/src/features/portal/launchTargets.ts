@@ -1,6 +1,7 @@
 import type {
   CardTarget,
   CommandTarget,
+  HistoryTarget,
   PortalTarget,
   RowTarget,
   SuggestionTarget,
@@ -17,6 +18,7 @@ export interface PartitionedTargets {
   readonly suggestions: ReadonlyArray<Indexed<SuggestionTarget>>
   readonly cards: ReadonlyArray<Indexed<CardTarget>>
   readonly rows: ReadonlyArray<Indexed<RowTarget>>
+  readonly history: ReadonlyArray<Indexed<HistoryTarget>>
 }
 
 /**
@@ -35,6 +37,15 @@ export function isSuggestion(target: PortalTarget): target is SuggestionTarget {
  */
 export function isRow(target: PortalTarget): target is RowTarget {
   return target.kind === 'row'
+}
+
+/**
+ * Returns whether a target is a page this account visited before.
+ * @param {PortalTarget} target - Target to test
+ * @returns {boolean} - True for history entries
+ */
+export function isHistory(target: PortalTarget): target is HistoryTarget {
+  return target.kind === 'history'
 }
 
 /**
@@ -67,6 +78,7 @@ export function partitionTargets(matches: ReadonlyArray<PortalTarget>): Partitio
   const suggestions: Indexed<SuggestionTarget>[] = []
   const cards: Indexed<CardTarget>[] = []
   const rows: Indexed<RowTarget>[] = []
+  const history: Indexed<HistoryTarget>[] = []
 
   matches.forEach((item, index) => {
     if (isCommand(item)) {
@@ -75,10 +87,12 @@ export function partitionTargets(matches: ReadonlyArray<PortalTarget>): Partitio
       suggestions.push({ index, item })
     } else if (isRow(item)) {
       rows.push({ index, item })
+    } else if (isHistory(item)) {
+      history.push({ index, item })
     } else {
       cards.push({ index, item })
     }
   })
 
-  return { commands, suggestions, cards, rows }
+  return { commands, suggestions, cards, rows, history }
 }

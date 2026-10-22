@@ -15,10 +15,23 @@ describe('terms that are really urls', () => {
     expect(pasteTargetFor('docs.example.dev/guide')?.url).toBe('https://docs.example.dev/guide')
   })
 
+  it('knows country codes and the suffixes of private networks', () => {
+    expect(pasteTargetFor('example.is')?.url).toBe('https://example.is/')
+    expect(pasteTargetFor('shop.example.fr/cart')?.url).toBe('https://shop.example.fr/cart')
+    expect(pasteTargetFor('nas.lan:5001')?.url).toBe('https://nas.lan:5001/')
+    expect(pasteTargetFor('router.home.arpa')?.url).toBe('https://router.home.arpa/')
+  })
+
   // A dev server is served over plain http, so guessing https would offer a link that fails.
   it('assumes http for localhost and loopback', () => {
     expect(pasteTargetFor('localhost:5173')?.url).toBe('http://localhost:5173/')
     expect(pasteTargetFor('127.0.0.1:3000/admin')?.url).toBe('http://127.0.0.1:3000/admin')
+  })
+
+  // An mDNS device rarely carries a certificate, for the same reason.
+  it('assumes http for mDNS and loopback names', () => {
+    expect(pasteTargetFor('homeassistant.local:8123')?.url).toBe('http://homeassistant.local:8123/')
+    expect(pasteTargetFor('app.localhost:3000')?.url).toBe('http://app.localhost:3000/')
   })
 
   it('shows the host alone when the url has no path of its own', () => {
@@ -47,7 +60,17 @@ describe('terms that are not urls', () => {
   // Any two-plus letter suffix would swallow these, and offering to navigate to them as the
   // auto-selected first hit would be worse than not offering at all.
   it('offers nothing for a filename that merely looks host-like', () => {
-    for (const term of ['sites.json', 'App.vue', 'index.ts', 'notes.md', 'main.rs']) {
+    for (const term of [
+      'sites.json',
+      'App.vue',
+      'index.ts',
+      'notes.md',
+      'main.rs',
+      'setup.py',
+      'lib.so',
+      'util.cc',
+      'build.ps',
+    ]) {
       expect(pasteTargetFor(term), term).toBeUndefined()
     }
   })

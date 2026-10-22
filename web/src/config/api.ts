@@ -47,6 +47,22 @@ export const SIGNALS_URL = '/api/signals'
 // that means the whole portal or only their own account.
 export const SIGNALS_SILENCE_URL = '/api/signals/silence'
 
+// Pages this account visited, offered back in the search. Separate from the entries because it is
+// per account and off until opted into, so a portal that never turns it on never asks.
+export const HISTORY_URL = '/api/history'
+export const HISTORY_ENTRIES_URL = '/api/history/entries'
+export const HISTORY_VISITS_URL = '/api/history/visits'
+export const HISTORY_PREFERENCES_URL = '/api/history/preferences'
+
+/**
+ * Builds the path that forgets one visited page.
+ * @param {number} id - Entry to delete
+ * @returns {string} - Same-origin url for that entry
+ */
+export function historyEntryUrl(id: number): string {
+  return `${HISTORY_ENTRIES_URL}/${encodeURIComponent(String(id))}`
+}
+
 export const ADMIN_FEATURES_URL = '/api/admin/features'
 export const ADMIN_ICONS_URL = '/api/admin/icons'
 export const ADMIN_EXPORT_URL = '/api/admin/export'
@@ -73,3 +89,13 @@ export const CONFIG_CACHE_MAX_AGE_MS = 30 * 24 * 60 * 60_000
 
 export const ENTRIES_CACHE_KEY = 'diele:entries:v1'
 export const ENTRIES_CACHE_MAX_AGE_MS = 7 * 24 * 60 * 60_000
+
+// What was opened, by ref, for the ranking. Here rather than with its reader because signing out
+// clears it, and the list is this browser's rather than any one account's. Keyed by ref rather
+// than by url, which is why it is versioned: renaming a repo changes its url, and a list keyed on
+// that would quietly forget everything ever opened from it.
+export const LAUNCH_HISTORY_KEY = 'diele:launch-history:v2'
+
+// Keys an older build wrote and nothing reads any more, dropped on load so they do not linger.
+// `diele:visited-urls` held the origins of every address typed into the field.
+export const RETIRED_STORAGE_KEYS: ReadonlyArray<string> = ['diele:visited-urls']

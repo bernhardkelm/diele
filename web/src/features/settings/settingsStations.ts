@@ -1,5 +1,11 @@
 import type { ListAction } from '@/helpers/listActions'
-import type { SettingsOption, SettingsSection } from '@/features/settings/settingsSections'
+import type {
+  SettingsField,
+  SettingsItem,
+  SettingsOption,
+  SettingsRow,
+  SettingsSection,
+} from '@/features/settings/settingsSections'
 
 interface SectionStation {
   readonly kind: 'section'
@@ -14,6 +20,22 @@ interface OptionStation {
   readonly label: string
   readonly section: SettingsSection
   readonly option: SettingsOption
+}
+
+interface FieldStation {
+  readonly kind: 'field'
+  readonly key: string
+  readonly label: string
+  readonly section: SettingsSection
+  readonly field: SettingsField
+}
+
+export interface ItemStation {
+  readonly kind: 'item'
+  readonly key: string
+  readonly label: string
+  readonly section: SettingsSection
+  readonly item: SettingsItem
 }
 
 interface ActionStation {
@@ -31,7 +53,12 @@ interface ActionStation {
  * One stop in the settings view's keyboard ring. A section's options are stations in the same
  * list as the section itself, which is what lets one pair of arrow keys reach everything.
  */
-export type SettingsStation = SectionStation | OptionStation | ActionStation
+export type SettingsStation =
+  | SectionStation
+  | OptionStation
+  | FieldStation
+  | ItemStation
+  | ActionStation
 
 /**
  * Names the station a section occupies.
@@ -50,6 +77,26 @@ export function sectionKey(sectionId: string): string {
  */
 function optionKey(sectionId: string, optionId: string): string {
   return `option:${sectionId}:${optionId}`
+}
+
+/**
+ * Builds the station one of a section's later rows occupies.
+ * @param {SettingsSection} section - Section the row belongs to
+ * @param {SettingsRow} row - Row being addressed
+ * @returns {SettingsStation} - Its station, keyed by its kind so two kinds may share an id
+ */
+function rowStation(section: SettingsSection, row: SettingsRow): SettingsStation {
+  const key = `${row.kind}:${section.id}:${row.id}`
+
+  if (row.kind === 'field') {
+    return { kind: 'field', key, label: row.label, section, field: row }
+  }
+
+  if (row.kind === 'item') {
+    return { kind: 'item', key, label: row.label, section, item: row }
+  }
+
+  return { kind: 'action', key, label: row.label, action: row, nested: true, section }
 }
 
 /**
@@ -99,6 +146,10 @@ export function buildSettingsStations(
         section,
         option,
       })
+    }
+
+    for (const row of section.rows ?? []) {
+      stations.push(rowStation(section, row))
     }
   }
 

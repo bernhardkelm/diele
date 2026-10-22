@@ -19,6 +19,10 @@ function sectionOf(target: PortalTarget): number {
       return 1
     case 'card':
       return 2
+    // below everything the portal was told about, since a page merely visited is the weakest
+    // claim on a term: a card, a site or a repo matching it always wins
+    case 'history':
+      return 5
     default:
       // a group page leads its own repos, the way it does without a term
       return target.searchOnly ? 3 : 4

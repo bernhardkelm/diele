@@ -181,8 +181,10 @@ export async function startApi(env: Record<string, string> = {}): Promise<TestAp
     async close(): Promise<void> {
       await new Promise<void>((resolve) => server.close(() => resolve()))
 
-      for (const suffix of ['', '-wal', '-shm']) {
-        rmSync(`${dbPath}${suffix}`, { force: true })
+      for (const path of [dbPath, config.history.dbPath]) {
+        for (const suffix of ['', '-wal', '-shm']) {
+          rmSync(`${path}${suffix}`, { force: true })
+        }
       }
     },
   }

@@ -7,6 +7,7 @@ import {
   AUTH_ME_URL,
   AUTH_PROVIDERS_URL,
   AUTH_SETUP_URL,
+  LAUNCH_HISTORY_KEY,
   authLoginUrl,
 } from '@/config/api'
 import { ROUTES } from '@/composables/routes'
@@ -14,12 +15,14 @@ import { useHashRoute } from '@/composables/useHashRoute'
 import { apiMessage, readPayload } from '@/helpers/apiError'
 import { refreshConnectorEntries, resetConnectorEntries } from '@/composables/useConnectorEntries'
 import { resetHealth } from '@/composables/useHealth'
+import { refreshHistory, resetHistory } from '@/composables/useHistory'
 import { refreshPortalConfig, resetPortalConfig } from '@/composables/usePortalConfig'
 import { resetSignals } from '@/composables/useSignals'
 import { applyBrandAccent } from '@/helpers/brandAccent'
 import { clearConfigCache } from '@/helpers/configCache'
 import { clearEntriesCache } from '@/helpers/entriesCache'
 import { readInjectedBrand } from '@/helpers/injectedRuntime'
+import { removeStored } from '@/helpers/storage'
 import { DEFAULT_BRAND } from '@/helpers/portalConfig'
 import type { ApiBrand, ApiProvider, ApiProviders, ApiUser } from '@diele/common'
 
@@ -174,7 +177,7 @@ async function adoptSession(): Promise<void> {
   reauth.value = false
   // Both, and in parallel: the session changed without the page reloading, so every request
   // that answered 401 a moment ago has to be retried, not only the config's.
-  await Promise.all([refreshPortalConfig(), refreshConnectorEntries()])
+  await Promise.all([refreshPortalConfig(), refreshConnectorEntries(), refreshHistory()])
 }
 
 /**
@@ -202,6 +205,9 @@ export function useSession(): SessionSource {
       resetConnectorEntries()
       resetHealth()
       resetSignals()
+      resetHistory()
+      // the ranking is this browser's, so what one account opened must not rank for the next
+      removeStored(LAUNCH_HISTORY_KEY)
       return
     }
 
@@ -303,6 +309,9 @@ export function useSession(): SessionSource {
       resetConnectorEntries()
       resetHealth()
       resetSignals()
+      resetHistory()
+      // the ranking is this browser's, so what one account opened must not rank for the next
+      removeStored(LAUNCH_HISTORY_KEY)
       user.value = undefined
 
       window.location.assign(payload.logoutUrl ?? '/')

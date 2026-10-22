@@ -36,6 +36,11 @@ whole set.
 | `TRUST_PROXY` | off by default; set to the number of proxies in front (`1` behind nginx) so `req.ip` is the caller and not a header |
 | `DIELE_VERSION` | what `/status` reports as the running build; the image stamps it from the git tag it was built at |
 | `DIELE_SEED_STOCK_CONFIG` | whether a database created by this boot gets the stock engines, commands and ports, default `true`; read only while the schema is created |
+| `HISTORY_DB_PATH` | where visited history lives, default `<DB_PATH stem>-history.db` beside `DB_PATH`; a relative path is resolved from the repo root |
+| `HISTORY_SERVED` | entries `GET /api/history` serves, most frecent first, default `300` |
+| `HISTORY_MAX_ENTRIES` | entries kept per account, least recently visited pruned first, default `5000` |
+| `HISTORY_ONE_OFF_DAYS` | days an entry visited only once survives the prune, default `14` |
+| `HISTORY_PROBE` | default `true`; `false` stores a public Go to url without requesting it from this server, for deployments that do not want the server's IP sent to every site their people open. Private and local addresses are never requested either way |
 | `VITE_API_TARGET` | **web, development only:** where the dev server proxies `/api`; a build talks to whatever origin serves it |
 
 `AUTH_MODE` falls back to `local` - the mode that needs nothing configured and still holds the
@@ -208,6 +213,73 @@ a connector must never cost that. `src/connectors/registry.ts` is the allowlist.
 `connectors.user_id` is always null today. It is declared so the per-user variant - everyone seeing
 the repos of their own token rather than the instance's - is a code change rather than a migration.
 
+### Visited history
+
+History is kept in a **second SQLite file**, `HISTORY_DB_PATH`, with its own connection and its own
+migrations in [`src/history/migrations/`](src/history/migrations/). It is the one thing here that
+is not configuration: a backup, an exclusion or a wipe can treat it on its own, the export does not
+carry it and an import does not touch it. The file is created by the first write, mode `0600`, so a
+deployment that never turns the feature on never has one. The connection runs with
+`secure_delete`, and a delete an account asks for checkpoints the log, so forgotten rows leave the
+disk. Boot refuses a `HISTORY_DB_PATH` that is the same file as `DB_PATH`: both ledgers are
+`user_version`. Every `/api/history` response is `Cache-Control: no-store`.
+
+Rows are filed under `users.history_key`, a random 128-bit key created the first time an account
+sets its preferences, never under `users.id`. The history file can outlive a reset or a restore of
+the configuration, and an id handed out again would otherwise give a new account someone else's
+history. Foreign keys cannot cross files, so the prune deletes every owner whose key no account
+holds; with no account deletion in the code today, that sweep is what covers it.
+
+Three switches gate it, all off by default: `history` for the instance, and `historyDiele` and
+`historyExtension` beneath it for each source, on only while `history` is too. Each account opts in
+for itself on top. Switching any of them off stops recording and serving and deletes nothing;
+while `history` is off the prune only sweeps the rows of owners no account holds any more. A write
+re-checks every gate, the account's exclusions and whether it deleted anything since the batch
+arrived, so a probe that finishes late cannot write back what was just switched off or forgotten.
+
+The server decides what is kept, in [`src/history/filters.ts`](src/history/filters.ts). A url is
+stored as origin and path only: no credentials, query, fragment or matrix parameters
+(`;jsessionid=`), the host lowercased without a trailing dot, a default port and a trailing slash
+(except the root's) dropped. A visit is dropped entirely when it:
+
+- is not http(s), or is longer than 2000 characters;
+- is diele's own origin, or names a loopback, link-local, metadata or other special-purpose host;
+- is a search results page: an engine or slash command configured here, with the term in a
+  parameter or in the path, on the template's host with or without `www.` or below it, or the
+  built-in list, Google Maps included;
+- carries a token-like path segment, long, random and not word-like (UUIDs and 32-hex page ids
+  pass);
+- is a capability link: an opaque id after a segment holding a word such as `reset`, `password`,
+  `invite`, `join`, `login`, `share` or `token`, page ids included, an encoded `/` counting as a
+  boundary;
+- falls on a domain the account excluded.
+
+Segments are percent-decoded twice before they are judged. A url that arrives with three distinct
+titles depends on its query string, and is folded into its origin-only entry for good; only
+digests of those titles are kept. A title from the portal itself is ignored, since it only ever
+echoes one this server served. Titles lose their control and format characters and are capped at
+300 characters, and a reported visit time is held to the last thirty days. Each account keeps at
+most `HISTORY_MAX_ENTRIES` entries and a fifth of that in folded shells, oldest first, enforced on
+every insert as well as in the prune.
+
+A visit from the portal's own bar that the account does not hold yet is judged on where its host
+**resolves**: loopback, link-local, metadata and every other special-purpose address are dropped
+and never requested, since only global unicast counts as public; a private, unique-local or CGNAT
+address is kept unprobed, so the outcome says nothing about that
+network; a public one is requested once, HEAD then GET on 405 or 501, never following a redirect,
+and kept on any answer but 404 or 410. The request resolves again at connect time and refuses
+anything that is not public, which closes DNS rebinding. Only the stored form is sent. Every
+lookup is charged to the account, sixty per ten minutes, because whether a private url is kept says
+whether its name resolves; lookups run two at a time across the instance with a three-second wait,
+so they never hold more than half of libuv's thread pool. Probes are budgeted at thirty per account
+per ten minutes and also run two at a time. Both queues are bounded and drop rather than grow, an
+account may have two batches in flight, and nothing about any of it is logged. `HISTORY_PROBE=false`
+keeps public urls unprobed. Everything here is per account: what another account holds never
+spares a probe or counts towards a fold. The extension's visits are not probed.
+
+`GET /api/history` ranks by visit count weighted by Firefox-style recency buckets. The prune runs
+in the fifteen-minute cycle beside the session sweep.
+
 ## Icons
 
 Uploaded svgs live in the `icons` table as text. Only svg is accepted, so there is nothing to store
@@ -298,6 +370,12 @@ turns it back on.
 | `GET` | `/api/entries` | what the connectors produced, one line per source saying when it last synced, and what is hidden |
 | `PUT` | `/api/entries/hidden` | hide an entry or bring it back, for yourself or for everyone |
 | `GET` | `/api/health` | how each bound entry last answered, and when to ask again |
+| `GET` | `/api/history` | the account's history state, and its most frecent entries less what the portal already offers |
+| `GET` | `/api/history/entries` | every entry the account holds, most recent first, whatever the switches say |
+| `POST` | `/api/history/visits` | report visits from a source, up to 20 from `diele` and 200 from `extension`; answered at once, checked and written in the background; 403 while the feature, the source or the account's opt-in is off, 429 while the account already has two batches in flight |
+| `DELETE` | `/api/history/entries/:id` | forget one entry; 404 alike for one that is missing and one that is not yours |
+| `DELETE` | `/api/history/entries` | forget them all; the preferences stay |
+| `PUT` | `/api/history/preferences` | opt in or out, set the excluded domains; adding one forgets what was kept on it |
 | `GET` | `/api/admin/features` | the registry the admin view renders from |
 | `GET`&nbsp;`POST` | `/api/admin/links/:kind` | list and create cards (`card`) or saved sites (`site`) |
 | `PATCH`&nbsp;`DELETE` | `/api/admin/links/:kind/:id` | edit and remove one |

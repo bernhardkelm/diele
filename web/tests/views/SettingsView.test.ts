@@ -1,13 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount, type VueWrapper } from '@vue/test-utils'
 import { nextTick } from 'vue'
-import type { ApiHidden } from '@diele/common'
+import type { ApiHidden, ApiHistoryEntry, ApiHistoryState } from '@diele/common'
 import SettingsView from '@/views/SettingsView.vue'
 import SettingsSectionRow from '@/features/settings/SettingsSectionRow.vue'
+import SettingsItemRow from '@/features/settings/SettingsItemRow.vue'
 import SettingsOptionRow from '@/features/settings/SettingsOptionRow.vue'
 import ActionRow from '@/components/ActionRow.vue'
 import { resetPortalConfig } from '@/composables/usePortalConfig'
 import { resetConnectorEntries } from '@/composables/useConnectorEntries'
+import { resetHistory } from '@/composables/useHistory'
 import { useTheme } from '@/composables/useTheme'
 
 const entries = {
@@ -324,5 +326,321 @@ describe('walking the list by keyboard', () => {
     await press(wrapper, 'ArrowDown')
 
     expect(document.activeElement?.getAttribute('data-station')).toBe('section:appearance')
+  })
+})
+
+describe('the history section', () => {
+  const STATE: ApiHistoryState = {
+    available: true,
+    sources: { diele: true, extension: false },
+    enabled: true,
+    excludedDomains: ['bank.example'],
+  }
+
+  const PAGE: ApiHistoryEntry = {
+    id: 1,
+    url: 'https://github.com/example/diele',
+    title: 'diele',
+    visits: 3,
+    lastVisitedAt: '2026-10-01T00:00:00Z',
+  }
+
+  const writes: Array<{ url: string; method: string; body?: unknown }> = []
+
+  /**
+   * Answers the history endpoints on top of the rest of the view's, recording every call.
+   * @param {ApiHistoryState | undefined} state - What the instance and the account allow, or undefined for an api that refuses the read
+   * @returns {void}
+   */
+  function stubHistory(state: ApiHistoryState | undefined = STATE): void {
+    const api = stubApi()
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input)
+        const method = init?.method ?? 'GET'
+
+        if (!url.startsWith('/api/history')) {
+          return api(input)
+        }
+
+        writes.push({ url, method, body: init?.body ? JSON.parse(String(init.body)) : undefined })
+
+        if (!state) {
+          return Promise.resolve(new Response(JSON.stringify({}), { status: 403 }))
+        }
+
+        if (url === '/api/history') {
+          return Promise.resolve(new Response(JSON.stringify({ state, entries: [PAGE] })))
+        }
+
+        if (url === '/api/history/entries' && method === 'GET') {
+          return Promise.resolve(new Response(JSON.stringify({ entries: [PAGE] })))
+        }
+
+        if (url === '/api/history/preferences') {
+          const next = { ...state, ...(init?.body ? JSON.parse(String(init.body)) : {}) }
+          return Promise.resolve(new Response(JSON.stringify(next)))
+        }
+
+        return Promise.resolve(new Response(null, { status: 204 }))
+      }),
+    )
+  }
+
+  /**
+   * Opens the history section, mounting the view first unless one is given, and waits for its
+   * kept pages.
+   * @param {VueWrapper} [mounted] - A view already on screen
+   * @returns {Promise<VueWrapper>} - The mounted view
+   */
+  async function openHistory(mounted?: VueWrapper): Promise<VueWrapper> {
+    const wrapper = mounted ?? (await open())
+    const row = await vi.waitFor(() => {
+      const found = wrapper
+        .findAllComponents(SettingsSectionRow)
+        .find((candidate) => candidate.props('section').id === 'history')
+      expect(found).toBeDefined()
+
+      return found!
+    })
+
+    await row.trigger('click')
+    await vi.waitFor(() => expect(wrapper.findAllComponents(SettingsItemRow)).toHaveLength(2))
+
+    return wrapper
+  }
+
+  /**
+   * Puts the caret on one station and sends it a key, the way a press on the focused row would.
+   * @param {VueWrapper} wrapper - The mounted view
+   * @param {string} key - Key name
+   * @returns {Promise<void>}
+   */
+  async function press(wrapper: VueWrapper, key: string): Promise<void> {
+    const focused = document.activeElement as HTMLElement | null
+    const target = focused ?? wrapper.find('.settings').element
+
+    target.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }))
+    await nextTick()
+  }
+
+  /**
+   * Focuses the row standing for one station.
+   * @param {VueWrapper} wrapper - The mounted view
+   * @param {string} station - Its station key
+   * @returns {Promise<void>}
+   */
+  async function focus(wrapper: VueWrapper, station: string): Promise<void> {
+    wrapper.find<HTMLElement>(`[data-station="${station}"]`).element.focus()
+    await nextTick()
+  }
+
+  beforeEach(() => {
+    writes.length = 0
+    resetHistory()
+  })
+
+  afterEach(() => {
+    resetHistory()
+  })
+
+  // Not a disabled row, not a hint: an instance that does not offer it says nothing about it.
+  it('says nothing about history where the instance does not offer it', async () => {
+    stubHistory({ ...STATE, available: false })
+    const wrapper = await open()
+    await vi.waitFor(() => expect(writes.some((call) => call.url === '/api/history')).toBe(true))
+    await nextTick()
+
+    expect(wrapper.text()).not.toMatch(/history/i)
+  })
+
+  it('says nothing about it either where the api refuses the read', async () => {
+    stubHistory(undefined)
+    const wrapper = await open()
+    await vi.waitFor(() => expect(writes.length).toBeGreaterThan(0))
+    await nextTick()
+
+    expect(wrapper.text()).not.toMatch(/history/i)
+  })
+
+  it('reads the kept pages only once the section is opened', async () => {
+    stubHistory()
+    const wrapper = await open()
+    await vi.waitFor(() => expect(wrapper.text()).toContain('History'))
+
+    expect(writes.some((call) => call.url === '/api/history/entries')).toBe(false)
+
+    await openHistory(wrapper)
+
+    expect(writes.filter((call) => call.url === '/api/history/entries')).toHaveLength(1)
+  })
+
+  // One pair of arrow keys reaches every new row, in the order they are listed.
+  it('walks the opt-in, the field, the domains, the clearing row and the pages', async () => {
+    stubHistory()
+    const wrapper = await openHistory()
+    await focus(wrapper, 'section:history')
+
+    const visited: Array<string | null> = []
+    for (let step = 0; step < 5; step += 1) {
+      await press(wrapper, 'ArrowDown')
+      visited.push(document.activeElement?.getAttribute('data-station') ?? null)
+    }
+
+    expect(visited).toEqual([
+      'option:history:enabled',
+      'field:history:exclude',
+      'item:history:domain:bank.example',
+      'action:history:clear-history',
+      'item:history:page:1',
+    ])
+  })
+
+  it('shows what is still kept while the account is opted out', async () => {
+    stubHistory({ ...STATE, enabled: false })
+    const wrapper = await openHistory()
+
+    expect(wrapper.text()).toContain('diele')
+    expect(wrapper.text()).toContain('still kept from before')
+  })
+
+  it('opts in or out from the switch, keeping what is kept', async () => {
+    stubHistory()
+    const wrapper = await openHistory()
+
+    await focus(wrapper, 'option:history:enabled')
+    await press(wrapper, 'Enter')
+
+    await vi.waitFor(() =>
+      expect(writes.find((call) => call.method === 'PUT')?.body).toEqual({ enabled: false }),
+    )
+    expect(writes.some((call) => call.method === 'DELETE')).toBe(false)
+  })
+
+  it('excludes a domain typed into the field, pasted address and all', async () => {
+    stubHistory()
+    const wrapper = await openHistory()
+
+    await focus(wrapper, 'field:history:exclude')
+    await press(wrapper, 'Enter')
+
+    const input = await vi.waitFor(() => {
+      const found = wrapper.find<HTMLInputElement>('.add__input')
+      expect(found.exists()).toBe(true)
+
+      return found
+    })
+    await vi.waitFor(() => expect(document.activeElement).toBe(input.element))
+
+    await input.setValue('https://www.Shop.example/cart')
+    await wrapper.find('.add__form').trigger('submit')
+
+    await vi.waitFor(() =>
+      expect(writes.find((call) => call.method === 'PUT')?.body).toEqual({
+        excludedDomains: ['bank.example', 'shop.example'],
+      }),
+    )
+    await vi.waitFor(() => expect(wrapper.find('.add__form').exists()).toBe(false))
+  })
+
+  it('keeps the form open with the reason when what was typed is no domain', async () => {
+    stubHistory()
+    const wrapper = await openHistory()
+
+    await focus(wrapper, 'field:history:exclude')
+    await press(wrapper, 'Enter')
+    await vi.waitFor(() => expect(wrapper.find('.add__input').exists()).toBe(true))
+
+    await wrapper.find('.add__input').setValue('not a domain')
+    await wrapper.find('.add__form').trigger('submit')
+
+    await vi.waitFor(() => expect(wrapper.find('.add__error').text()).toMatch(/not a domain/))
+    expect(writes.some((call) => call.method === 'PUT')).toBe(false)
+  })
+
+  it('closes the form on escape without closing the section', async () => {
+    stubHistory()
+    const wrapper = await openHistory()
+
+    await focus(wrapper, 'field:history:exclude')
+    await press(wrapper, 'Enter')
+    await vi.waitFor(() =>
+      expect(document.activeElement?.classList.contains('add__input')).toBe(true),
+    )
+
+    await press(wrapper, 'Escape')
+
+    expect(wrapper.find('.add__form').exists()).toBe(false)
+    expect(window.location.hash).toBe('#/settings/history')
+    expect(document.activeElement?.getAttribute('data-station')).toBe('field:history:exclude')
+  })
+
+  // Nothing undoes it, so the first press only asks.
+  it('asks once before forgetting every page', async () => {
+    stubHistory()
+    const wrapper = await openHistory()
+
+    await focus(wrapper, 'action:history:clear-history')
+    await press(wrapper, 'Enter')
+
+    expect(wrapper.text()).toContain('press again to forget all')
+    expect(writes.some((call) => call.method === 'DELETE')).toBe(false)
+
+    await press(wrapper, 'Enter')
+
+    await vi.waitFor(() =>
+      expect(writes.find((call) => call.method === 'DELETE')?.url).toBe('/api/history/entries'),
+    )
+    await vi.waitFor(() => expect(wrapper.text()).toContain('nothing is kept for you'))
+  })
+
+  it('asks once before forgetting one page, and leaves the caret in the list', async () => {
+    stubHistory()
+    const wrapper = await openHistory()
+
+    await focus(wrapper, 'item:history:page:1')
+    await press(wrapper, 'Enter')
+
+    expect(wrapper.text()).toContain('press again to delete')
+
+    await press(wrapper, 'Enter')
+
+    await vi.waitFor(() =>
+      expect(writes.find((call) => call.method === 'DELETE')?.url).toBe('/api/history/entries/1'),
+    )
+    await vi.waitFor(() =>
+      expect(wrapper.find('[data-station="item:history:page:1"]').exists()).toBe(false),
+    )
+    await vi.waitFor(() =>
+      expect(document.activeElement?.getAttribute('data-station')).toBe(
+        'action:history:clear-history',
+      ),
+    )
+  })
+
+  it('stops excluding a domain without asking', async () => {
+    stubHistory()
+    const wrapper = await openHistory()
+
+    await focus(wrapper, 'item:history:domain:bank.example')
+    await press(wrapper, 'Enter')
+
+    await vi.waitFor(() =>
+      expect(writes.find((call) => call.method === 'PUT')?.body).toEqual({ excludedDomains: [] }),
+    )
+  })
+
+  // The filter bar narrows an open section to what it holds, the way it finds a hidden repo.
+  it('finds a kept page by its title through the filter bar', async () => {
+    stubHistory()
+    const wrapper = await openHistory()
+
+    await wrapper.find('.launcher__input').setValue('diele')
+    await nextTick()
+
+    const items = wrapper.findAllComponents(SettingsItemRow).map((row) => row.props('item').id)
+    expect(items).toEqual(['page:1'])
   })
 })

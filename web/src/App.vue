@@ -7,6 +7,7 @@ import LauncherBar from '@/components/LauncherBar.vue'
 import LoginGate from '@/views/LoginGate.vue'
 import EntriesLoading from '@/features/portal/EntriesLoading.vue'
 import EntryList from '@/features/portal/EntryList.vue'
+import HistoryList from '@/features/portal/HistoryList.vue'
 import PageFooter from '@/components/PageFooter.vue'
 import PortalHeader from '@/components/PortalHeader.vue'
 import ServiceCard from '@/features/portal/ServiceCard.vue'
@@ -20,6 +21,7 @@ import { ROUTES } from '@/composables/routes'
 import { useHashRoute } from '@/composables/useHashRoute'
 import { useHealth } from '@/composables/useHealth'
 import { useHiddenEntries } from '@/composables/useHiddenEntries'
+import { useHistory } from '@/composables/useHistory'
 import { useLocalhostStatus } from '@/composables/useLocalhostStatus'
 import { usePortalConfig } from '@/composables/usePortalConfig'
 import { usePortalLauncher } from '@/features/portal/usePortalLauncher'
@@ -27,6 +29,7 @@ import { useSearchEngine } from '@/features/portal/useSearchEngine'
 import { useSession } from '@/composables/useSession'
 import { useSignals } from '@/composables/useSignals'
 import { shortcutFor } from '@/features/portal/useLauncher'
+import { historyTargets } from '@/features/portal/historyTargets'
 import type { PortalTarget } from '@/types/portal'
 
 const {
@@ -107,21 +110,30 @@ const needsLogin = computed(
     setupRequired.value || reauth.value || (configState.value === 'needs-auth' && !hasConfig.value),
 )
 
-// saved sites lead, so a match on one lands at index 0 where it can be auto-highlighted;
-// cards keep their positions behind it, then the connector rows, whose own order already puts
-// a group page ahead of its repos
-const targets = computed<ReadonlyArray<PortalTarget>>(() => [
-  ...sites.value,
-  ...cards.value,
-  ...visibleRows.value,
-])
-
 // The condition the template renders the portal branch under. The launcher's keys are live
 // exactly while the list they move is on screen, and the dots are polled for exactly as long as
 // there is something drawing them.
 const portalShowing = computed(
   () => !isStyleguide.value && !needsLogin.value && !isAdmin.value && !isSettings.value,
 )
+
+const { entries: historyEntries } = useHistory(() => portalShowing.value)
+
+// Visited pages are checked against every row, hidden ones included, so a repo kept out of the
+// list does not come back into it through the history.
+const visited = computed(() =>
+  historyTargets(historyEntries.value, [...sites.value, ...cards.value, ...sorted.value]),
+)
+
+// saved sites lead, so a match on one lands at index 0 where it can be auto-highlighted;
+// cards keep their positions behind it, then the connector rows, whose own order already puts
+// a group page ahead of its repos, and the visited pages last of all
+const targets = computed<ReadonlyArray<PortalTarget>>(() => [
+  ...sites.value,
+  ...cards.value,
+  ...visibleRows.value,
+  ...visited.value,
+])
 
 const {
   query,
@@ -243,6 +255,14 @@ const altHeld = useAltHeld()
         :refreshing="isRefreshingEntries"
         :query="query"
         @sort="sortBy"
+        @launch="recordLaunch($event)"
+      />
+
+      <HistoryList
+        v-if="sections.history.length"
+        :pages="sections.history"
+        :active-index="highlight"
+        :query="query"
         @launch="recordLaunch($event)"
       />
     </main>

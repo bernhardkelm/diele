@@ -1,5 +1,16 @@
 import type { SuggestionTarget } from '@/types/portal'
 
+const REF_PREFIX = 'adhoc:'
+
+/**
+ * Returns whether a ref names a target made up from the term, which is a url rather than an id.
+ * @param {string} ref - Ref to test
+ * @returns {boolean} - True for a ref built by `dynamicSiteLink`
+ */
+export function isMadeUpRef(ref: string): boolean {
+  return ref.startsWith(REF_PREFIX)
+}
+
 /**
  * Builds a target the launcher makes up from the term rather than one the portal has saved.
  *
@@ -17,11 +28,11 @@ export function dynamicSiteLink(fields: {
   url: string
   /** Second column text, the host or wherever the entry actually leads */
   display: string
-  /** Records the host in the visited list when opened, for a target built from a typed url */
+  /** Marks an address typed into the field, whose opening is a visit the history may keep */
   adHoc?: true
 }): SuggestionTarget {
   return {
-    ref: `adhoc:${fields.url}`,
+    ref: `${REF_PREFIX}${fields.url}`,
     kind: 'suggestion',
     keywords: [],
     searchOnly: true,

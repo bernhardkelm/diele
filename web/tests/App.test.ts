@@ -4,6 +4,7 @@ import { nextTick } from 'vue'
 import App from '@/App.vue'
 import CommandRow from '@/features/portal/CommandRow.vue'
 import EntryRow from '@/features/portal/EntryRow.vue'
+import HistoryRow from '@/features/portal/HistoryRow.vue'
 import LauncherBar from '@/components/LauncherBar.vue'
 import LoginGate from '@/views/LoginGate.vue'
 import ServiceCard from '@/features/portal/ServiceCard.vue'
@@ -12,6 +13,7 @@ import { CONFIG_CACHE_KEY } from '@/config/api'
 import { resetAdmin } from '@/features/admin/useAdmin'
 import { resetPortalConfig } from '@/composables/usePortalConfig'
 import { resetConnectorEntries } from '@/composables/useConnectorEntries'
+import { resetHistory } from '@/composables/useHistory'
 import { resetSession } from '@/composables/useSession'
 
 const CONFIG = {
@@ -315,5 +317,132 @@ describe('the routes', () => {
     await vi.waitFor(() => expect(wrapper.findComponent(LoginGate).exists()).toBe(true))
 
     expect(localStorage.getItem(CONFIG_CACHE_KEY)).not.toBeNull()
+  })
+})
+
+describe('visited pages', () => {
+  const STATE = {
+    available: true,
+    sources: { diele: true, extension: false },
+    enabled: true,
+    excludedDomains: [],
+  }
+
+  const ENTRIES_SERVED = [
+    {
+      id: 1,
+      url: 'https://github.com/example/diele',
+      title: 'Grafana lookalike',
+      visits: 4,
+      lastVisitedAt: '2026-10-01T00:00:00Z',
+    },
+    // a card already reaches this one, with the trailing slash the api's own dedupe missed
+    { id: 2, url: 'https://grafana.example/', visits: 9, lastVisitedAt: '2026-10-02T00:00:00Z' },
+  ]
+
+  const posts: Array<{ url: string; init?: RequestInit }> = []
+
+  beforeEach(() => {
+    posts.length = 0
+    resetHistory()
+
+    const api = stubApi()
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input)
+
+        if (url === '/api/history') {
+          return Promise.resolve(
+            new Response(JSON.stringify({ state: STATE, entries: ENTRIES_SERVED })),
+          )
+        }
+
+        if (url.startsWith('/api/history')) {
+          posts.push({ url, init })
+          return Promise.resolve(new Response(null, { status: 204 }))
+        }
+
+        return api(input)
+      }),
+    )
+  })
+
+  afterEach(() => {
+    resetHistory()
+  })
+
+  /**
+   * Types a term and waits for the visited pages it matches.
+   * @param {VueWrapper} wrapper - The mounted portal
+   * @param {string} term - Term to type
+   * @returns {Promise<void>}
+   */
+  async function search(wrapper: VueWrapper, term: string): Promise<void> {
+    await wrapper.find('input').setValue(term)
+    await nextTick()
+  }
+
+  it('leaves them off the resting page', async () => {
+    const wrapper = await open()
+    await nextTick()
+
+    expect(wrapper.findComponent(HistoryRow).exists()).toBe(false)
+  })
+
+  // Something the portal was told about always wins, so the visited page comes after the card.
+  it('offers a matching page after everything the portal knows, saying it is history', async () => {
+    const wrapper = await open()
+    await vi.waitFor(() => expect(wrapper.findComponent(EntryRow).exists()).toBe(true))
+
+    await search(wrapper, 'grafana')
+    await vi.waitFor(() => expect(wrapper.findComponent(HistoryRow).exists()).toBe(true))
+
+    const row = wrapper.findComponent(HistoryRow)
+    expect(row.text()).toContain('Grafana lookalike')
+    expect(row.text()).toContain('history')
+    expect(wrapper.findAllComponents(ServiceCard)).toHaveLength(1)
+
+    const order = wrapper
+      .find('.grid')
+      .element.compareDocumentPosition(wrapper.find('.history').element)
+    expect(order & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  // A page sets its own title, so a lookalike one is told apart by the address beside it.
+  it('always shows the host beside the title', async () => {
+    const wrapper = await open()
+
+    await search(wrapper, 'lookalike')
+    await vi.waitFor(() => expect(wrapper.findComponent(HistoryRow).exists()).toBe(true))
+
+    const row = wrapper.findComponent(HistoryRow)
+    expect(row.find('.visit__address').text()).toBe('github.com/example/diele')
+    expect(row.find('a').attributes('href')).toBe('https://github.com/example/diele')
+    expect(row.find('a').attributes('aria-label')).toContain('github.com/example/diele')
+  })
+
+  it('leaves out a page a card already reaches', async () => {
+    const wrapper = await open()
+
+    await search(wrapper, 'grafana.example')
+    await nextTick()
+
+    const urls = wrapper.findAllComponents(HistoryRow).map((row) => row.props('page').url)
+    expect(urls).not.toContain('https://grafana.example/')
+  })
+
+  it('records opening one as a visit', async () => {
+    const wrapper = await open()
+
+    await search(wrapper, 'lookalike')
+    await vi.waitFor(() => expect(wrapper.findComponent(HistoryRow).exists()).toBe(true))
+
+    const link = wrapper.findComponent(HistoryRow).find('a')
+    link.element.addEventListener('click', (event) => event.preventDefault())
+    await link.trigger('click')
+
+    expect(posts.map((post) => post.url)).toEqual(['/api/history/visits'])
+    expect(posts[0]!.init?.keepalive).toBe(true)
   })
 })

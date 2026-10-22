@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { CONFIG_CACHE_KEY, ENTRIES_CACHE_KEY } from '@/config/api'
+import { CONFIG_CACHE_KEY, ENTRIES_CACHE_KEY, LAUNCH_HISTORY_KEY } from '@/config/api'
 import { resetConnectorEntries, useConnectorEntries } from '@/composables/useConnectorEntries'
+import { resetHistory, useHistory } from '@/composables/useHistory'
+import { withSetup } from '@tests/support/withSetup'
 import { resetPortalConfig } from '@/composables/usePortalConfig'
 import { useSession } from '@/composables/useSession'
 
@@ -125,5 +127,55 @@ describe('signing out', () => {
 
     expect(fetchMock.mock.calls.map((call) => call[0])).toContain('/api/auth/logout-all')
     expect(localStorage.getItem(ENTRIES_CACHE_KEY)).toBeNull()
+  })
+
+  // The ranking is this browser's rather than the account's, so what one person opened must not
+  // go on ranking for whoever signs in next.
+  it('takes the launch ranking with it, on either route out', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.resolve(new Response(JSON.stringify({ logoutUrl: '/' })))),
+    )
+
+    localStorage.setItem(LAUNCH_HISTORY_KEY, JSON.stringify(['card:1']))
+    await useSession().signOut()
+    expect(localStorage.getItem(LAUNCH_HISTORY_KEY)).toBeNull()
+
+    localStorage.setItem(LAUNCH_HISTORY_KEY, JSON.stringify(['card:1']))
+    await useSession().signOutEverywhere()
+    expect(localStorage.getItem(LAUNCH_HISTORY_KEY)).toBeNull()
+  })
+
+  // Where someone has been is held in memory, and the next account on this page must not see it.
+  it('drops the visited pages held in memory', async () => {
+    const state = {
+      available: true,
+      sources: { diele: true, extension: false },
+      enabled: true,
+      excludedDomains: [],
+    }
+    const page = { id: 1, url: 'https://a.example/', visits: 1, lastVisitedAt: '2026-10-01' }
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL) =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify(
+              String(input) === '/api/history' ? { state, entries: [page] } : { logoutUrl: '/' },
+            ),
+          ),
+        ),
+      ),
+    )
+
+    const { result } = withSetup(() => useHistory(() => true))
+    await vi.waitFor(() => expect(result.entries.value).toHaveLength(1))
+
+    await useSession().signOut()
+
+    expect(result.entries.value).toEqual([])
+    expect(result.state.value.available).toBe(false)
+    resetHistory()
   })
 })

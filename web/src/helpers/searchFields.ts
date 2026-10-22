@@ -27,6 +27,20 @@ function hostOf(url: string): string {
 }
 
 /**
+ * Returns the path a url points at as its segments, without the slashes either side, so each
+ * segment matches as a word of its own.
+ * @param {string} url - Absolute url of a target
+ * @returns {string} - Path without its leading and trailing slash, empty for a bare origin
+ */
+function pathOf(url: string): string {
+  try {
+    return decodeURIComponent(new URL(url).pathname).replace(/^\/+|\/+$/g, '')
+  } catch {
+    return ''
+  }
+}
+
+/**
  * Returns the texts a target is searched over, each weighted by how much a hit on it says.
  * Matching the fields rather than the whole url is what keeps `lab` or `com` from matching
  * every repo through the `gitlab.com` they all share.
@@ -47,6 +61,22 @@ export function fieldsFor(target: PortalTarget): ReadonlyArray<SearchField> {
 
   if (target.kind === 'suggestion' && target.display) {
     fields.push({ text: target.display, weight: CAPTION })
+  }
+
+  // A visited page has no keywords and often no title, so its address is most of what there is
+  // to find it by. Its own section ranks it, so its host cannot raise it over anything else.
+  if (target.kind === 'history') {
+    const path = pathOf(target.url)
+    if (path) {
+      fields.push({ text: path, weight: PATH })
+    }
+
+    const host = hostOf(target.url)
+    if (host) {
+      fields.push({ text: host, weight: HOST })
+    }
+
+    return fields
   }
 
   for (const keyword of target.keywords ?? []) {

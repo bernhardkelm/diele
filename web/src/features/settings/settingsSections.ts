@@ -23,9 +23,51 @@ export interface SettingsOption {
 }
 
 /**
- * One group of preferences, which expands in place the way an admin feature does. A section
- * owns its rows outright: they are read from and written to this browser, so opening one costs
- * no request and shows nothing that has to be waited for.
+ * A row that can be taken out of its section on its own, the way an admin entry is deleted: a
+ * kept page, an excluded domain.
+ */
+export interface SettingsItem {
+  readonly kind: 'item'
+  readonly id: string
+  readonly label: string
+  /** One line under the name, saying what the row stands for */
+  readonly detail: string
+  /** Shown in the trail at rest, ahead of the word that removes it */
+  readonly note?: string
+  /** What removing it does, for assistive technology, since the trail word alone reads as loose text */
+  readonly removeTitle: string
+  /** Asks for a second press first, for a removal nothing undoes */
+  readonly confirm?: boolean
+  readonly remove: () => Promise<void>
+}
+
+/**
+ * A row holding a text field that adds to its section, opened in place the way an admin add row
+ * opens its form.
+ */
+export interface SettingsField {
+  readonly kind: 'field'
+  readonly id: string
+  readonly label: string
+  /** One line under the name, saying what adding one does */
+  readonly detail: string
+  /** Names the field for assistive technology, where the row's label names the whole row */
+  readonly inputLabel: string
+  readonly placeholder: string
+  /** Word on the button that submits it */
+  readonly submitLabel: string
+  /** Takes what was typed; answers with why it was refused, or undefined once it is added */
+  readonly submit: (value: string) => Promise<string | undefined>
+}
+
+/** A row after a section's options: one that adds, one that is removed on its own, or one that acts. */
+export type SettingsRow = SettingsField | SettingsItem | ListAction
+
+/**
+ * One group of preferences, which expands in place the way an admin feature does. Most sections
+ * own their rows outright: they are read from and written to this browser, so opening one costs
+ * no request and shows nothing that has to be waited for. One whose rows live on the api reads
+ * them when it opens instead.
  */
 export interface SettingsSection {
   readonly id: string
@@ -38,6 +80,8 @@ export interface SettingsSection {
   readonly options: ReadonlyArray<SettingsOption>
   /** Row that acts rather than switching, ahead of the options the way `Add entry` is */
   readonly action?: ListAction
+  /** Rows after the options, in the order they are listed */
+  readonly rows?: ReadonlyArray<SettingsRow>
 }
 
 /**
@@ -67,6 +111,31 @@ function optionFields(option: SettingsOption): ReadonlyArray<SearchField> {
 }
 
 /**
+ * Filters the rows a term addresses, in their declared order. Only the items are narrowed: the
+ * field and the actions act on the section as a whole, the way its restore row does, so a term
+ * looking for one item must not take away the row that adds another.
+ * @param {ReadonlyArray<SettingsRow>} rows - Rows after a section's options
+ * @param {ReadonlyArray<SearchToken>} tokens - Tokens the query split into
+ * @returns {ReadonlyArray<SettingsRow>} - Rows left standing, in section order
+ */
+function filterRows(
+  rows: ReadonlyArray<SettingsRow>,
+  tokens: ReadonlyArray<SearchToken>,
+): ReadonlyArray<SettingsRow> {
+  return rows.filter(
+    (row) =>
+      row.kind !== 'item' ||
+      scoreFields(
+        [
+          { text: row.label, weight: 1 },
+          { text: row.detail, weight: 0.5 },
+        ],
+        tokens,
+      ) !== undefined,
+  )
+}
+
+/**
  * Filters and ranks the options a term addresses, in their declared order: a section's rows
  * are a fixed set someone reads down, not a result list to be reordered under them.
  * @param {ReadonlyArray<SettingsOption>} options - Rows of one section
@@ -78,6 +147,20 @@ function filterOptions(
   tokens: ReadonlyArray<SearchToken>,
 ): ReadonlyArray<SettingsOption> {
   return options.filter((option) => scoreFields(optionFields(option), tokens) !== undefined)
+}
+
+/**
+ * Narrows an open section to what a term addresses inside it.
+ * @param {SettingsSection} section - Section whose rows are on screen
+ * @param {ReadonlyArray<SearchToken>} tokens - Tokens the query split into
+ * @returns {SettingsSection} - The same section, holding only the rows the term left
+ */
+function narrow(section: SettingsSection, tokens: ReadonlyArray<SearchToken>): SettingsSection {
+  return {
+    ...section,
+    options: filterOptions(section.options, tokens),
+    ...(section.rows ? { rows: filterRows(section.rows, tokens) } : {}),
+  }
 }
 
 /**
@@ -113,7 +196,7 @@ export function searchSections(
     }
 
     ranked.push({
-      section: open ? { ...section, options: filterOptions(section.options, tokens) } : section,
+      section: open ? narrow(section, tokens) : section,
       // an open section that the term missed still leads, since what it holds is what the
       // term is narrowing
       score: score ?? Number.POSITIVE_INFINITY,

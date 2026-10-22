@@ -35,6 +35,7 @@ next tab has it.
     - [Search engines](#search-engines)
     - [Cards](#cards)
     - [Saved sites](#saved-sites)
+    - [History](#history)
     - [Local ports](#local-ports)
     - [Subreddit jump](#subreddit-jump)
     - [Light and dark](#light-and-dark)
@@ -64,7 +65,7 @@ next tab has it.
 
 The bar takes focus on load, so a new tab can be typed into straight away. It searches the service
 cards, the saved sites, the connector rows and the local ports together, by name, by url and by
-keyword.
+keyword, and the pages you visited where you turned [history](#history) on.
 
 Matching is fuzzy, so `prometeus` still finds Prometheus and `uk` finds Uptime Kuma. Paths split on
 their separators, so `example-group/web` matches both halves. A term that is really a url -
@@ -129,6 +130,33 @@ Everything that does not deserve a logo on the front page but should still be on
 They are suggested as results when the term matches them, and stay out of the way until it does.
 
 ![A saved site suggested alongside a local port and a repo](docs/images/sites.webp)
+
+### History
+
+Pages you visited, offered in the search the way an address bar offers them. Off at every level:
+an instance offers nothing until an admin turns it on, and an account keeps nothing until its owner
+opts in.
+
+The admin panel has one **History** switch for the whole instance, and beneath it one per source it
+accepts visits from: **diele** itself, which is an address opened through **Go to** or a history
+result, and the browser **extension**, which is not here yet. All three start off.
+
+Each account then opts in under **History** in its settings. A visited page ranks below everything
+the portal was told about, so a card, a saved site, a repo or a local port matching the same term
+always wins, and the row says `history` in its trail. A page names itself, so its address is always
+shown beside the title: a page calling itself something it is not is told apart by where it sits.
+
+Only the origin and the path are kept, never a query string or a fragment. Nothing is kept for a
+search results page, a link carrying something that looks like a token, a domain the account
+excluded or anything below it, or this machine itself. An address opened through **Go to** on the
+public internet is checked first and dropped when it does not exist; one on a private network is
+kept without asking, since the server's network is not the browser's and the answer would say
+which internal hosts exist. Excluding a domain also forgets what was already kept on it.
+
+The settings list every kept page with how often and how recently it was visited, and each can be
+forgotten on its own, or all of them at once. Opting out stops keeping new pages and deletes
+nothing: what is kept stays listed there until it is forgotten. The browser stores none of it; the
+portal holds it in memory for the page it is on and drops it on sign out.
 
 ### Local ports
 
@@ -411,7 +439,6 @@ What is coming, in roughly the order it is meant to land.
 | **Users and roles** | only the first account exists today; the `groups` claim is already carried onto the session, so the seam is there |
 | **Sessions and devices** | every session an account has open, listed in the user settings and revocable one at a time |
 | **Personal entries** | cards, saved sites, slash commands and search engines a user adds for themselves, on top of the ones an admin defines |
-| **History** | opt in, and the urls you open are kept and offered in the search, listed in the user settings to drop, to clear, or to keep as a saved site |
 | **Ranking that follows you** | what you open most keeps winning ties, on every browser you sign in from rather than only the one that opened it |
 | **Inline answers** | `12*7`, `40f in c`, a hex or base conversion answered above the results instead of handed to an engine |
 | **General component hardening and polish** | every view once more over: edge cases, empty and error states, focus order |
@@ -464,6 +491,11 @@ these is a real environment variable.
 | `LOCAL_SETUP_TOKEN` | gates creating the first account; generated and printed when unset |
 | `SESSION_MAX_AGE_MS`, `SESSION_REMEMBER_MAX_AGE_MS` | idle windows, not lifetimes; they roll forward on use |
 | `DIELE_SEED_STOCK_CONFIG` | `false` creates the database without the stock engines, commands and ports |
+| `HISTORY_DB_PATH` | where visited history is kept, its own SQLite file beside the database by default (`diele-history.db`); created only once something is recorded |
+| `HISTORY_SERVED` | how many history entries the search is sent per load, most frecent first, default `300` |
+| `HISTORY_MAX_ENTRIES` | how many entries each account keeps, the least recently visited going first beyond it, default `5000` |
+| `HISTORY_ONE_OFF_DAYS` | days a page visited only once is kept, default `14` |
+| `HISTORY_PROBE` | `false` keeps a public address opened through Go to without this server requesting it first, for a deployment that would rather not send its own IP to every site its people open; on by default. Private and local addresses are never requested either way |
 
 Losing `DIELE_SECRET_KEYS` means re-entering every credential by hand, so back it up somewhere
 other than the database. The [full variable list](api/README.md#configuration), including the ones
@@ -519,6 +551,22 @@ docker cp diele:/data/backup.db "./diele-$(date +%F).db"
 
 `VACUUM INTO` takes a read transaction, so it is safe while the portal is serving, and it refuses
 to overwrite a file that is already there.
+
+Visited history is not in that file. It lives in `diele-history.db` beside it (or wherever
+`HISTORY_DB_PATH` points), so it can be backed up, left out of a backup or wiped on its own, and the
+configuration export never carries it. A backup of the whole `/data` volume does include it, and
+with it the pages every opted-in account visited, so keep such a backup as private as the portal
+itself. The same command copies it, pointed at that file:
+
+```sh
+docker exec diele node -e \
+  "process.umask(0o077); require('better-sqlite3')('/data/diele-history.db').exec(\"VACUUM INTO '/data/history-backup.db'\")"
+(umask 077 && docker cp diele:/data/history-backup.db "./diele-history-$(date +%F).db")
+```
+
+The `umask` keeps both copies readable by their owner alone, the way the live file is. Deleting the
+file while the portal is stopped forgets every account's history and nothing else. Nothing an
+account forgets, a page, a domain or all of it, reaches a backup that was already taken.
 
 ### Which tag
 
