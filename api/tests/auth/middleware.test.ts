@@ -132,7 +132,7 @@ test('a write from anywhere else is rejected', () => {
     const error = outcome(requireSameOrigin(), requestOf({ method: 'POST', headers: { origin } }))
 
     assert.ok(error instanceof ApiError, origin)
-    assert.equal(error.status, 401)
+    assert.equal(error.status, 403)
   }
 })
 
@@ -156,6 +156,6 @@ test('a write with no origin is judged by Sec-Fetch-Site', () => {
     )
 
     assert.ok(error instanceof ApiError, site)
-    assert.equal(error.status, 401)
+    assert.equal(error.status, 403)
   }
 })

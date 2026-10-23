@@ -1,5 +1,6 @@
 import { computed, type ComputedRef } from 'vue'
 import { polledJson } from '@/composables/usePolledJson'
+import { reportLapse } from '@/composables/sessionLapse'
 import { SIGNALS_SILENCE_URL, SIGNALS_URL } from '@/config/api'
 import type { ApiSignal, ApiSignals, SilencedIds } from '@diele/common'
 
@@ -140,6 +141,7 @@ export function useSignals(
     })
 
     if (!response.ok) {
+      reportLapse(response.status)
       // The next poll puts it back where it was, which is the honest outcome: nothing changed.
       console.warn(`[diele] silencing ${id} answered ${response.status}`)
     }

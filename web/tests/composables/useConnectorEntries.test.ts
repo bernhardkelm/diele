@@ -6,6 +6,7 @@ import {
   useConnectorEntries,
 } from '@/composables/useConnectorEntries'
 import { useHiddenEntries } from '@/composables/useHiddenEntries'
+import { clearLapse, sessionLapsed } from '@/composables/sessionLapse'
 
 const ENTRY = {
   ref: 'gitlab:1:1',
@@ -57,6 +58,7 @@ beforeEach(() => {
   writes.length = 0
   localStorage.clear()
   resetConnectorEntries()
+  clearLapse()
   vi.restoreAllMocks()
   vi.spyOn(console, 'warn').mockImplementation(() => {})
 })
@@ -130,6 +132,32 @@ describe('reading the entries', () => {
     await refreshConnectorEntries()
 
     expect(source.rows.value).toHaveLength(1)
+  })
+
+  // The list stands through a lapse like any other failure, and the portal is told once rather
+  // than the console being told on every load.
+  it('reports a lapse and keeps the cached rows when the session has ended', async () => {
+    localStorage.setItem(
+      ENTRIES_CACHE_KEY,
+      JSON.stringify({ storedAt: Date.now(), payload: PAYLOAD, etag: 'W/"1"' }),
+    )
+    vi.stubGlobal('fetch', stubApi({ status: 401, payload: { error: 'authentication required' } }))
+
+    const source = useConnectorEntries()
+    await refreshConnectorEntries()
+
+    expect(source.rows.value).toHaveLength(1)
+    expect(sessionLapsed.value).toBe(true)
+    expect(console.warn).not.toHaveBeenCalled()
+  })
+
+  it('does not take a 403 for a lapse', async () => {
+    vi.stubGlobal('fetch', stubApi({ status: 403, payload: { error: 'forbidden' } }))
+
+    useConnectorEntries()
+    await refreshConnectorEntries()
+
+    expect(sessionLapsed.value).toBe(false)
   })
 
   it('answers with nothing rather than failing on a cold start that cannot reach the API', async () => {

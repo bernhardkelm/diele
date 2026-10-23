@@ -214,7 +214,9 @@ authRouter.get('/callback', (req, res, next) => {
   completeLogin(currentUrl, flow.codeVerifier, state, flow.nonce)
     .then(({ claims, idToken }) => {
       const userId = upsertUser(claims)
-      startSession(res, userId, claims.groups ?? [], req.get('user-agent'), flow.remember, idToken)
+      // Always the long window, whatever the login asked for, so no client has to remember to ask.
+      // The issuer still decides who may sign in, and the session is still revocable from here.
+      startSession(res, userId, claims.groups ?? [], req.get('user-agent'), true, idToken)
       res.redirect(safeRedirect(flow.redirectTo))
     })
     .catch(next)

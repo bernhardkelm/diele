@@ -1,18 +1,30 @@
 import { ref, type Ref } from 'vue'
 import { ADMIN_FEATURES_URL, adminFeatureEnabledUrl } from '@/config/api'
 import { refreshConnectorEntries } from '@/composables/useConnectorEntries'
+import { reportLapse } from '@/composables/sessionLapse'
 import { usePortalConfig } from '@/composables/usePortalConfig'
 import { apiFieldMessage, readPayload } from '@/helpers/apiError'
 import type { ApiFeature, ApiRow } from '@diele/common'
 
-/** Carries the status so a lapsed session can be told apart from a rejected edit. */
+/**
+ * Carries the status so a lapsed session can be told apart from a rejected edit, and whether the
+ * request was a write, since a 403 means something different on each.
+ */
 class AdminError extends Error {
   readonly status: number
+  readonly write: boolean
 
-  constructor(status: number, message: string) {
+  /**
+   * Builds the error from what the api answered.
+   * @param {number} status - Status the api answered with
+   * @param {string} message - What to show for it
+   * @param {boolean} write - Whether the request changed something rather than read it
+   */
+  constructor(status: number, message: string, write = false) {
     super(message)
     this.name = 'AdminError'
     this.status = status
+    this.write = write
   }
 }
 
@@ -144,6 +156,7 @@ async function call(url: string, init: RequestInit = {}): Promise<unknown> {
     throw new AdminError(
       response.status,
       apiFieldMessage(payload, `request failed (${response.status})`),
+      (init.method ?? 'GET') !== 'GET',
     )
   }
 
@@ -265,18 +278,22 @@ function syncLabel(): string {
  * Records a failure, telling three cases apart: a lapsed session the view can offer to fix, an
  * account that may not configure at all, and a rejected edit that is something to read. The
  * middle one is not a lapse, so offering the sign-in form for it would only loop.
+ *
+ * A 403 is that middle case only on a read. An account that may not configure is turned away by
+ * the first read the panel makes, so one refused on a write got past that: the write was refused
+ * for something else, its origin for one, and the server's message says what.
  * @param {unknown} cause - Error raised by a call
  * @returns {void}
  */
 function hold(cause: unknown): void {
-  if (cause instanceof AdminError && cause.status === 401) {
+  if (cause instanceof AdminError && reportLapse(cause.status)) {
     needsAuth.value = true
     forbidden.value = false
     error.value = undefined
     return
   }
 
-  if (cause instanceof AdminError && cause.status === 403) {
+  if (cause instanceof AdminError && cause.status === 403 && !cause.write) {
     forbidden.value = true
     needsAuth.value = false
     error.value = undefined

@@ -2,6 +2,7 @@ import { ref } from 'vue'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useHealth, resetHealth } from '@/composables/useHealth'
 import { useLocalhostStatus } from '@/composables/useLocalhostStatus'
+import { clearLapse, sessionLapsed } from '@/composables/sessionLapse'
 import { withSetup } from '@tests/support/withSetup'
 import type { SuggestionTarget } from '@/types/portal'
 
@@ -20,6 +21,7 @@ beforeEach(() => {
   vi.spyOn(console, 'warn').mockImplementation(() => {})
   // The readings are shared at module scope, so one test's would otherwise be the next one's
   resetHealth()
+  clearLapse()
 })
 
 afterEach(() => {
@@ -147,6 +149,36 @@ describe('useHealth', () => {
     await vi.waitFor(() => expect(fetchMock.mock.calls.length).toBeGreaterThan(1))
 
     expect(result.readingFor('card:1')).toEqual({ state: 'up' })
+  })
+
+  // The readings did not break, the session ended: what is drawn stays, and the portal is told
+  // once rather than the console on every poll.
+  it('reports a lapse on a 401 and keeps the last readings', async () => {
+    const fetchMock = stubHealth()
+    vi.stubGlobal('fetch', fetchMock)
+
+    const { result } = withSetup(() => useHealth())
+    await vi.waitFor(() => expect(result.readingFor('card:1')).toBeDefined())
+
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ error: 'authentication required' }), { status: 401 }),
+    )
+    document.dispatchEvent(new Event('visibilitychange'))
+    await vi.waitFor(() => expect(sessionLapsed.value).toBe(true))
+
+    expect(result.readingFor('card:1')).toEqual({ state: 'up' })
+    expect(console.warn).not.toHaveBeenCalled()
+  })
+
+  // A 403 is an account refused something, which signing in again would not change.
+  it('does not take a 403 for a lapse', async () => {
+    const fetchMock = stubHealth({ status: 403 })
+    vi.stubGlobal('fetch', fetchMock)
+
+    withSetup(() => useHealth())
+    await vi.waitFor(() => expect(console.warn).toHaveBeenCalled())
+
+    expect(sessionLapsed.value).toBe(false)
   })
 
   // jsdom leaves `document.hidden` false, so a test that only fires the event never sees a tab

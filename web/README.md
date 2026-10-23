@@ -155,6 +155,12 @@ the API must never sit between opening a tab and seeing something. A lapsed sess
 cached page on screen rather than bouncing to the issuer - only a cold start with nothing cached
 shows the login screen.
 
+Any read that answers 401 marks the session as lapsed, and the page says so with a `Signed out`
+line above the field. Its `sign in` goes straight to the issuer in OIDC mode, whose own session
+usually answers without a prompt, and opens the password form in local mode. A 403 is a refusal
+rather than a lapse and never raises it. The session is read again whenever the tab comes back to
+the front, so one that ended in the background is noticed the moment someone looks.
+
 Icons are uploaded rather than bundled: the API sanitises an svg on the way in and rewrites its
 paint to `currentColor`, so an uploaded logo is monochrome at rest and brand-coloured on hover
 like the built-in ones. Open-source sources: [simple-icons](https://simpleicons.org) (CC0) for

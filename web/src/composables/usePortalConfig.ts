@@ -3,6 +3,7 @@ import { singleFlight } from '@/helpers/singleFlight'
 import { CONFIG_URL } from '@/config/api'
 import { readConfigCache, writeConfigCache } from '@/helpers/configCache'
 import { applyBrandAccent } from '@/helpers/brandAccent'
+import { reportLapse } from '@/composables/sessionLapse'
 import { EMPTY_CONFIG, toPortalConfig, type PortalConfig } from '@/helpers/portalConfig'
 import type { ApiBrand, ApiCommand, ApiConfig } from '@diele/common'
 import type { CardTarget, SearchEngine, SuggestionTarget } from '@/types/portal'
@@ -80,9 +81,10 @@ async function load(): Promise<void> {
       return
     }
 
-    if (response.status === 401) {
+    if (reportLapse(response.status)) {
       // Not an error: the session simply lapsed. Whether that interrupts the user is App's
-      // call, and it only does when there is no cached config to fall back on.
+      // call: the gate when there is no cached config to fall back on, a banner over it when
+      // there is.
       state.value = 'needs-auth'
       return
     }

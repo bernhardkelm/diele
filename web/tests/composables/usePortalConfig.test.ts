@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { CONFIG_CACHE_KEY } from '@/config/api'
 import { resetPortalConfig, usePortalConfig } from '@/composables/usePortalConfig'
+import { clearLapse, sessionLapsed } from '@/composables/sessionLapse'
 import type { ApiConfig } from '@diele/common'
 
 const payload = {
@@ -42,6 +43,7 @@ function configResponse(init: { status?: number; body?: unknown; etag?: string }
 beforeEach(() => {
   localStorage.clear()
   resetPortalConfig()
+  clearLapse()
   vi.restoreAllMocks()
   vi.spyOn(console, 'warn').mockImplementation(() => {})
 })
@@ -116,7 +118,8 @@ describe('a later visit', () => {
 })
 
 describe('when the request does not succeed', () => {
-  // Not an error: the session simply lapsed. Whether that interrupts anyone is App's call.
+  // Not an error: the session simply lapsed. Whether that interrupts anyone is App's call, and
+  // the shared flag is what lets it say so over a cached portal rather than only on a cold one.
   it('reports a lapsed session rather than failing', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(configResponse({ status: 401 })))
 
@@ -124,6 +127,33 @@ describe('when the request does not succeed', () => {
     await source.refresh()
 
     expect(source.state.value).toBe('needs-auth')
+    expect(sessionLapsed.value).toBe(true)
+  })
+
+  it('keeps the cached config on screen through a lapse', async () => {
+    localStorage.setItem(
+      CONFIG_CACHE_KEY,
+      JSON.stringify({ storedAt: Date.now(), config: payload, etag: 'W/"1"' }),
+    )
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(configResponse({ status: 401 })))
+
+    const source = usePortalConfig()
+    await source.refresh()
+
+    expect(source.hasConfig.value).toBe(true)
+    expect(source.cards.value).toHaveLength(1)
+    expect(sessionLapsed.value).toBe(true)
+  })
+
+  // A refusal is not a lapse: signing in again would not change the answer.
+  it('does not take a 403 for a lapse', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(configResponse({ status: 403 })))
+
+    const source = usePortalConfig()
+    await source.refresh()
+
+    expect(source.state.value).not.toBe('needs-auth')
+    expect(sessionLapsed.value).toBe(false)
   })
 
   it('reports unreachable when there was nothing cached to fall back on', async () => {

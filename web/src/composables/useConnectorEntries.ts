@@ -3,6 +3,7 @@ import { singleFlight } from '@/helpers/singleFlight'
 import { ENTRIES_URL } from '@/config/api'
 import { readEntriesCache, toEntriesPayload, writeEntriesCache } from '@/helpers/entriesCache'
 import { toEntryTarget } from '@/helpers/entryTargets'
+import { reportLapse } from '@/composables/sessionLapse'
 import type { ApiEntries, ApiEntriesSource, ApiHidden } from '@diele/common'
 import type { PortalTarget, RowTarget } from '@/types/portal'
 
@@ -70,6 +71,12 @@ async function load(): Promise<void> {
     })
 
     if (response.status === 304) {
+      return
+    }
+
+    // a lapse keeps the list standing like any other failure, and is said once by the portal
+    // rather than logged here as one
+    if (reportLapse(response.status)) {
       return
     }
 

@@ -276,7 +276,7 @@ test('a write from another origin is turned away like every other write', async 
     headers: { origin: 'https://evil.example' },
   })
 
-  assert.equal(response.status, 401)
+  assert.equal(response.status, 403)
   assert.equal((await allEntries()).length, 1)
 })
 

@@ -1,11 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ADMIN_FEATURES_URL } from '@/config/api'
 import { resetAdmin, useAdmin } from '@/features/admin/useAdmin'
+import { clearLapse, sessionLapsed } from '@/composables/sessionLapse'
 
 beforeEach(() => {
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
   resetAdmin()
+  clearLapse()
 })
 
 describe('loading the registry', () => {
@@ -28,6 +30,7 @@ describe('loading the registry', () => {
 
     expect(admin.needsAuth.value).toBe(true)
     expect(admin.error.value).toBeUndefined()
+    expect(sessionLapsed.value).toBe(true)
   })
 
   // Signing in again cannot fix this one, so it is held apart from the lapse: the view offers
@@ -46,6 +49,7 @@ describe('loading the registry', () => {
 
     expect(admin.forbidden.value).toBe(true)
     expect(admin.needsAuth.value).toBe(false)
+    expect(sessionLapsed.value).toBe(false)
   })
 
   it('reads the features a signed-in session is given', async () => {
@@ -91,5 +95,62 @@ describe('loading the registry', () => {
     await admin.loadFeatures()
 
     expect(admin.needsAuth.value).toBe(false)
+  })
+})
+
+describe('a write the server refuses', () => {
+  const FEATURES = [{ id: 'cards', label: 'Cards', collection: '/api/admin/links/card' }]
+
+  /**
+   * Answers the reads, and the write with whatever status the test is about.
+   * @param {number} status - What the write answers with
+   * @param {string} message - The error the server names
+   * @returns {ReturnType<typeof vi.fn>} - The stubbed fetch
+   */
+  function stubWrite(status: number, message: string) {
+    return vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === 'POST') {
+        return Promise.resolve(new Response(JSON.stringify({ error: message }), { status }))
+      }
+
+      return Promise.resolve(
+        new Response(
+          JSON.stringify(
+            String(input) === ADMIN_FEATURES_URL ? { features: FEATURES } : { rows: [] },
+          ),
+        ),
+      )
+    })
+  }
+
+  // The panel's first read already turns away an account that may not configure, so a write
+  // refused with a 403 was refused for something else, its origin for one. That is something to
+  // read rather than a reason to hide the panel or hand it to the gate.
+  it('holds a 403 on a write as an error to read', async () => {
+    vi.stubGlobal('fetch', stubWrite(403, 'cross-origin request rejected'))
+
+    const admin = useAdmin()
+    await admin.loadFeatures()
+    await admin.expand('cards')
+
+    await expect(admin.create({ label: 'Grafana' })).resolves.toBe(false)
+
+    expect(admin.error.value).toBe('cross-origin request rejected')
+    expect(admin.forbidden.value).toBe(false)
+    expect(admin.needsAuth.value).toBe(false)
+    expect(sessionLapsed.value).toBe(false)
+  })
+
+  it('holds a 401 on a write as the lapse it is', async () => {
+    vi.stubGlobal('fetch', stubWrite(401, 'authentication required'))
+
+    const admin = useAdmin()
+    await admin.loadFeatures()
+    await admin.expand('cards')
+    await admin.create({ label: 'Grafana' })
+
+    expect(admin.needsAuth.value).toBe(true)
+    expect(admin.error.value).toBeUndefined()
+    expect(sessionLapsed.value).toBe(true)
   })
 })

@@ -18,6 +18,7 @@ import PageFooter from '@/components/PageFooter.vue'
 import PortalHeader from '@/components/PortalHeader.vue'
 import ServiceCard from '@/features/portal/ServiceCard.vue'
 import SettingsView from '@/views/SettingsView.vue'
+import SignedOutBanner from '@/features/portal/SignedOutBanner.vue'
 import SiteList from '@/features/portal/SiteList.vue'
 import { useAltHeld } from '@/composables/useAltHeld'
 import { useConnectorEntries } from '@/composables/useConnectorEntries'
@@ -34,6 +35,7 @@ import { usePortalConfig } from '@/composables/usePortalConfig'
 import { usePortalLauncher } from '@/features/portal/usePortalLauncher'
 import { useSearchEngine } from '@/features/portal/useSearchEngine'
 import { useSession } from '@/composables/useSession'
+import { useSessionRecheck } from '@/composables/useSessionRecheck'
 import { useSignals } from '@/composables/useSignals'
 import { shortcutFor } from '@/features/portal/useLauncher'
 import { historyTargets } from '@/features/portal/historyTargets'
@@ -58,7 +60,7 @@ const {
 } = usePortalConfig()
 const { engine, cycle, urlFor } = useSearchEngine(() => engines.value)
 const { isHidden } = useHiddenEntries()
-const { user, signOut, setupRequired, reauth, loadProviders } = useSession()
+const { user, signOut, setupRequired, reauth, lapsed, resume, loadProviders } = useSession()
 const { isAdmin, isSettings, isStyleguide, go, replace } = useHashRoute()
 
 // Only an account that is signed in and told it may not configure is turned away. Someone not
@@ -90,6 +92,10 @@ const StyleguideView = import.meta.env.DEV
 // depends on the answer. Fetching it there first would need the gate to already be on screen.
 void loadProviders()
 
+// Here rather than in a view, because App outlives every one of them: a tab coming back to the
+// front re-reads the session whichever screen it is showing.
+useSessionRecheck()
+
 // the tiles wrap wherever the viewport lets them, so the arrows ask the layout itself how
 // wide a row is rather than assuming a count
 const tileGrid = shallowRef<HTMLElement | null>(null)
@@ -114,7 +120,8 @@ const visibleRows = computed(() => sorted.value.filter((row) => !isHidden(row.re
 
 // Only a cold start interrupts with a login screen. A lapsed session on a portal that still
 // has last visit's config keeps painting it: this is a new tab page, and throwing the user
-// at the issuer every time a cookie ages out would be worse than a slightly stale tile.
+// at the issuer every time a cookie ages out would be worse than a slightly stale tile. The
+// banner above the field says so instead, and signs back in from there when asked.
 //
 // A portal waiting to be claimed is the exception, and it has to be, because that is exactly
 // the case where a cache from a previous run would otherwise paint over the setup screen and
@@ -210,6 +217,8 @@ const altHeld = useAltHeld()
 
   <div v-else class="page view-shell">
     <PortalHeader :title="brand.title" :subtitle="brand.subtitle" />
+
+    <SignedOutBanner :lapsed="lapsed" @sign-in="resume" />
 
     <!-- Above the field and outside the results: something firing is not an answer to the term,
          so it stays put whether or not one is typed. -->

@@ -120,6 +120,8 @@ export function requireSameOrigin(): RequestHandler {
       return
     }
 
-    next(unauthorized('cross-origin request rejected'))
+    // Forbidden rather than unauthorized: the session may be perfectly valid, and a client that
+    // reads 401 as a lapsed one would ask someone already signed in to sign in again.
+    next(forbidden('cross-origin request rejected'))
   }
 }

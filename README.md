@@ -250,6 +250,10 @@ account yet. Creating the first one is gated by a token the server prints at sta
 
 ![The local mode sign-in screen](docs/images/login.webp)
 
+A session that ends behind an open tab does not blank the page: the portal keeps what it last
+drew and says `Signed out` above the field, with a sign-in that goes straight back through the
+issuer or opens the password form.
+
 ### Connectors
 
 A connector is a feature whose rows come from somewhere else. Give one a token and some groups or
@@ -510,7 +514,7 @@ these is a real environment variable.
 | `BRAND_TITLE`, `BRAND_SUBTITLE` | the wordmark and the line under it |
 | `BRAND_ACCENT_LIGHT`, `BRAND_ACCENT_DARK` | the accent, one six-digit hex per theme; the favicons, the iOS home-screen icon and the web manifest are drawn from it at boot |
 | `LOCAL_SETUP_TOKEN` | gates creating the first account; generated and printed when unset |
-| `SESSION_MAX_AGE_MS`, `SESSION_REMEMBER_MAX_AGE_MS` | idle windows, not lifetimes; they roll forward on use |
+| `SESSION_MAX_AGE_MS`, `SESSION_REMEMBER_MAX_AGE_MS` | idle windows, not lifetimes; they roll forward on use. The second is what an issuer login and `remember me` get |
 | `DIELE_SEED_STOCK_CONFIG` | `false` creates the database without the stock engines, commands and ports |
 | `HISTORY_DB_PATH` | where visited history is kept, its own SQLite file beside the database by default (`diele-history.db`); created the first time any account saves its history preferences, opting out included, whatever the switches say |
 | `HISTORY_SERVED` | how many history entries the search is sent per load, most frecent first, default `300` |
