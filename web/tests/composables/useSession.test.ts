@@ -66,6 +66,7 @@ afterEach(() => {
   Object.defineProperty(window, 'location', { configurable: true, value: realLocation })
   resetPortalConfig()
   resetConnectorEntries()
+  resetHistory()
   resetSession()
   vi.useRealTimers()
   localStorage.clear()
@@ -372,7 +373,7 @@ describe('re-checking the session', () => {
     const fetchMock = stubSession()
     vi.stubGlobal('fetch', fetchMock)
     // the portal's own reader, without which the history is not asked for at all
-    withSetup(() => useHistory(() => true))
+    const { wrapper } = withSetup(() => useHistory(() => true))
     fetchMock.mockClear()
 
     await recheckSession()
@@ -382,6 +383,7 @@ describe('re-checking the session', () => {
     expect(urls).toContain('/api/config')
     expect(urls).toContain('/api/entries')
     expect(urls).toContain('/api/history')
+    wrapper.unmount()
   })
 
   it('refetches nothing when there was no lapse to recover from', async () => {
