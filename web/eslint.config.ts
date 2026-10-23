@@ -26,6 +26,9 @@ export default defineConfigWithVueTs(
     name: 'app/rules',
     rules: {
       curly: ['error', 'all'],
+      // v-html launders any string through Vue's own Trusted Types policy, which the api's header
+      // has to allow for compiled templates; markup goes through v-svg and its `diele-svg` instead.
+      'vue/no-v-html': 'error',
     },
   },
 )

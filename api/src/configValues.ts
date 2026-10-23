@@ -1,3 +1,23 @@
+import { realpathSync } from 'node:fs'
+
+/**
+ * Returns whether two paths name one file, following symlinks where the files already exist.
+ * @param {string} a - Absolute path
+ * @param {string} b - Absolute path
+ * @returns {boolean} - True when both lead to the same file
+ */
+export function sameFile(a: string, b: string): boolean {
+  if (a === b) {
+    return true
+  }
+
+  try {
+    return realpathSync(a) === realpathSync(b)
+  } catch {
+    return false
+  }
+}
+
 /**
  * Reads a colour variable, refusing anything that is not a plain hex. The value ends up in a
  * css custom property, so allowing arbitrary text would let it carry more than a colour.

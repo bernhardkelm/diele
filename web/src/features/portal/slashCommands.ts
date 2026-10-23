@@ -53,12 +53,11 @@ export function parseSlash(term: string): SlashInput | undefined {
  * @returns {SuggestionTarget} - Search-only entry opening the resolved url
  */
 export function commandTarget(command: ApiCommand, args: string): SuggestionTarget {
+  // not `adHoc`: this is a search, and a results page is not a visit worth offering back
   return dynamicSiteLink({
     name: `${command.label ?? command.keyword}: ${args}`,
     url: command.urlTemplate.replace('{query}', encodeURIComponent(args)),
     display: hostOf(command.urlTemplate),
-    // built from the typed term rather than saved, so opening it is worth recording
-    adHoc: true,
   })
 }
 

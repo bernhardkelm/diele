@@ -63,6 +63,12 @@ jobs:
       contents: read
       packages: write
 
+    # Pushes from this repository publish, and so does a pull request from one of its own
+    # branches, as a preview the test deployment can run. A fork's pull request only builds: its
+    # token cannot write packages, and its code is not ours to publish under this name.
+    env:
+      PUBLISH: ${{ github.event_name == 'push' || (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) }}
+
     steps:
       - uses: actions/checkout@v7
 
@@ -73,8 +79,8 @@ jobs:
       - name: Resolve the image name
         run: echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
 
-      # Nothing to push from a pull request, and a fork's token cannot write packages anyway.
-      - if: github.event_name != 'pull_request'
+      # Skipped rather than failed when there is nothing to publish, so a fork's check stays green.
+      - if: env.PUBLISH == 'true'
         uses: docker/login-action@v4
         with:
           registry: ghcr.io
@@ -89,9 +95,16 @@ jobs:
           # so `0.4.0-rc1` can move neither `latest` nor `0.4`. The guard on `{{major}}` is the
           # action's own recipe for major version zero: while diele is 0.x, a bare `0` would be a
           # tag that moves across breaking changes.
+          #
+          # A pull request gets `pr-<n>`, which moves with every push to it, and `sha-<short>`,
+          # which does not. Neither can reach a release name: `edge` needs a push to main, the
+          # semver patterns need a tag push, and `latest=auto` only follows the semver ones. The
+          # `sha-` prefix is load-bearing too, Renovate would read an all-digit short hash as a
+          # version.
           tags: |
             type=edge,branch=main
             type=ref,event=pr
+            type=sha
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}},enable=${{ !startsWith(github.ref, 'refs/tags/0.') }}
@@ -102,7 +115,7 @@ jobs:
         with:
           context: .
           platforms: ${{ env.PLATFORMS }}
-          push: ${{ github.event_name == 'push' }}
+          push: ${{ env.PUBLISH == 'true' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           annotations: ${{ steps.meta.outputs.annotations }}

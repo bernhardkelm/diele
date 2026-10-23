@@ -80,3 +80,31 @@ test('an unknown auth mode falls back to local and says so', () => {
   assert.equal(result.ok, true)
   assert.match(result.output, /AUTH_MODE=oicd is not a known mode, falling back to local/)
 })
+
+// Both files keep their migration ledger in `user_version`, so one file standing in for both would
+// read the other's version as its own.
+test('a history database pointed at the configuration database refuses to boot', () => {
+  const result = loadConfig({
+    DB_PATH: '/tmp/diele-same.db',
+    HISTORY_DB_PATH: '/tmp/diele-same.db',
+  })
+
+  assert.equal(result.ok, false)
+  assert.match(result.output, /HISTORY_DB_PATH points at the same file as DB_PATH/)
+})
+
+test('the history database sits beside the configuration database by default', () => {
+  const result = spawnSync(
+    process.execPath,
+    [
+      '--import',
+      'tsx',
+      '--conditions=development',
+      '-e',
+      `import(${JSON.stringify(CONFIG)}).then(({ config }) => console.log(config.history.dbPath))`,
+    ],
+    { encoding: 'utf8', env: { ...process.env, DB_PATH: '/data/diele.db', HISTORY_DB_PATH: '' } },
+  )
+
+  assert.equal(result.stdout.trim(), '/data/diele-history.db')
+})

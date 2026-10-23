@@ -1,9 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { computed, nextTick, ref } from 'vue'
 import { usePortalLauncher, type PortalLauncher } from '@/features/portal/usePortalLauncher'
+import { resetHistory, useHistory } from '@/composables/useHistory'
 import { withSetup } from '@tests/support/withSetup'
-import type { ApiCommand } from '@diele/common'
-import type { CardTarget, PortalTarget, SuggestionTarget } from '@/types/portal'
+import type { ApiCommand, ApiHistoryState, ApiHistoryVisits } from '@diele/common'
+import type {
+  CardTarget,
+  HistoryTarget,
+  PortalTarget,
+  RowTarget,
+  SuggestionTarget,
+} from '@/types/portal'
 
 const card: CardTarget = {
   ref: 'card:1',
@@ -132,6 +139,19 @@ describe('what the term adds to the list', () => {
     expect(result.matches.value.some((target) => target.url.includes('reddit.com'))).toBe(false)
   })
 
+  // A slash term addresses the commands alone, whatever else the keyword would match.
+  it('enters command mode for a slash term, leaving the cards out', async () => {
+    const youtube: CardTarget = { ...card, ref: 'card:yt', name: 'yt' }
+    const { result } = launcher({ targets: [youtube, savedSite] })
+
+    result.query.value = '/yt'
+    await nextTick()
+
+    expect(result.sections.value.cards).toEqual([])
+    expect(result.sections.value.order[0]).toBe('commands')
+    expect(result.sections.value.commands.map((entry) => entry.item.name)).toContain('/yt')
+  })
+
   it('offers the slash menu for a bare slash', async () => {
     const { result } = launcher()
 
@@ -203,6 +223,42 @@ describe('submitting', () => {
     result.submit(false)
 
     expect(assign).toHaveBeenCalledWith('https://grafana.example')
+  })
+
+  // The block that ranks first is painted first, so its first entry is what Enter opens.
+  it('opens a visited page that leads the matches, past the repos it outranks', async () => {
+    const heise: HistoryTarget = {
+      ref: 'history:heise',
+      kind: 'history',
+      name: 'heise online - IT-News, Nachrichten und Hintergründe | heise online',
+      title: 'heise online - IT-News, Nachrichten und Hintergründe | heise online',
+      url: 'https://www.heise.de/',
+      display: 'heise.de',
+      searchOnly: true,
+    }
+    const repos: ReadonlyArray<RowTarget> = [
+      'Klickmeister/freiheit-und-gleichheit-in-der-bildungsgeschichte',
+      'bernhardkelm/undisclosed',
+      'bernhardkelm/miwo_datasets',
+    ].map((path) => ({
+      ref: `github:1:${path}`,
+      kind: 'row',
+      name: path.split('/')[1]!,
+      detail: path.split('/')[0]!,
+      url: `https://github.com/${path}`,
+    }))
+    const { result } = launcher({ targets: [card, ...repos, heise] })
+
+    result.query.value = 'heise'
+    await nextTick()
+
+    expect(result.sections.value.order[0]).toBe('history')
+    expect(result.sections.value.rows).toEqual([])
+    expect(result.sections.value.history[0]?.index).toBe(0)
+
+    result.submit(false)
+
+    expect(assign).toHaveBeenCalledWith('https://www.heise.de/')
   })
 
   it('searches the term when nothing is highlighted', () => {
@@ -293,9 +349,82 @@ describe('what the selection announces', () => {
   })
 })
 
-// Every launch feeds the ranking; one that came from a typed url also lands in the visited
-// list, whose hosts can later be lifted into the saved sites.
+/** How many pages the stubbed api says are kept, which no state held before an answer says */
+const KEPT = 4
+
+// Every launch feeds the ranking. Only an address typed into the field and a page offered from the
+// history are visits as well, and only where every switch on the way allows keeping them.
 describe('recording a launch', () => {
+  const page: HistoryTarget = {
+    ref: 'history:7',
+    kind: 'history',
+    name: 'diele',
+    title: 'diele',
+    url: 'https://github.com/example/diele',
+    display: 'github.com/example/diele',
+    searchOnly: true,
+  }
+
+  /**
+   * Answers the history read with a state, and records every visit posted.
+   * @param {Partial<ApiHistoryState>} state - What the instance and the account allow
+   * @returns {ReturnType<typeof vi.fn>} - The stubbed fetch
+   */
+  function stubHistory(state: Partial<ApiHistoryState> = {}): ReturnType<typeof vi.fn> {
+    const fetch = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input)
+
+      if (url === '/api/history') {
+        const served: ApiHistoryState = {
+          available: true,
+          sources: { diele: true, extension: false },
+          enabled: true,
+          excludedDomains: [],
+          kept: KEPT,
+          ...state,
+        }
+
+        return Promise.resolve(new Response(JSON.stringify({ state: served, entries: [] })))
+      }
+
+      return Promise.resolve(new Response(null, { status: 204 }))
+    })
+
+    vi.stubGlobal('fetch', fetch)
+
+    return fetch
+  }
+
+  /**
+   * Mounts a reader of the history and waits for the state the api served, told apart from the
+   * one held before any answer by how much it says is kept.
+   * @returns {Promise<void>}
+   */
+  async function historyRead(): Promise<void> {
+    const { result } = withSetup(() => useHistory(() => true))
+    await vi.waitFor(() => expect(result.state.value.kept).toBe(KEPT))
+  }
+
+  /**
+   * Returns the visit bodies posted so far.
+   * @param {ReturnType<typeof vi.fn>} fetch - The stubbed fetch
+   * @returns {ReadonlyArray<{ init: RequestInit; body: ApiHistoryVisits }>} - Each post and its body
+   */
+  function posted(
+    fetch: ReturnType<typeof vi.fn>,
+  ): ReadonlyArray<{ init: RequestInit; body: ApiHistoryVisits }> {
+    return fetch.mock.calls
+      .filter(([input]) => String(input) === '/api/history/visits')
+      .map(([, init]) => ({
+        init: init as RequestInit,
+        body: JSON.parse(String((init as RequestInit).body)) as ApiHistoryVisits,
+      }))
+  }
+
+  afterEach(() => {
+    resetHistory()
+  })
+
   it('remembers what was opened', () => {
     const { result } = launcher()
 
@@ -304,18 +433,124 @@ describe('recording a launch', () => {
     expect(localStorage.getItem('diele:launch-history:v2')).toContain('card:1')
   })
 
-  it('records the host only for a target built from a typed url', () => {
+  // Whatever the account chose about its history, a typed address must not stay in the browser.
+  it.each([
+    ['on', true],
+    ['off', false],
+  ])('leaves no typed address in storage while history is %s', async (_case, enabled) => {
+    stubHistory({ enabled })
+    await historyRead()
     const { result } = launcher()
 
-    result.recordLaunch(savedSite)
-    expect(localStorage.getItem('diele:visited-urls')).toBeNull()
+    result.query.value = 'https://typed.example/reset?token=secret#frag'
+    await nextTick()
+    result.submit(false)
 
-    result.recordLaunch({
-      ...savedSite,
-      ref: 'adhoc:x',
-      adHoc: true,
-      url: 'https://typed.example/x',
-    })
-    expect(localStorage.getItem('diele:visited-urls')).toContain('https://typed.example')
+    result.query.value = '/yt private search'
+    await nextTick()
+    result.submit(false)
+
+    expect(assign).toHaveBeenCalledTimes(2)
+
+    const stored = Object.keys(localStorage)
+      .map((key) => localStorage.getItem(key) ?? '')
+      .join('\n')
+    expect(stored).not.toContain('typed.example')
+    expect(stored).not.toContain('private')
+    expect(stored).not.toContain('adhoc:')
+  })
+
+  // keepalive, because opening the page unloads this one straight after.
+  it('posts a typed address as a visit from diele, with keepalive', async () => {
+    const fetch = stubHistory()
+    await historyRead()
+    const { result } = launcher()
+
+    result.query.value = 'https://typed.example/some/page'
+    await nextTick()
+    result.submit(false)
+
+    const [visit] = posted(fetch)
+    expect(visit?.init.keepalive).toBe(true)
+    expect(visit?.init.method).toBe('POST')
+    expect(visit?.body.source).toBe('diele')
+    expect(visit?.body.visits.map((entry) => entry.url)).toEqual([
+      'https://typed.example/some/page',
+    ])
+    expect(assign).toHaveBeenCalledWith('https://typed.example/some/page')
+  })
+
+  // The api keeps no title for a visit from diele, so none is sent.
+  it('posts a page offered from the history, without its title', async () => {
+    const fetch = stubHistory()
+    await historyRead()
+    const { result } = launcher()
+
+    result.recordLaunch(page)
+
+    const visits = posted(fetch).map((visit) => visit.body.visits[0])
+    expect(visits).toMatchObject([{ url: 'https://github.com/example/diele' }])
+    expect(visits[0]).not.toHaveProperty('title')
+  })
+
+  // A slash command and a subreddit jump put the term in the url, so a launch of one is a search.
+  it('posts nothing for a slash command, a subreddit jump, a saved site or a card', async () => {
+    const fetch = stubHistory()
+    await historyRead()
+    const { result } = launcher()
+
+    result.query.value = '/yt cats'
+    await nextTick()
+    result.submit(false)
+
+    result.query.value = 'r/vuejs'
+    await nextTick()
+    result.submit(false)
+
+    result.recordLaunch(savedSite)
+    result.recordLaunch(card)
+
+    expect(assign).toHaveBeenCalledTimes(2)
+    expect(posted(fetch)).toEqual([])
+  })
+
+  it('posts nothing for a web search', async () => {
+    const fetch = stubHistory()
+    await historyRead()
+    const { result } = launcher()
+
+    result.query.value = 'nothing matches this'
+    await nextTick()
+    result.submit(false)
+
+    expect(assign).toHaveBeenCalledWith('https://search.test/?q=nothing%20matches%20this')
+    expect(posted(fetch)).toEqual([])
+  })
+
+  it.each([
+    ['the account has not opted in', { enabled: false }],
+    ['the portal accepts nothing from diele', { sources: { diele: false, extension: true } }],
+    ['the portal offers no history', { available: false }],
+  ])('posts nothing while %s', async (_case, state) => {
+    const fetch = stubHistory(state)
+    const { result: history } = withSetup(() => useHistory(() => true))
+    await vi.waitFor(() => expect(history.state.value.kept).toBe(KEPT))
+    expect(history.state.value).toMatchObject(state)
+    const { result } = launcher()
+
+    result.recordLaunch(page)
+
+    expect(posted(fetch)).toEqual([])
+  })
+
+  it('posts nothing for a page on an excluded domain or below it', async () => {
+    const fetch = stubHistory({ excludedDomains: ['github.com'] })
+    await historyRead()
+    const { result } = launcher()
+
+    result.recordLaunch({ ...page, url: 'https://gist.github.com/x' })
+    result.recordLaunch(page)
+
+    expect(posted(fetch)).toEqual([])
   })
 })

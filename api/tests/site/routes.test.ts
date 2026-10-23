@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { createHash } from 'node:crypto'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import type { Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
@@ -10,6 +11,30 @@ import { createSiteRouter } from '#site/routes.js'
 
 const HASHED_ASSET = 'index-abc123.js'
 const INDEX_MARKER = '<title>diele</title>'
+const INLINE_SCRIPT = "document.documentElement.dataset.theme = 'dark'"
+
+/**
+ * Writes a document shaped like the built one: an inline script ahead of the hashed bundle.
+ * @param {string} dir - Directory to write `index.html` into
+ * @param {string} script - Body of the inline script
+ * @returns {void}
+ */
+function writeIndex(dir: string, script: string): void {
+  writeFileSync(
+    join(dir, 'index.html'),
+    `<!doctype html>${INDEX_MARKER}<!--diele:brand--><script>${script}</script>` +
+      `<script type="module" crossorigin src="/assets/${HASHED_ASSET}"></script>`,
+  )
+}
+
+/**
+ * Hashes a script body independently of the module under test, as a browser would.
+ * @param {string} source - Script text
+ * @returns {string} - A `'sha256-…'` source expression
+ */
+function expectedHash(source: string): string {
+  return `'sha256-${createHash('sha256').update(source).digest('base64')}'`
+}
 
 interface RunningSite {
   readonly url: string
@@ -57,7 +82,7 @@ let site: RunningSite
 before(async () => {
   root = mkdtempSync(join(tmpdir(), 'diele-site-'))
   mkdirSync(join(root, 'assets'))
-  writeFileSync(join(root, 'index.html'), `<!doctype html>${INDEX_MARKER}<!--diele:brand-->`)
+  writeIndex(root, INLINE_SCRIPT)
   writeFileSync(join(root, 'assets', HASHED_ASSET), 'export default 1\n')
   writeFileSync(join(root, 'favicon.svg'), '<svg xmlns="http://www.w3.org/2000/svg" />')
   writeFileSync(join(root, 'robots.txt'), 'User-agent: *\nDisallow: /\n')
@@ -165,5 +190,72 @@ test('a directory holding no build serves nothing at all', async () => {
   } finally {
     await unbuilt.close()
     rmSync(empty, { recursive: true, force: true })
+  }
+})
+
+test('the document is served under a content security policy', async () => {
+  for (const path of ['/', '/admin/connectors']) {
+    for (const method of ['GET', 'HEAD']) {
+      const response = await fetch(`${site.url}${path}`, { method })
+      const policy = response.headers.get('content-security-policy') ?? ''
+
+      assert.match(policy, /default-src 'none'/, `${method} ${path}`)
+      assert.match(policy, /frame-ancestors 'none'/, `${method} ${path}`)
+      assert.match(policy, /object-src 'none'/, `${method} ${path}`)
+    }
+  }
+})
+
+// Read back from the body that was actually sent, so a hash of anything but the served script,
+// the file before stamping or a stale constant, fails here.
+test('the policy carries the hash of the inline script the document is served with', async () => {
+  const response = await fetch(`${site.url}/`)
+  const policy = response.headers.get('content-security-policy') ?? ''
+  const html = await response.text()
+  const start = html.indexOf('<script>') + '<script>'.length
+  const served = html.slice(start, html.indexOf('</script>', start))
+
+  assert.equal(served, INLINE_SCRIPT)
+  assert.match(policy, /script-src 'self' 'sha256-[^']+'(;|$)/)
+  assert.ok(policy.includes(expectedHash(served)), policy)
+})
+
+test('a document with a different inline script is served a different hash', async () => {
+  const other = mkdtempSync(join(tmpdir(), 'diele-site-other-'))
+  writeIndex(other, `${INLINE_SCRIPT}\n`)
+  const otherSite = await startSite(other)
+
+  try {
+    const first = (await fetch(`${site.url}/`)).headers.get('content-security-policy')
+    const second = (await fetch(`${otherSite.url}/`)).headers.get('content-security-policy')
+
+    assert.notEqual(second, first)
+    assert.ok(second?.includes(expectedHash(`${INLINE_SCRIPT}\n`)), second ?? '')
+  } finally {
+    await otherSite.close()
+    rmSync(other, { recursive: true, force: true })
+  }
+})
+
+// Reported, not enforced, so a sink the app still feeds a plain string shows in the console
+// without breaking the page; the enforced policy beside it is left exactly as it was.
+test('the document reports trusted types violations beside the enforced policy', async () => {
+  for (const method of ['GET', 'HEAD']) {
+    const response = await fetch(`${site.url}/`, { method })
+
+    assert.equal(
+      response.headers.get('content-security-policy-report-only'),
+      "require-trusted-types-for 'script'; trusted-types diele-svg vue",
+      method,
+    )
+    assert.doesNotMatch(response.headers.get('content-security-policy') ?? '', /trusted-types/)
+  }
+})
+
+test('nothing but the document carries the trusted types report', async () => {
+  for (const path of [`/assets/${HASHED_ASSET}`, '/favicon.svg', '/robots.txt']) {
+    const response = await fetch(`${site.url}${path}`)
+
+    assert.equal(response.headers.get('content-security-policy-report-only'), null, path)
   }
 })

@@ -4,7 +4,6 @@ import type { SearchField } from '@/helpers/searchFields'
 
 interface Item {
   readonly name: string
-  readonly section?: number
   readonly boost?: number
 }
 
@@ -68,16 +67,26 @@ describe('rankByScore', () => {
     expect(ranked.map((item) => item.name)).toEqual(['alpha two', 'alpha one'])
   })
 
-  // Ranking only ever reorders within a section, so match order follows paint order.
-  it('never lifts an item across sections, however well it scores', () => {
-    const sectioned: ReadonlyArray<Item> = [
-      { name: 'alphabetical', section: 1 },
-      { name: 'alpha', section: 2 },
-    ]
-    const ranked = rankByScore(sectioned, 'alpha', fieldsOf, {
-      sectionOf: (item) => item.section ?? 0,
-    })
+  // A typo is a guess, worth offering when nothing else answers and noise beside a literal hit.
+  it('drops what only a typo found once something matched literally', () => {
+    const names: ReadonlyArray<Item> = [{ name: 'Grafana' }, { name: 'Grafna mirror' }]
 
-    expect(ranked.map((item) => item.name)).toEqual(['alphabetical', 'alpha'])
+    expect(rankByScore(names, 'grafana', fieldsOf).map((item) => item.name)).toEqual(['Grafana'])
+  })
+
+  it('keeps the typos when nothing matched literally', () => {
+    const names: ReadonlyArray<Item> = [{ name: 'Grafana' }, { name: 'Prometheus' }]
+
+    expect(rankByScore(names, 'grafna', fieldsOf).map((item) => item.name)).toEqual(['Grafana'])
+  })
+
+  // An acronym is no literal hit, so it leaves the typos standing, ranked below it.
+  it('keeps the typos beside an acronym', () => {
+    const names: ReadonlyArray<Item> = [{ name: 'Ukmo' }, { name: 'Uptime Kuma Metrics Agent' }]
+
+    expect(rankByScore(names, 'ukma', fieldsOf).map((item) => item.name)).toEqual([
+      'Uptime Kuma Metrics Agent',
+      'Ukmo',
+    ])
   })
 })

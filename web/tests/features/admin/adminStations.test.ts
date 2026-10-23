@@ -258,6 +258,72 @@ describe('buildStations, a feature configured inside another', () => {
   })
 })
 
+describe('buildStations, switches configured inside a switch', () => {
+  const history = feature({
+    id: 'history',
+    label: 'History',
+    switchOnly: true,
+    toggleable: true,
+    enabled: false,
+  })
+  const diele = feature({
+    id: 'historyDiele',
+    label: 'From diele',
+    parent: 'history',
+    switchOnly: true,
+    toggleable: true,
+  })
+  const extension = feature({
+    id: 'historyExtension',
+    label: 'From the extension',
+    parent: 'history',
+    switchOnly: true,
+    toggleable: true,
+  })
+
+  /**
+   * Returns the keys of the ring, in order.
+   * @param {Parameters<typeof buildStations>} args - What the ring is built from
+   * @returns {ReadonlyArray<string>} - Its station keys
+   */
+  function keysOf(...args: Parameters<typeof buildStations>): ReadonlyArray<string> {
+    return buildStations(...args).map((station) => station.key)
+  }
+
+  // A switch never expands, so waiting for it to would leave its children nowhere at all.
+  it('lists them beneath it without being opened', () => {
+    expect(keysOf([history, diele, extension], undefined, [], [leave])).toEqual([
+      featureKey('history'),
+      featureKey('historyDiele'),
+      featureKey('historyExtension'),
+      'action:leave',
+    ])
+  })
+
+  it('sets them at the depth of rows, each its own switch', () => {
+    const stations = buildStations([history, diele, extension], undefined, [], [])
+    const child = stations.find((station) => station.key === featureKey('historyDiele'))
+
+    expect(child).toMatchObject({ kind: 'feature', nested: true })
+    expect(rowActionsFor(child).map((action) => action.id)).toEqual(['toggle'])
+  })
+
+  it('stays beneath it while another feature is open', () => {
+    expect(keysOf([feature(), history, diele], 'cards', [], [])).toEqual([
+      featureKey('cards'),
+      'add:cards',
+      featureKey('history'),
+      featureKey('historyDiele'),
+    ])
+  })
+
+  it('leaves the children of an unavailable switch out with it', () => {
+    const blocked = { ...history, unavailable: 'needs a value' }
+
+    expect(keysOf([blocked, diele], undefined, [], [])).toEqual([featureKey('history')])
+  })
+})
+
 describe('rowActionsFor', () => {
   it('offers nothing when nothing holds focus', () => {
     expect(rowActionsFor(undefined)).toEqual([])

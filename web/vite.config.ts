@@ -45,6 +45,9 @@ export default defineConfig({
       // under the same names in `public/`. Vite registers the proxy ahead of the middleware
       // serving that directory, so this wins without the files having to move.
       '/favicon': { target: apiTarget, changeOrigin: true },
+      // The extension's relay asks this before it sends anything, and would otherwise get the
+      // app's index.html and take the dev server for something that is not diele.
+      '^/status$': { target: apiTarget, changeOrigin: true },
     },
   },
   resolve: {

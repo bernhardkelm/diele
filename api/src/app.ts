@@ -17,6 +17,8 @@ import { entriesRouter } from './connectors/routes.js'
 import { ApiError } from './errors.js'
 import { createFaviconRouter } from './favicon/routes.js'
 import { healthRouter } from './health/routes.js'
+import { historyRouter } from './history/routes.js'
+import { CSP_HEADER, RESOURCE_POLICY } from './site/contentSecurityPolicy.js'
 import { signalsRouter } from './signals/routes.js'
 import { createSiteRouter } from './site/routes.js'
 
@@ -46,6 +48,18 @@ export function createApp(siteRoot: string = config.webRoot): Express {
   // only the meta tag, because it also covers the api and the assets.
   app.use((_req, res, next) => {
     res.set('X-Robots-Tag', 'noindex, nofollow')
+    next()
+  })
+
+  // The policy is for everything but the document, which the site router answers under one of
+  // its own: one of these opened as a page runs nothing and cannot be framed. `nosniff` holds for
+  // the document too, since `script-src 'self'` trusts that no other same-origin response is ever
+  // run as a script on a guessed type. `same-origin` keeps the portal's address, and so which
+  // instance someone opened a link from, out of every request to another site.
+  app.use((_req, res, next) => {
+    res.set(CSP_HEADER, RESOURCE_POLICY)
+    res.set('X-Content-Type-Options', 'nosniff')
+    res.set('Referrer-Policy', 'same-origin')
     next()
   })
 
@@ -88,6 +102,7 @@ export function createApp(siteRoot: string = config.webRoot): Express {
   app.use('/api/config', configRouter)
   app.use('/api/entries', entriesRouter)
   app.use('/api/health', healthRouter)
+  app.use('/api/history', historyRouter)
   app.use('/api/signals', signalsRouter)
   // requireAdmin on top of the global session gate: the client's mode switch is a
   // convenience, and a request that gets here has to stand on its own.

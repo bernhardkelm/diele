@@ -30,6 +30,20 @@ test('every response says it is not to be indexed', async () => {
   }
 })
 
+// The document has a policy of its own; everything else is never meant to render as a page, so
+// one opened directly loads nothing and cannot be framed. Set before the gate, so a 401 has it too.
+test('every response but the document runs nothing and cannot be framed', async () => {
+  for (const path of ['/status', '/api/auth/providers', '/api/config', '/favicon/favicon.svg']) {
+    const response = await api.request(path)
+
+    assert.equal(
+      response.headers.get('content-security-policy'),
+      "default-src 'none'; frame-ancestors 'none'",
+      path,
+    )
+  }
+})
+
 // Deny by default: the gate runs before every router, so this holds for routes nobody has
 // written yet as much as for the ones that exist.
 test('a route that is not on the public list refuses an anonymous caller', async () => {

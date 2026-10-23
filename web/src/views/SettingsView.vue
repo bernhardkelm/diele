@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { computed, ref, useTemplateRef } from 'vue'
+import { computed, nextTick, ref, useTemplateRef, watch } from 'vue'
 import ActionRow from '@/components/ActionRow.vue'
 import LauncherBar from '@/components/LauncherBar.vue'
 import PageFooter from '@/components/PageFooter.vue'
 import PortalHeader from '@/components/PortalHeader.vue'
+import SettingsFieldRow from '@/features/settings/SettingsFieldRow.vue'
+import SettingsItemRow from '@/features/settings/SettingsItemRow.vue'
 import SettingsOptionRow from '@/features/settings/SettingsOptionRow.vue'
 import SettingsSectionRow from '@/features/settings/SettingsSectionRow.vue'
 import { useConnectorEntries } from '@/composables/useConnectorEntries'
@@ -25,9 +27,11 @@ import { searchSections, type SettingsSection } from '@/features/settings/settin
 import {
   buildSettingsStations,
   sectionKey,
+  type ItemStation,
   type SettingsStation,
 } from '@/features/settings/settingsStations'
 import { themeSection } from '@/features/settings/themeSection'
+import { useHistorySection } from '@/features/settings/useHistorySection'
 import { walkDelta } from '@/helpers/walkDelta'
 
 const { brand } = usePortalConfig()
@@ -52,25 +56,45 @@ if (routeSection.value) {
 // The route owns which section is open, so opening one survives a step back.
 const expanded = computed(() => routeSection.value)
 
+const { section: history, error: historyError } = useHistorySection(() => expanded.value)
+
 // Offered whenever a connector is configured, whether or not it has produced anything yet: a
 // connector that is failing still has rows someone hid, and hiding the switch would strand them.
 //
 // This account's own list only. Keeping an entry from everyone belongs to the admin panel,
 // under the connector that produced it.
+//
+// History is listed where the instance offers it or still keeps pages for this account, and
+// otherwise not mentioned at all.
 const sections = computed<ReadonlyArray<SettingsSection>>(() => {
-  if (sources.value.length === 0) {
-    return [themeSection(preference.value, setTheme)]
+  const listed: SettingsSection[] = [themeSection(preference.value, setTheme)]
+
+  if (sources.value.length > 0) {
+    listed.push(
+      entrySection(sortRows(entryRows.value, 'name', 'asc'), {
+        isHiddenIn: (ref) => isHiddenIn(ref, 'mine'),
+        isHiddenForEveryone: (ref) => isHiddenIn(ref, 'all'),
+        toggle: (ref) => toggle(ref, 'mine'),
+        showAll: () => showAll('mine'),
+      }),
+    )
   }
 
-  return [
-    themeSection(preference.value, setTheme),
-    entrySection(sortRows(entryRows.value, 'name', 'asc'), {
-      isHiddenIn: (ref) => isHiddenIn(ref, 'mine'),
-      isHiddenForEveryone: (ref) => isHiddenIn(ref, 'all'),
-      toggle: (ref) => toggle(ref, 'mine'),
-      showAll: () => showAll('mine'),
-    }),
-  ]
+  if (history.value) {
+    listed.push(history.value)
+  }
+
+  return listed
+})
+
+// Row whose form is open, and row whose removal is on its way, each by station key: the list is
+// rebuilt around both, so a position would be pointing at something else by the time it settled.
+const editing = ref<string | undefined>()
+const removing = ref<string | undefined>()
+
+// A form belongs to the section it was opened in, and that section is no longer on screen.
+watch(expanded, () => {
+  editing.value = undefined
 })
 
 const actions = computed(() =>
@@ -99,6 +123,7 @@ const {
   leave,
   release,
   syncTo,
+  restore,
 } = useStationRing(stations, list, () => bar.value?.focus())
 
 useStickyFocus({ selector: '[data-station]', heldClass: 'row-marker-held' })
@@ -127,14 +152,58 @@ function open(station: SettingsStation): void {
   }
 
   if (station.kind === 'action') {
-    if (!station.action.disabled) {
-      station.action.run()
+    if (station.action.disabled) {
+      return
+    }
+
+    const index = stations.value.indexOf(station)
+    station.action.run()
+
+    // the rows it listed take its place, so the caret lands on the first of them
+    if (station.reveals) {
+      void restore({ type: 'position', index })
     }
 
     return
   }
 
+  if (station.kind === 'field') {
+    editing.value = station.key
+    return
+  }
+
+  // a removal asks on the row itself, so reaching one is all opening it does
+  if (station.kind === 'item') {
+    return
+  }
+
   station.option.run()
+}
+
+/**
+ * Removes one item and puts the caret on whatever took its place, since the row it was on goes
+ * away with it. The row above takes it where the next one belongs to something else, so removing
+ * the last item does not throw the caret out of the section onto the closing rows.
+ * @param {ItemStation} station - Station the item occupies
+ * @param {number} index - Position it held in the ring
+ * @returns {Promise<void>}
+ */
+async function removeItem(station: ItemStation, index: number): Promise<void> {
+  removing.value = station.key
+
+  try {
+    await station.item.remove()
+  } finally {
+    removing.value = undefined
+  }
+
+  await nextTick()
+
+  const next = stations.value[index]
+  const stays =
+    next !== undefined && next.kind !== 'section' && next.section?.id === station.section.id
+
+  await restore({ type: 'position', index: stays ? index : index - 1 })
 }
 
 /**
@@ -248,6 +317,9 @@ function onFocusin(event: FocusEvent): void {
       @submit="submit"
     />
 
+    <!-- see AdminView: a refused change is said above the list, where it is read the same way -->
+    <p v-if="historyError" class="settings__error" role="alert">{{ historyError }}</p>
+
     <main class="settings__body">
       <ul
         v-if="stations.length"
@@ -276,6 +348,28 @@ function onFocusin(event: FocusEvent): void {
             :focused="index === activeIndex"
             :query="query"
             @run="open(station)"
+          />
+
+          <SettingsFieldRow
+            v-else-if="station.kind === 'field'"
+            :field="station.field"
+            :station-key="station.key"
+            :active="index === tabStop"
+            :focused="index === activeIndex"
+            :editing="editing === station.key"
+            @open="open(station)"
+            @close="editing = undefined"
+          />
+
+          <SettingsItemRow
+            v-else-if="station.kind === 'item'"
+            :item="station.item"
+            :station-key="station.key"
+            :active="index === tabStop"
+            :focused="index === activeIndex"
+            :query="query"
+            :busy="removing === station.key"
+            @remove="removeItem(station, index)"
           />
 
           <ActionRow
@@ -322,6 +416,18 @@ function onFocusin(event: FocusEvent): void {
    selector inside any one of them cannot see the other two. */
 .settings__list > li + li {
   border-top: 1px solid var(--diele-rule);
+}
+
+.settings__error {
+  width: 100%;
+  max-width: var(--diele-content-width);
+  margin: 0;
+  padding: var(--diele-space-3);
+  font-family: var(--diele-font-mono);
+  font-size: var(--diele-text-md);
+  color: var(--diele-status-down);
+  border: 1px solid var(--diele-status-down);
+  border-radius: var(--diele-radius-sm);
 }
 
 .settings__empty {

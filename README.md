@@ -35,6 +35,7 @@ next tab has it.
     - [Search engines](#search-engines)
     - [Cards](#cards)
     - [Saved sites](#saved-sites)
+    - [History](#history)
     - [Local ports](#local-ports)
     - [Subreddit jump](#subreddit-jump)
     - [Light and dark](#light-and-dark)
@@ -64,14 +65,20 @@ next tab has it.
 
 The bar takes focus on load, so a new tab can be typed into straight away. It searches the service
 cards, the saved sites, the connector rows and the local ports together, by name, by url and by
-keyword.
+keyword, and the pages you visited where you turned [history](#history) on.
 
-Matching is fuzzy, so `prometeus` still finds Prometheus and `uk` finds Uptime Kuma. Paths split on
-their separators, so `example-group/web` matches both halves. A term that is really a url -
-`example.com`, `localhost:3000`, a pasted link - leads the results as **Go to**.
+Matching forgives typos, word by word: `prometeus` still finds Prometheus, `grafna` finds Grafana,
+and `uk` finds Uptime Kuma by its initials. A typo only fills in when nothing matches as typed, and
+letters merely scattered across a name match nothing. Paths split on their separators, so
+`example-group/web` matches both halves, and quotes hold a term to exactly what it says. A term
+that is really a url - `example.com`, `localhost:3000`, a pasted link - leads the results as
+**Go to**.
 
-What diele already knows ranks above the web: the first match is highlighted, so `↵` opens it. To
-search the web anyway, `↑` steps off the list and hands `↵` back to the engine.
+Results come in blocks - sites, cards, repos, visited pages - and the block with the best match
+comes first, so `heise` puts the heise.de you visited on top rather than under ten repos. On a tie
+what diele was told about wins over a page you merely visited. What diele already knows ranks
+above the web: the first match is highlighted, so `↵` opens it. To search the web anyway, `↑`
+steps off the list and hands `↵` back to the engine.
 
 ![Searching for "web": a local port, a saved site and a repo, ranked above the web](docs/images/search.webp)
 
@@ -129,6 +136,48 @@ Everything that does not deserve a logo on the front page but should still be on
 They are suggested as results when the term matches them, and stay out of the way until it does.
 
 ![A saved site suggested alongside a local port and a repo](docs/images/sites.webp)
+
+### History
+
+Pages you visited, offered in the search the way an address bar offers them. Off at every level:
+an instance offers nothing until an admin turns it on, and an account keeps nothing until its owner
+opts in.
+
+The admin panel has one **History** switch for the whole instance, and beneath it one per source it
+accepts visits from: **diele** itself, which is an address opened through **Go to** or a history
+result, and the browser **extension**, which sees every page loaded in the browser it runs in.
+All three start off.
+
+Each account then opts in under **History** in its settings. A visited page ranks below everything
+the portal was told about, so a card, a saved site, a repo or a local port matching the same term
+always wins, and the row says `history` in its trail. A page names itself, so its address is always
+shown beside the title: a page calling itself something it is not is told apart by where it sits.
+
+Only the origin and the path are kept, never a query string or a fragment. Nothing is kept for a
+search results page, a link carrying something that looks like a token, a domain the account
+excluded or anything below it, or this machine itself. An address opened through **Go to** on the
+public internet is checked first and dropped when it does not exist; one on a private network is
+kept without asking, since the server's network is not the browser's and the answer would say
+which internal hosts exist. Excluding a domain also forgets what was already kept on it.
+
+The settings list the kept pages, the most recent hundred first and a hundred more on request,
+with how often and how recently each was visited; the filter bar searches all of them. Each can be
+forgotten on its own, or all of them at once. Opting out stops keeping new pages and deletes
+nothing: what is kept stays listed there until it is forgotten. The same holds once an admin turns
+**History** off: nothing new is kept and the search offers none of it, but an account that still
+has pages kept finds them in its settings, without the opt-in or the excluded domains, until it
+forgets them. An account with nothing kept sees no history section at all.
+
+The portal keeps none of it in the browser: it holds what it read in memory for the page it is on
+and drops it on sign out. The extension is the one place visits wait in the browser, already
+filtered, until they are delivered.
+
+The [extension](extension/README.md#history) records only once it is switched on for one instance
+in its own toolbar panel too, which is when Chrome asks for the permissions it needs; until then it
+holds `storage` and nothing else. It sends origin and path, and page titles only when switched on
+there as well. It drops the same kinds of page before anything is stored, keeps what waits in the
+browser for a week at most, and delivers it on the next load of the instance, with that page's own
+session and only for the account it was recorded for.
 
 ### Local ports
 
@@ -415,7 +464,6 @@ What is coming, in roughly the order it is meant to land.
 | **Users and roles** | only the first account exists today; the `groups` claim is already carried onto the session, so the seam is there |
 | **Sessions and devices** | every session an account has open, listed in the user settings and revocable one at a time |
 | **Personal entries** | cards, saved sites, slash commands and search engines a user adds for themselves, on top of the ones an admin defines |
-| **History** | opt in, and the urls you open are kept and offered in the search, listed in the user settings to drop, to clear, or to keep as a saved site |
 | **Ranking that follows you** | what you open most keeps winning ties, on every browser you sign in from rather than only the one that opened it |
 | **Inline answers** | `12*7`, `40f in c`, a hex or base conversion answered above the results instead of handed to an engine |
 | **General component hardening and polish** | every view once more over: edge cases, empty and error states, focus order |
@@ -468,6 +516,11 @@ these is a real environment variable.
 | `LOCAL_SETUP_TOKEN` | gates creating the first account; generated and printed when unset |
 | `SESSION_MAX_AGE_MS`, `SESSION_REMEMBER_MAX_AGE_MS` | idle windows, not lifetimes; they roll forward on use. The second is what an issuer login and `remember me` get |
 | `DIELE_SEED_STOCK_CONFIG` | `false` creates the database without the stock engines, commands and ports |
+| `HISTORY_DB_PATH` | where visited history is kept, its own SQLite file beside the database by default (`diele-history.db`); created the first time any account saves its history preferences, opting out included, whatever the switches say |
+| `HISTORY_SERVED` | how many history entries the search is sent per load, most frecent first, default `300` |
+| `HISTORY_MAX_ENTRIES` | how many entries each account keeps, the least recently visited going first beyond it, default `5000` |
+| `HISTORY_ONE_OFF_DAYS` | days a page visited only once is kept, default `14` |
+| `HISTORY_PROBE` | `false` keeps a public address opened through Go to without this server requesting it first, for a deployment that would rather not send its own IP to every site its people open; on by default. Private and local addresses are never requested either way |
 
 Losing `DIELE_SECRET_KEYS` means re-entering every credential by hand, so back it up somewhere
 other than the database. The [full variable list](api/README.md#configuration), including the ones
@@ -499,14 +552,16 @@ move, not a way to top up a portal you have already set up.
 Chrome has no setting for this - overriding the new tab page takes an extension, so there is one in
 [`extension/`](extension/README.md). Load it unpacked from `chrome://extensions`, open a new tab,
 and enter the address of your instance. It asks for the `storage` permission and nothing else: no
-host access, no build step, no third party.
+host access, no build step, no third party. Switching on [history](#history) there is the one
+thing that asks for more, at that moment.
 
 Its toolbar button holds the list, so a private portal and a work one can both live there and new
 tabs follow whichever is marked - switched in a click, with nothing to retype.
 
 Edge, Brave, Vivaldi and Opera load the same folder the same way. Safari needs no extension: it
-opens new tabs with the home page, so setting that is enough. Firefox has no such setting and
-would need the extension, which has not been tried there.
+opens new tabs with the home page, so setting that is enough. Firefox has no such setting; the
+same folder loads there as a temporary add-on, built for it but not yet tried, see
+[extension/README.md](extension/README.md).
 
 ![The first new tab asks where the instance lives](docs/images/extension.webp)
 
@@ -524,10 +579,34 @@ docker cp diele:/data/backup.db "./diele-$(date +%F).db"
 `VACUUM INTO` takes a read transaction, so it is safe while the portal is serving, and it refuses
 to overwrite a file that is already there.
 
+Visited history is not in that file. It lives in `diele-history.db` beside it (or wherever
+`HISTORY_DB_PATH` points), so it can be backed up, left out of a backup or wiped on its own, and the
+configuration export never carries it. The file exists from the first time any account saves its
+history preferences, opting out included, whatever the switches say; before that there is nothing
+to back up. A backup of the whole `/data` volume does include it, and
+with it the pages every opted-in account visited, so keep such a backup as private as the portal
+itself. The same command copies it, pointed at that file:
+
+```sh
+docker exec diele node -e \
+  "process.umask(0o077); require('better-sqlite3')('/data/diele-history.db').exec(\"VACUUM INTO '/data/history-backup.db'\")"
+(umask 077 && docker cp diele:/data/history-backup.db "./diele-history-$(date +%F).db")
+```
+
+The `umask` keeps both copies readable by their owner alone, the way the live file is. Deleting the
+file while the portal is stopped forgets every account's history and nothing else. Nothing an
+account forgets, a page, a domain or all of it, reaches a backup that was already taken.
+
 ### Which tag
 
 `latest` follows the newest release and `0.4` the newest patch of that minor, while `0.4.0` never
 moves. Prereleases are published under their full version and move neither of the first two.
+
+`edge` follows `main`. `pr-<n>` follows the newest push to pull request `<n>`, and `sha-<short>`
+names a single build, of a commit on `main`, a release tag or, for a pull request, the merge commit
+GitHub tests. These are previews, published so a change can be tried on a test instance before it
+is merged: run them only against data you can throw away, never in front of a database you want to
+keep.
 
 diele is 0.x: a minor may change behaviour, and migrations are forward-only and immutable, so a
 database a newer image has already migrated is not one an older image can open. Pin a version you

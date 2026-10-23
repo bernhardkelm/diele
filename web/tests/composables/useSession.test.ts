@@ -1,9 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { CONFIG_CACHE_KEY, ENTRIES_CACHE_KEY } from '@/config/api'
+import { CONFIG_CACHE_KEY, ENTRIES_CACHE_KEY, LAUNCH_HISTORY_KEY } from '@/config/api'
 import { resetConnectorEntries, useConnectorEntries } from '@/composables/useConnectorEntries'
+import { resetHistory, useHistory } from '@/composables/useHistory'
+import { withSetup } from '@tests/support/withSetup'
 import { resetPortalConfig } from '@/composables/usePortalConfig'
 import { recheckSession, resetSession, useSession } from '@/composables/useSession'
 import { reportLapse, sessionLapsed } from '@/composables/sessionLapse'
+import { useLaunchHistory } from '@/features/portal/useLaunchHistory'
 
 const ENTRIES = {
   entries: [
@@ -129,6 +132,90 @@ describe('signing out', () => {
 
     expect(fetchMock.mock.calls.map((call) => call[0])).toContain('/api/auth/logout-all')
     expect(localStorage.getItem(ENTRIES_CACHE_KEY)).toBeNull()
+  })
+
+  // The ranking is this browser's rather than the account's, so what one person opened must not
+  // go on ranking for whoever signs in next.
+  it('takes the launch ranking with it, on either route out', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.resolve(new Response(JSON.stringify({ logoutUrl: '/' })))),
+    )
+
+    localStorage.setItem(LAUNCH_HISTORY_KEY, JSON.stringify(['card:1']))
+    await useSession().signOut()
+    expect(localStorage.getItem(LAUNCH_HISTORY_KEY)).toBeNull()
+
+    localStorage.setItem(LAUNCH_HISTORY_KEY, JSON.stringify(['card:1']))
+    await useSession().signOutEverywhere()
+    expect(localStorage.getItem(LAUNCH_HISTORY_KEY)).toBeNull()
+  })
+
+  // A reader already on screen ranks from memory, so clearing storage alone would leave it ranking.
+  it('clears the ranking a reader on screen holds as well, on every route out', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL) =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify(
+              String(input).includes('/api/auth/providers')
+                ? { providers: [], mode: 'local' }
+                : { logoutUrl: '/' },
+            ),
+          ),
+        ),
+      ),
+    )
+
+    const { result: ranking } = withSetup(() => useLaunchHistory())
+    const session = useSession()
+    await session.loadProviders()
+
+    for (const leave of [session.signOut, session.signOutEverywhere, session.signIn]) {
+      ranking.remember('card:1')
+      expect(ranking.boostFor('card:1')).toBeGreaterThan(0)
+
+      await leave()
+
+      expect(ranking.boostFor('card:1')).toBe(0)
+    }
+
+    resetSession()
+  })
+
+  // Where someone has been is held in memory, and the next account on this page must not see it.
+  it('drops the visited pages held in memory', async () => {
+    const state = {
+      available: true,
+      sources: { diele: true, extension: false },
+      enabled: true,
+      excludedDomains: [],
+      kept: 1,
+    }
+    const page = { id: 1, url: 'https://a.example/', visits: 1, lastVisitedAt: '2026-10-01' }
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL) =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify(
+              String(input) === '/api/history' ? { state, entries: [page] } : { logoutUrl: '/' },
+            ),
+          ),
+        ),
+      ),
+    )
+
+    const { result } = withSetup(() => useHistory(() => true))
+    await vi.waitFor(() => expect(result.entries.value).toHaveLength(1))
+
+    await useSession().signOut()
+
+    expect(result.entries.value).toEqual([])
+    expect(result.state.value.available).toBe(false)
+    resetHistory()
   })
 })
 
@@ -280,10 +367,13 @@ describe('re-checking the session', () => {
 
   // Signed back in from another tab: nothing else retries the reads that answered 401 meanwhile,
   // so the portal would keep painting the copy it fell back on.
-  it('refetches the config and the entries once a lapse turns out to be over', async () => {
+  it('refetches the config, the entries and the history once a lapse turns out to be over', async () => {
     reportLapse(401)
     const fetchMock = stubSession()
     vi.stubGlobal('fetch', fetchMock)
+    // the portal's own reader, without which the history is not asked for at all
+    withSetup(() => useHistory(() => true))
+    fetchMock.mockClear()
 
     await recheckSession()
 
@@ -291,6 +381,7 @@ describe('re-checking the session', () => {
     expect(sessionLapsed.value).toBe(false)
     expect(urls).toContain('/api/config')
     expect(urls).toContain('/api/entries')
+    expect(urls).toContain('/api/history')
   })
 
   it('refetches nothing when there was no lapse to recover from', async () => {

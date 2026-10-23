@@ -25,6 +25,14 @@ looking at first are:
   the database is enough to read them.
 - **Untrusted markup** (`api/src/icons/sanitize.ts`) - uploaded SVGs are inlined into the
   portal's own page, so the sanitiser is the boundary.
+- **Content Security Policy** (`api/src/site/contentSecurityPolicy.ts`) - the layer behind the
+  sanitiser: the page runs only its own bundle and one hashed inline script, and talks only to its
+  own origin and, while it probes one, the loopback ports. Trusted Types is reported, not yet
+  enforced, with icon markup the only thing let into `innerHTML`. Script that runs in the page
+  despite it is in scope. Every response also carries `Referrer-Policy: same-origin`, so a link out
+  of the portal does not tell the site it leads to which instance it was opened from.
+- **The origin** - diele must be the only app on it. Anything else served there reads the
+  history with the visitor's own cookie, and the extension's relay trusts the whole origin.
 - **Untrusted values from elsewhere** (`api/src/admin/importConfig.ts`,
   `api/src/connectors/entries.ts`) - an imported configuration file and a connector's own output
   are both held to the same rules as a typed one, since both end up as links on the page.
@@ -36,5 +44,8 @@ looking at first are:
 - **A connector pointed at an internal address.** Configuring one is an admin's job, and an
   internal GitLab is a normal thing to point at. Sync errors are kept to admins for that reason -
   if you find a way for a non-admin to read them, that *is* in scope.
+- **Whether local-port probing is configured.** The policy is served before sign-in, so the login
+  page's `connect-src` tells an anonymous visitor whether it lists the loopback sources. That one
+  bit is accepted; a way to learn which ports, or which saved sites, *is* in scope.
 - **Anything requiring an operator to run a hostile configuration deliberately.** Importing a
   file from someone you do not trust replaces your whole portal by design.

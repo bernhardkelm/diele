@@ -1,4 +1,6 @@
+import { MATCH_TIERS, type MatchTier } from '@/helpers/matchTiers'
 import type { SearchToken } from '@/helpers/searchTokens'
+import { typoMatch } from '@/helpers/typoMatch'
 
 /** Half-open span of matched characters in a haystack, `[start, end)`. */
 export interface MatchRange {
@@ -9,24 +11,18 @@ export interface MatchRange {
 export interface FuzzyMatch {
   /** 0 to 999; only comparable between matches of the same token */
   readonly score: number
+  /** Floor of the way it matched, which is what tells a literal hit from a guess */
+  readonly tier: MatchTier
   /** Where the token landed, ascending and non-overlapping */
   readonly ranges: ReadonlyArray<MatchRange>
 }
 
-// Shorter tokens only ever match contiguously: letting `r` or `lh` scatter across a name
-// would match nearly everything, which is worse than not matching at all. Landing every
-// character on a word start is specific enough to stay useful two characters down, which is
-// what makes `uk` find `Uptime Kuma`.
-const MIN_SUBSEQUENCE_LENGTH = 3
+// Landing every character on a word start is specific enough to stay useful two characters down,
+// which is what makes `uk` find `Uptime Kuma`.
 const MIN_ACRONYM_LENGTH = 2
 
-// Tier floors, spaced wider than the quality bonus so no tier can be lifted past the next.
-const EXACT = 800
-const PREFIX = 600
-const WORD_START = 500
-const SUBSTRING = 400
-const ACRONYM = 300
-const SUBSEQUENCE = 100
+// taken off a typo's bonus per edit, so one slip on a word outranks two on the same word
+const TYPO_EDIT_COST = 50
 
 const WORD_CHAR = /[a-z0-9]/i
 
@@ -65,18 +61,27 @@ function quality(matched: number, span: number, length: number): number {
 }
 
 /**
- * Finds the positions a token occupies in a haystack as a subsequence, tightest last.
- * @param {string} haystack - Lowercased text to search
+ * Finds the word starts a token's characters land on, in order, choosing the tightest run when
+ * a letter opens more than one word.
+ * @param {string} text - Haystack in its original casing, which is what carries the humps
+ * @param {string} haystack - The same text, lowercased
  * @param {string} needle - Lowercased token to place
  * @returns {number[] | undefined} - Ascending positions, or undefined when the token does not fit
  */
-function subsequencePositions(haystack: string, needle: string): number[] | undefined {
+function acronymPositions(text: string, haystack: string, needle: string): number[] | undefined {
+  const starts: number[] = []
+  for (let index = 0; index < haystack.length; index += 1) {
+    if (WORD_CHAR.test(haystack[index]!) && isWordStart(text, index)) {
+      starts.push(index)
+    }
+  }
+
   let end = -1
   let ahead = 0
 
-  for (let index = 0; index < haystack.length && ahead < needle.length; index += 1) {
-    if (haystack[index] === needle[ahead]) {
-      end = index
+  for (let slot = 0; slot < starts.length && ahead < needle.length; slot += 1) {
+    if (haystack[starts[slot]!] === needle[ahead]) {
+      end = slot
       ahead += 1
     }
   }
@@ -86,13 +91,13 @@ function subsequencePositions(haystack: string, needle: string): number[] | unde
   }
 
   // walking back from the earliest possible end gives the tightest window, which a forward
-  // pass alone misses whenever an early character of the token repeats
+  // pass alone misses whenever an early letter of the token opens several words
   const positions: number[] = []
   let behind = needle.length - 1
 
-  for (let index = end; index >= 0 && behind >= 0; index -= 1) {
-    if (haystack[index] === needle[behind]) {
-      positions.unshift(index)
+  for (let slot = end; slot >= 0 && behind >= 0; slot -= 1) {
+    if (haystack[starts[slot]!] === needle[behind]) {
+      positions.unshift(starts[slot]!)
       behind -= 1
     }
   }
@@ -121,61 +126,118 @@ function toRanges(positions: ReadonlyArray<number>): MatchRange[] {
 }
 
 /**
- * Matches one token against one text, softly. A literal hit scores highest and is ranked by
- * where it sits, a token whose characters merely appear in order still matches but lands far
- * below, so `prometeus` finds `prometheus` without `abc` finding half the portal.
- *
- * A quoted token is the exception and is only ever read literally, since asking for one is
- * asking for the guessing to stop.
+ * Matches a token where it appears literally, ranked by where it sits.
  * @param {string} text - Text to search, in its original casing
- * @param {SearchToken} token - Token to look for, and whether it was quoted
- * @returns {FuzzyMatch | undefined} - Score and matched spans, or undefined when it does not match
+ * @param {string} haystack - The same text, lowercased
+ * @param {string} needle - Lowercased token
+ * @returns {FuzzyMatch | undefined} - The match, or undefined when the token is not in the text
  */
-export function fuzzyMatch(text: string, token: SearchToken): FuzzyMatch | undefined {
-  const needle = token.text
-  if (!text || !needle) {
-    return undefined
-  }
-
-  const haystack = text.toLowerCase()
+function literalMatch(text: string, haystack: string, needle: string): FuzzyMatch | undefined {
   const at = haystack.indexOf(needle)
-
-  if (at !== -1) {
-    const contiguous =
-      at === 0
-        ? needle.length === haystack.length
-          ? EXACT
-          : PREFIX
-        : isWordStart(text, at)
-          ? WORD_START
-          : SUBSTRING
-
-    return {
-      score: contiguous + quality(needle.length, needle.length, haystack.length),
-      ranges: [{ start: at, end: at + needle.length }],
-    }
-  }
-
-  // Everything below this line is a guess at what was meant. A quoted token has said it means
-  // itself, so a text it does not literally appear in is a miss.
-  if (token.exact || needle.length < MIN_ACRONYM_LENGTH) {
+  if (at === -1) {
     return undefined
   }
 
-  const positions = subsequencePositions(haystack, needle)
+  const tier =
+    at === 0
+      ? needle.length === haystack.length
+        ? MATCH_TIERS.EXACT
+        : MATCH_TIERS.PREFIX
+      : isWordStart(text, at)
+        ? MATCH_TIERS.WORD_START
+        : MATCH_TIERS.SUBSTRING
+
+  return {
+    score: tier + quality(needle.length, needle.length, haystack.length),
+    tier,
+    ranges: [{ start: at, end: at + needle.length }],
+  }
+}
+
+/**
+ * Matches a token whose every character lands on the start of a word, in order.
+ * @param {string} text - Text to search, in its original casing
+ * @param {string} haystack - The same text, lowercased
+ * @param {string} needle - Lowercased token
+ * @returns {FuzzyMatch | undefined} - The match, or undefined when the token is no acronym of the text
+ */
+function acronymMatch(text: string, haystack: string, needle: string): FuzzyMatch | undefined {
+  const positions = acronymPositions(text, haystack, needle)
   if (!positions) {
-    return undefined
-  }
-
-  const acronym = positions.every((position) => isWordStart(text, position))
-  if (!acronym && needle.length < MIN_SUBSEQUENCE_LENGTH) {
     return undefined
   }
 
   const span = positions[positions.length - 1]! - positions[0]! + 1
 
   return {
-    score: (acronym ? ACRONYM : SUBSEQUENCE) + quality(needle.length, span, haystack.length),
+    score: MATCH_TIERS.ACRONYM + quality(needle.length, span, haystack.length),
+    tier: MATCH_TIERS.ACRONYM,
     ranges: toRanges(positions),
   }
+}
+
+/**
+ * Matches one token against one text by everything short of a typo: literally, ranked by where
+ * it sits, or by the initials of the text's words. A quoted token is only ever read literally,
+ * since asking for one is asking for the guessing to stop.
+ * @param {string} text - Text to search, in its original casing
+ * @param {SearchToken} token - Token to look for, and whether it was quoted
+ * @returns {FuzzyMatch | undefined} - Score, tier and matched spans, or undefined when it does not match
+ */
+export function matchAsTyped(text: string, token: SearchToken): FuzzyMatch | undefined {
+  const needle = token.text
+  if (!text || !needle) {
+    return undefined
+  }
+
+  const haystack = text.toLowerCase()
+  const literal = literalMatch(text, haystack, needle)
+
+  // past a literal hit everything is a guess at what was meant, which a quoted token refuses
+  if (literal || token.exact || needle.length < MIN_ACRONYM_LENGTH) {
+    return literal
+  }
+
+  return acronymMatch(text, haystack, needle)
+}
+
+/**
+ * Matches a token that is a word of the text, or the start of one, typed with a slip. It never
+ * scores 300 or more, under every match `matchAsTyped` finds, which is what lets a caller skip it
+ * wherever a hit as typed already scores higher.
+ * @param {string} text - Text to search, in its original casing
+ * @param {SearchToken} token - Token to look for, and whether it was quoted
+ * @returns {FuzzyMatch | undefined} - The match, marking the word, or undefined when no word is close
+ */
+export function matchAsTypo(text: string, token: SearchToken): FuzzyMatch | undefined {
+  if (!text || token.exact) {
+    return undefined
+  }
+
+  const typo = typoMatch(text, token.text)
+  if (!typo) {
+    return undefined
+  }
+
+  const length = typo.end - typo.start
+  const bonus = quality(length, length, text.length) - TYPO_EDIT_COST * typo.edits
+
+  return {
+    score: MATCH_TIERS.TYPO + Math.max(0, bonus),
+    tier: MATCH_TIERS.TYPO,
+    ranges: [{ start: typo.start, end: typo.end }],
+  }
+}
+
+/**
+ * Matches one token against one text, softly. A literal hit scores highest and is ranked by
+ * where it sits, the initials of the text's words come next, and a token one or two edits away
+ * from one of its words still matches but lands below everything else, so `prometeus` finds
+ * `prometheus` without `heise` finding every repo that happens to hold those letters in order.
+ * @param {string} text - Text to search, in its original casing
+ * @param {SearchToken} token - Token to look for, and whether it was quoted
+ * @returns {FuzzyMatch | undefined} - Score, tier and matched spans, or undefined when it does not match
+ */
+export function fuzzyMatch(text: string, token: SearchToken): FuzzyMatch | undefined {
+  return matchAsTyped(text, token) ?? matchAsTypo(text, token)
 }

@@ -14,9 +14,11 @@ import { useHashRoute } from '@/composables/useHashRoute'
 import { apiMessage, readPayload } from '@/helpers/apiError'
 import { refreshConnectorEntries, resetConnectorEntries } from '@/composables/useConnectorEntries'
 import { resetHealth } from '@/composables/useHealth'
+import { refreshHistory, resetHistory } from '@/composables/useHistory'
 import { refreshPortalConfig, resetPortalConfig } from '@/composables/usePortalConfig'
 import { resetSignals } from '@/composables/useSignals'
 import { clearLapse, reportLapse, sessionLapsed } from '@/composables/sessionLapse'
+import { resetLaunchHistory } from '@/features/portal/useLaunchHistory'
 import { applyBrandAccent } from '@/helpers/brandAccent'
 import { clearConfigCache } from '@/helpers/configCache'
 import { clearEntriesCache } from '@/helpers/entriesCache'
@@ -146,8 +148,8 @@ const readUser = singleFlight(loadUser)
  * at the next poll that happens to answer 401.
  *
  * A session found live again after a lapse, signed back into from another tab, also refetches
- * the config and the entries, since the reads that answered 401 meanwhile are not retried by
- * anything else.
+ * the config, the entries and the history, since the reads that answered 401 meanwhile are not
+ * retried by anything else.
  * @returns {Promise<void>}
  */
 export async function recheckSession(): Promise<void> {
@@ -159,7 +161,7 @@ export async function recheckSession(): Promise<void> {
   await readUser()
 
   if (wasLapsed && !sessionLapsed.value) {
-    await Promise.all([refreshPortalConfig(), refreshConnectorEntries()])
+    await Promise.all([refreshPortalConfig(), refreshConnectorEntries(), refreshHistory()])
   }
 }
 
@@ -229,7 +231,7 @@ async function adoptSession(): Promise<void> {
   reauth.value = false
   // Both, and in parallel: the session changed without the page reloading, so every request
   // that answered 401 a moment ago has to be retried, not only the config's.
-  await Promise.all([refreshPortalConfig(), refreshConnectorEntries()])
+  await Promise.all([refreshPortalConfig(), refreshConnectorEntries(), refreshHistory()])
 }
 
 /**
@@ -257,6 +259,9 @@ export function useSession(): SessionSource {
       resetConnectorEntries()
       resetHealth()
       resetSignals()
+      resetHistory()
+      // the ranking is this browser's, so what one account opened must not rank for the next
+      resetLaunchHistory()
       return
     }
 
@@ -376,6 +381,9 @@ export function useSession(): SessionSource {
       resetConnectorEntries()
       resetHealth()
       resetSignals()
+      resetHistory()
+      // the ranking is this browser's, so what one account opened must not rank for the next
+      resetLaunchHistory()
       user.value = undefined
 
       window.location.assign(payload.logoutUrl ?? '/')

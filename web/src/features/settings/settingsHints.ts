@@ -37,5 +37,18 @@ export function settingsHintsFor(
     return [{ text: '↵ runs', key: true }, LEAVE_HINT]
   }
 
+  if (station.kind === 'field') {
+    return [{ text: '↵ adds one', key: true }, LEAVE_HINT]
+  }
+
+  // Named as asking first where it does, because a press that only arms would otherwise read as
+  // one that did nothing.
+  if (station.kind === 'item') {
+    return [
+      { text: station.item.confirm ? '↵ deletes, asking first' : '↵ deletes', key: true },
+      LEAVE_HINT,
+    ]
+  }
+
   return [{ text: expanded ? '↵ closes' : '↵ opens', key: true }, LEAVE_HINT]
 }

@@ -9,6 +9,8 @@ interface AdminRowActionsProps {
   /** Name of the row these belong to, so each action reads as its own thing */
   name: string
   busy?: boolean
+  /** Whether the delete waits for its second press, which leaves its word alone asking for it */
+  armed?: boolean
 }
 
 const props = defineProps<AdminRowActionsProps>()
@@ -20,11 +22,25 @@ const emit = defineEmits<{ run: [id: RowActionId] }>()
 // feature that is only a switch has its switch there, and it is the whole of what it shows.
 // Index 0 never draws as picked: it is where the selection rests before the arrows are used,
 // so painting it would mark a word as chosen on every row that had not been touched.
+//
+// While the delete is armed its button stays mounted and asks again in place: a pointer focuses
+// the button it presses, and taking that button away moves focus off the row, which disarms it
+// before the second press can land. The other words step aside so the question stands alone.
 const trail = computed(() =>
   props.actions
     .map((action, index) => ({ action, index }))
-    .filter((entry) => entry.action.label.length > 0),
+    .filter((entry) => entry.action.label.length > 0)
+    .filter((entry) => !props.armed || entry.action.id === 'remove'),
 )
+
+/**
+ * Returns whether a button is the delete waiting for its second press.
+ * @param {RowAction} action - Action being rendered
+ * @returns {boolean} - True for the armed delete
+ */
+function isArmed(action: RowAction): boolean {
+  return props.armed === true && action.id === 'remove'
+}
 
 /**
  * Names an action for assistive technology, since the trail words alone read as loose text.
@@ -32,6 +48,10 @@ const trail = computed(() =>
  * @returns {string} - What the button does, and to what
  */
 function labelFor(action: RowAction): string {
+  if (isArmed(action)) {
+    return `Press again to delete ${props.name}`
+  }
+
   if (action.id === 'up') {
     return `Move ${props.name} up`
   }
@@ -55,6 +75,7 @@ function labelFor(action: RowAction): string {
         {
           'actions__item--picked': activeAction === index && index > 0,
           'actions__item--persistent': action.persistent,
+          'actions__item--armed': isArmed(action),
         },
       ]"
       type="button"
@@ -70,7 +91,7 @@ function labelFor(action: RowAction): string {
         aria-hidden="true"
         >{{ action.label }}</span
       >
-      <template v-else>{{ action.label }}</template>
+      <template v-else>{{ isArmed(action) ? 'press again to delete' : action.label }}</template>
     </button>
   </span>
 </template>
@@ -109,6 +130,16 @@ function labelFor(action: RowAction): string {
 .actions__item--picked:not(:disabled) {
   color: var(--diele-accent);
   text-decoration: underline;
+}
+
+/* see AdminEntryRow .entry__confirm: the question a destructive press asks takes the colour of
+   deleting, and stays on screen without the row revealing it. Stated after the picked word, which
+   would otherwise take it back to the accent. */
+.actions__item--armed,
+.actions__item--armed:not(:disabled) {
+  color: var(--diele-status-down);
+  text-decoration: none;
+  opacity: 1;
 }
 
 /* One glyph for both directions, the same caret the feature rows expand with, turned over for

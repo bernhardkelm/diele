@@ -2,6 +2,7 @@ import { createApp } from 'vue'
 import App from './App.vue'
 import { initTheme } from '@/composables/useTheme'
 import { dropEarlyKeys } from '@/helpers/earlyKeys'
+import { dropRetiredKeys } from '@/helpers/retiredKeys'
 import '@/styles/fonts.css'
 import '@/styles/tokens.css'
 import '@/styles/base.css'
@@ -10,6 +11,8 @@ import '@/styles/base.css'
 // paint. This is the same read from the module that owns it, and what still applies if that
 // script is ever dropped or refused.
 initTheme()
+
+dropRetiredKeys()
 
 const app = createApp(App)
 

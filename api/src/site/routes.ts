@@ -2,6 +2,13 @@ import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import express, { type NextFunction, type Request, type Response, Router } from 'express'
 import { config } from '#config.js'
+import { probesLoopback } from '#localhost/probes.js'
+import {
+  CSP_HEADER,
+  CSP_REPORT_ONLY_HEADER,
+  documentPolicy,
+  TRUSTED_TYPES_POLICY,
+} from './contentSecurityPolicy.js'
 import { injectRuntime } from './indexMeta.js'
 
 // Vite's `build.assetsDir`. Everything under it carries a content hash, so a changed file is a
@@ -43,6 +50,11 @@ export function createSiteRouter(root: string): Router {
     brand: config.brand,
     version: config.version,
   })
+  // From the stamped document rather than the file, so the hashes cover exactly what is sent.
+  // Both variants up front, since whether the page probes loopback is a switch an admin flips
+  // while this process runs and the request only has to pick one.
+  const probingPolicy = documentPolicy(document, true)
+  const quietPolicy = documentPolicy(document, false)
 
   // Nothing a vite build emits lands under /api today, and this is what keeps a file dropped
   // there tomorrow from shadowing a route: the api answers those, not the directory.
@@ -79,6 +91,8 @@ export function createSiteRouter(root: string): Router {
     // Never cached: it names the hashed bundles, so a stale copy pins an open tab to the build
     // it was opened on.
     res.set('Cache-Control', 'no-cache')
+    res.set(CSP_HEADER, probesLoopback() ? probingPolicy : quietPolicy)
+    res.set(CSP_REPORT_ONLY_HEADER, TRUSTED_TYPES_POLICY)
     res.type('html').send(document)
   })
 

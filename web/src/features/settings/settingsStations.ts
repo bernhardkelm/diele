@@ -1,5 +1,11 @@
 import type { ListAction } from '@/helpers/listActions'
-import type { SettingsOption, SettingsSection } from '@/features/settings/settingsSections'
+import type {
+  SettingsField,
+  SettingsItem,
+  SettingsOption,
+  SettingsPagedItems,
+  SettingsSection,
+} from '@/features/settings/settingsSections'
 
 interface SectionStation {
   readonly kind: 'section'
@@ -16,6 +22,22 @@ interface OptionStation {
   readonly option: SettingsOption
 }
 
+interface FieldStation {
+  readonly kind: 'field'
+  readonly key: string
+  readonly label: string
+  readonly section: SettingsSection
+  readonly field: SettingsField
+}
+
+export interface ItemStation {
+  readonly kind: 'item'
+  readonly key: string
+  readonly label: string
+  readonly section: SettingsSection
+  readonly item: SettingsItem
+}
+
 interface ActionStation {
   readonly kind: 'action'
   readonly key: string
@@ -25,13 +47,20 @@ interface ActionStation {
   readonly nested: boolean
   /** Section it belongs to, so Escape from it lands on the row that opened it */
   readonly section?: SettingsSection
+  /** Whether running it lists more rows where it stands, so the caret moves onto the first of them */
+  readonly reveals?: boolean
 }
 
 /**
  * One stop in the settings view's keyboard ring. A section's options are stations in the same
  * list as the section itself, which is what lets one pair of arrow keys reach everything.
  */
-export type SettingsStation = SectionStation | OptionStation | ActionStation
+export type SettingsStation =
+  | SectionStation
+  | OptionStation
+  | FieldStation
+  | ItemStation
+  | ActionStation
 
 /**
  * Names the station a section occupies.
@@ -50,6 +79,63 @@ export function sectionKey(sectionId: string): string {
  */
 function optionKey(sectionId: string, optionId: string): string {
   return `option:${sectionId}:${optionId}`
+}
+
+/**
+ * Builds the station one of a section's later rows occupies.
+ * @param {SettingsSection} section - Section the row belongs to
+ * @param {SettingsField | SettingsItem | ListAction} row - Row being addressed
+ * @returns {SettingsStation} - Its station, keyed by its kind so two kinds may share an id
+ */
+function rowStation(
+  section: SettingsSection,
+  row: SettingsField | SettingsItem | ListAction,
+): SettingsStation {
+  const key = `${row.kind}:${section.id}:${row.id}`
+
+  if (row.kind === 'field') {
+    return { kind: 'field', key, label: row.label, section, field: row }
+  }
+
+  if (row.kind === 'item') {
+    return { kind: 'item', key, label: row.label, section, item: row }
+  }
+
+  return { kind: 'action', key, label: row.label, action: row, nested: true, section }
+}
+
+/**
+ * Builds the stations a run of paged items occupies: the listed ones, then the row listing the
+ * next page while any are left.
+ * @param {SettingsSection} section - Section the items belong to
+ * @param {SettingsPagedItems} paged - Items and how many of them are listed
+ * @returns {ReadonlyArray<SettingsStation>} - Their stations, in order
+ */
+function pagedStations(
+  section: SettingsSection,
+  paged: SettingsPagedItems,
+): ReadonlyArray<SettingsStation> {
+  const listed = paged.items.slice(0, paged.shown).map((item) => rowStation(section, item))
+  const hidden = paged.items.length - listed.length
+
+  if (hidden <= 0) {
+    return listed
+  }
+
+  const more = paged.more(hidden)
+
+  return [
+    ...listed,
+    {
+      kind: 'action',
+      key: `action:${section.id}:${more.id}`,
+      label: more.label,
+      action: more,
+      nested: true,
+      section,
+      reveals: true,
+    },
+  ]
 }
 
 /**
@@ -99,6 +185,14 @@ export function buildSettingsStations(
         section,
         option,
       })
+    }
+
+    for (const row of section.rows ?? []) {
+      if (row.kind === 'paged') {
+        stations.push(...pagedStations(section, row))
+      } else {
+        stations.push(rowStation(section, row))
+      }
     }
   }
 

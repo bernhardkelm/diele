@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import HighlightedText from '@/components/HighlightedText.vue'
 import ScrollingText from '@/components/ScrollingText.vue'
+import { useArmedAction } from '@/composables/useArmedAction'
 import { useStationRow } from '@/composables/useStationRow'
 import type { ListAction } from '@/helpers/listActions'
 
@@ -28,6 +29,27 @@ const { attrs: stationAttrs, ownsEvent } = useStationRow({
   level: props.level,
 })
 
+// Held on the row rather than in a dialog, the way an admin row asks before deleting: a
+// confirmation that has to be reached for with the mouse would undo driving the list by keyboard.
+const { armed, press, onFocusout } = useArmedAction()
+
+/**
+ * Runs the action, or arms it first where it asks before running.
+ * @returns {void}
+ */
+function trigger(): void {
+  if (props.action.disabled) {
+    return
+  }
+
+  if (props.action.confirm) {
+    press(() => emit('run'))
+    return
+  }
+
+  emit('run')
+}
+
 /**
  * Runs the action.
  * @param {KeyboardEvent} event - Key press being handled
@@ -39,7 +61,7 @@ function onKeydown(event: KeyboardEvent): void {
   }
 
   event.preventDefault()
-  emit('run')
+  trigger()
 }
 </script>
 
@@ -54,7 +76,8 @@ function onKeydown(event: KeyboardEvent): void {
     }"
     :aria-disabled="action.disabled ? true : undefined"
     @keydown="onKeydown"
-    @click="!action.disabled && emit('run')"
+    @focusout="onFocusout"
+    @click="trigger"
   >
     <span class="action__name truncate">
       <HighlightedText :text="action.label" :query="query" />
@@ -62,9 +85,12 @@ function onKeydown(event: KeyboardEvent): void {
 
     <ScrollingText class="action__hint" :text="action.description" :focused="focused" />
 
-    <span class="action__trail row-trail" aria-hidden="true">
-      <span v-if="action.trail" class="action__note">{{ action.trail }}</span>
-      <span class="action__chevron">▸</span>
+    <span class="action__trail row-trail">
+      <span v-if="armed" class="action__confirm" role="status">{{ action.confirm }}</span>
+      <span v-else-if="action.trail" class="action__note" aria-hidden="true">{{
+        action.trail
+      }}</span>
+      <span class="action__chevron" aria-hidden="true">▸</span>
     </span>
   </li>
 </template>
@@ -101,6 +127,11 @@ function onKeydown(event: KeyboardEvent): void {
 
 .action__name {
   color: var(--diele-fg);
+}
+
+/* see AdminEntryRow: the question a destructive press asks takes the colour of deleting */
+.action__confirm {
+  color: var(--diele-status-down);
 }
 
 /* see ScrollingText: it owns the clipping, because it has to lift it while looping */

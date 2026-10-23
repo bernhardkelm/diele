@@ -4,6 +4,8 @@ import { announceSetup } from './auth/setup.js'
 import { config } from './config.js'
 import { startConnectorScheduler, stopConnectorScheduler } from './connectors/scheduler.js'
 import { closeDb, getDb } from './db/index.js'
+import { closeHistoryDb } from './history/db.js'
+import { pruneHistory } from './history/prune.js'
 
 // Every fifteen minutes, matching the shortest window anything here keeps. Pruning only at boot
 // left expired sessions and failed logins accumulating for the life of the process, and the
@@ -13,10 +15,27 @@ const PRUNE_EVERY_MS = 15 * 60_000
 // Opening the database also migrates it, so a schema problem stops the process here rather
 // than surfacing on the first request.
 getDb()
-pruneExpired()
+
+/**
+ * Sweeps what has expired: sessions, sign-in attempts and history past its retention.
+ * @returns {void}
+ */
+function prune(): void {
+  pruneExpired()
+
+  // Caught here because it is a second file: a history database that cannot be written must not
+  // take down the portal whose sessions the line above just swept.
+  try {
+    pruneHistory()
+  } catch (cause) {
+    console.error('[diele] pruning history failed, continuing:', cause)
+  }
+}
+
+prune()
 
 // Unref'd so a pending sweep never holds the process open.
-setInterval(pruneExpired, PRUNE_EVERY_MS).unref()
+setInterval(prune, PRUNE_EVERY_MS).unref()
 
 // Last resort behind the handlers each background job already carries. Without it a rejection
 // nobody awaited ends the process, and a portal serving everyone should not be taken down by a
@@ -52,6 +71,7 @@ function shutdown(signal: NodeJS.Signals): void {
 
   server.close(() => {
     closeDb()
+    closeHistoryDb()
     process.exit(0)
   })
 }

@@ -91,11 +91,11 @@ describe('commandTarget', () => {
     expect(commandTarget(broken, 'vue').display).toBe('not a url {query}')
   })
 
-  // Built from the typed term rather than saved, so opening it is worth recording.
-  it('marks the entry as made up on the spot', () => {
+  // A search rather than an address, so opening it is no visit for the history to keep.
+  it('marks the entry as made up on the spot, but not as a typed address', () => {
     const target = commandTarget(command, 'vue')
 
-    expect(target.adHoc).toBe(true)
+    expect(target.adHoc).toBeUndefined()
     expect(target.searchOnly).toBe(true)
   })
 })

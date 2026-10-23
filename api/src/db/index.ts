@@ -7,10 +7,11 @@ import { init } from './migrations/001_init.js'
 import { sessionIdToken } from './migrations/002_session_id_token.js'
 import { healthBindings } from './migrations/003_health_bindings.js'
 import { signalSilences } from './migrations/004_signal_silences.js'
+import { historyKey } from './migrations/005_history_key.js'
 
 export type DB = Database.Database
 
-const MIGRATIONS = [init, sessionIdToken, healthBindings, signalSilences]
+const MIGRATIONS = [init, sessionIdToken, healthBindings, signalSilences, historyKey]
 
 let db: DB | null = null
 

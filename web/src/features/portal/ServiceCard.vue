@@ -3,6 +3,7 @@ import { useTemplateRef } from 'vue'
 import HighlightedText from '@/components/HighlightedText.vue'
 import StatusDot from '@/components/StatusDot.vue'
 import { useRevealOnActive } from '@/composables/useRevealOnActive'
+import { vSvg } from '@/directives/trustedSvg'
 import type { CardTarget } from '@/types/portal'
 import type { ApiHealthReading } from '@diele/common'
 
@@ -37,9 +38,9 @@ useRevealOnActive(useTemplateRef<HTMLElement>('root'), () => props.active)
     <StatusDot v-if="status" :status="status" :name="service.name" />
     <span v-if="shortcut" class="card__shortcut" aria-hidden="true">{{ shortcut }}</span>
     <!-- Markup from /api/config, sanitised server-side on the way into the database
-         (api/src/icons/sanitize.ts) and never on the way out. This is the only place that
+         (api/src/icons/sanitize.ts) and never on the way out. v-svg is the only place that
          trust is spent, so it holds for the admin preview too. -->
-    <span class="card__icon" v-html="service.icon" />
+    <span class="card__icon" v-svg="service.icon" />
     <span class="card__name"><HighlightedText :text="service.name" :query="query" /></span>
   </a>
 </template>
