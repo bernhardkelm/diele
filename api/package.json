@@ -52,7 +52,7 @@
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "openid-client": "^6.8.4",
-    "zod": "^4.4.3"
+    "zod": "^4.6.6"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
